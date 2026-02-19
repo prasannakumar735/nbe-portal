@@ -1,431 +1,632 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { TopNavigation } from '../components/TopNavigation'
-import {
-  MapPin,
-  Play,
-  Download,
-  FileText,
-  AlertCircle,
-  CheckCircle,
-  MapPinOff,
-  Zap
-} from 'lucide-react'
+import { AlertCircle, CheckCircle, Play, Square } from 'lucide-react'
 
 interface TimeEntry {
   id: string
-  date: string
-  dayOfWeek: string
-  clockIn: string
-  clockOut: string
-  totalHours: string
-  gpsStatus: 'verified' | 'off-site' | 'pending'
-  shiftType: string
+  employee_id: string
+  client_id: string
+  location_id: string
+  level1_id: string
+  level2_id: string
+  billable: boolean
+  start_time: string
+  end_time: string | null
+  hours: number | null
+  status: 'active' | 'completed'
+  created_at: string
+  updated_at?: string
 }
 
-const TIMESHEET_DATA: TimeEntry[] = [
-  {
-    id: '1',
-    date: 'Fri, Oct 20',
-    dayOfWeek: 'Friday',
-    clockIn: '08:58 AM',
-    clockOut: '05:12 PM',
-    totalHours: '8h 14m',
-    gpsStatus: 'verified',
-    shiftType: 'Full Shift'
-  },
-  {
-    id: '2',
-    date: 'Thu, Oct 19',
-    dayOfWeek: 'Thursday',
-    clockIn: '09:02 AM',
-    clockOut: '05:05 PM',
-    totalHours: '8h 03m',
-    gpsStatus: 'verified',
-    shiftType: 'Full Shift'
-  },
-  {
-    id: '3',
-    date: 'Wed, Oct 18',
-    dayOfWeek: 'Wednesday',
-    clockIn: '08:45 AM',
-    clockOut: '06:30 PM',
-    totalHours: '9h 45m',
-    gpsStatus: 'verified',
-    shiftType: 'Overtime'
-  },
-  {
-    id: '4',
-    date: 'Tue, Oct 17',
-    dayOfWeek: 'Tuesday',
-    clockIn: '09:15 AM',
-    clockOut: '01:00 PM',
-    totalHours: '3h 45m',
-    gpsStatus: 'off-site',
-    shiftType: 'Partial Shift'
-  }
-]
+interface Client {
+  id: string
+  name: string
+}
+
+interface ClientLocation {
+  id: string
+  client_id: string
+  suburb: string
+}
+
+interface WorkTypeLevel1 {
+  id: string
+  code: string
+  name: string
+}
+
+interface WorkTypeLevel2 {
+  id: string
+  level1_id: string
+  code: string
+  name: string
+  billable: boolean
+}
 
 export default function TimeCardPage() {
   const router = useRouter()
-  const [user, setUser] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [currentTime, setCurrentTime] = useState<string>('08:45:21')
-  const [isClockedIn, setIsClockedIn] = useState(false)
-  const [isClockingIn, setIsClockingIn] = useState(false)
-  const [gpsLocation, setGpsLocation] = useState({
-    address: '123 Business Parkway, Suite 400',
-    city: 'New York, NY 10001',
-    accuracy: 'High (< 10m)'
-  })
 
-  // Check authentication on mount
+  const [user, setUser] = useState<any>(null)
+  const [isLoadingPage, setIsLoadingPage] = useState(true)
+  const [isLoadingEntries, setIsLoadingEntries] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const [entries, setEntries] = useState<TimeEntry[]>([])
+  const [activeEntry, setActiveEntry] = useState<TimeEntry | null>(null)
+  const [elapsedTime, setElapsedTime] = useState('00:00:00')
+
+  const [clients, setClients] = useState<Client[]>([])
+  const [locations, setLocations] = useState<ClientLocation[]>([])
+  const [workTypesL1, setWorkTypesL1] = useState<WorkTypeLevel1[]>([])
+  const [workTypesL2, setWorkTypesL2] = useState<WorkTypeLevel2[]>([])
+
+  const [entryLocationLookup, setEntryLocationLookup] = useState<Record<string, ClientLocation>>({})
+  const [entryLevel2Lookup, setEntryLevel2Lookup] = useState<Record<string, WorkTypeLevel2>>({})
+
+  const [selectedClient, setSelectedClient] = useState('')
+  const [selectedLocation, setSelectedLocation] = useState('')
+  const [selectedLevel1, setSelectedLevel1] = useState('')
+  const [selectedLevel2, setSelectedLevel2] = useState('')
+
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
+  const clearMessages = () => {
+    setErrorMessage(null)
+    setSuccessMessage(null)
+  }
+
+  const formatTime = (iso: string) =>
+    new Date(iso).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
+
+  const formatDate = (iso: string) =>
+    new Date(iso).toLocaleDateString('en-AU', { year: 'numeric', month: 'short', day: 'numeric' })
+
+  const loadBaseOptions = useCallback(async () => {
+    try {
+      const [{ data: clientRows, error: clientError }, { data: l1Rows, error: l1Error }] = await Promise.all([
+        supabase.from('clients').select('id, name').order('name', { ascending: true }),
+        supabase.from('work_type_level1').select('id, code, name').order('code', { ascending: true })
+      ])
+
+      if (clientError) throw clientError
+      if (l1Error) throw l1Error
+
+      setClients(clientRows || [])
+      setWorkTypesL1(l1Rows || [])
+    } catch (error) {
+      console.error('[timecard] loadBaseOptions failed:', error)
+      setErrorMessage('Failed to load form options.')
+    }
+  }, [])
+
+  const loadLocationsByClient = useCallback(async (clientId: string) => {
+    if (!clientId) {
+      setLocations([])
+      setSelectedLocation('')
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('client_locations')
+        .select('id, client_id, suburb')
+        .eq('client_id', clientId)
+        .order('suburb', { ascending: true })
+
+      if (error) throw error
+      setLocations(data || [])
+    } catch (error) {
+      console.error('[timecard] loadLocationsByClient failed:', error)
+      setErrorMessage('Failed to load locations for selected client.')
+    }
+  }, [])
+
+  const loadLevel2ByLevel1 = useCallback(async (level1Id: string) => {
+    if (!level1Id) {
+      setWorkTypesL2([])
+      setSelectedLevel2('')
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('work_type_level2')
+        .select('id, level1_id, code, name, billable')
+        .eq('level1_id', level1Id)
+        .order('code', { ascending: true })
+
+      if (error) throw error
+      setWorkTypesL2(data || [])
+    } catch (error) {
+      console.error('[timecard] loadLevel2ByLevel1 failed:', error)
+      setErrorMessage('Failed to load tasks for selected work type.')
+    }
+  }, [])
+
+  const buildEntryLookups = useCallback(async (rows: TimeEntry[]) => {
+    const locationIds = [...new Set(rows.map((entry) => entry.location_id).filter(Boolean))]
+    const level2Ids = [...new Set(rows.map((entry) => entry.level2_id).filter(Boolean))]
+
+    if (locationIds.length > 0) {
+      const { data, error } = await supabase
+        .from('client_locations')
+        .select('id, client_id, suburb')
+        .in('id', locationIds)
+
+      if (!error && data) {
+        const map: Record<string, ClientLocation> = {}
+        data.forEach((row) => {
+          map[row.id] = row
+        })
+        setEntryLocationLookup(map)
+      }
+    } else {
+      setEntryLocationLookup({})
+    }
+
+    if (level2Ids.length > 0) {
+      const { data, error } = await supabase
+        .from('work_type_level2')
+        .select('id, level1_id, code, name, billable')
+        .in('id', level2Ids)
+
+      if (!error && data) {
+        const map: Record<string, WorkTypeLevel2> = {}
+        data.forEach((row) => {
+          map[row.id] = row
+        })
+        setEntryLevel2Lookup(map)
+      }
+    } else {
+      setEntryLevel2Lookup({})
+    }
+  }, [])
+
+  const loadEntries = useCallback(
+    async (employeeId: string) => {
+      if (!employeeId) {
+        console.error('[timecard] loadEntries missing employeeId')
+        return
+      }
+
+      try {
+        setIsLoadingEntries(true)
+
+        const { data, error } = await supabase
+          .from('time_entries')
+          .select('id, employee_id, client_id, location_id, level1_id, level2_id, billable, start_time, end_time, hours, status, created_at, updated_at')
+          .eq('employee_id', employeeId)
+          .order('start_time', { ascending: false })
+
+        if (error) throw error
+
+        const rows = (data || []) as TimeEntry[]
+        setEntries(rows)
+
+        const active = rows.find((entry) => entry.status === 'active' && !entry.end_time) || null
+        setActiveEntry(active)
+
+        await buildEntryLookups(rows)
+      } catch (error) {
+        console.error('[timecard] loadEntries failed:', error)
+        setErrorMessage('Failed to load weekly activity.')
+      } finally {
+        setIsLoadingEntries(false)
+      }
+    },
+    [buildEntryLookups]
+  )
+
+  useEffect(() => {
+    if (!activeEntry) {
+      setElapsedTime('00:00:00')
+      return
+    }
+
+    const interval = setInterval(() => {
+      const start = new Date(activeEntry.start_time)
+      const diff = Date.now() - start.getTime()
+      const hours = Math.floor(diff / 3600000)
+      const minutes = Math.floor((diff % 3600000) / 60000)
+      const seconds = Math.floor((diff % 60000) / 1000)
+
+      setElapsedTime(`${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`)
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [activeEntry])
+
   useEffect(() => {
     const checkUser = async () => {
       try {
         const { data } = await supabase.auth.getUser()
         if (!data.user) {
           router.push('/')
-        } else {
-          setUser(data.user)
+          return
         }
+
+        setUser(data.user)
+        await loadBaseOptions()
+        await loadEntries(data.user.id)
       } catch (error) {
-        console.error('Auth check failed:', error)
+        console.error('[timecard] auth check failed:', error)
         router.push('/')
       } finally {
-        setIsLoading(false)
+        setIsLoadingPage(false)
       }
     }
 
     checkUser()
-  }, [router])
+  }, [router, loadBaseOptions, loadEntries])
 
-  // Real-time clock update
-  useEffect(() => {
-    const updateClock = () => {
-      const now = new Date()
-      const hours = String(now.getHours()).padStart(2, '0')
-      const minutes = String(now.getMinutes()).padStart(2, '0')
-      const seconds = String(now.getSeconds()).padStart(2, '0')
-      setCurrentTime(`${hours}:${minutes}:${seconds}`)
+  const handleClientChange = async (clientId: string) => {
+    setSelectedClient(clientId)
+    setSelectedLocation('')
+    setLocations([])
+    await loadLocationsByClient(clientId)
+  }
+
+  const handleLevel1Change = async (level1Id: string) => {
+    setSelectedLevel1(level1Id)
+    setSelectedLevel2('')
+    setWorkTypesL2([])
+    await loadLevel2ByLevel1(level1Id)
+  }
+
+  const handleStartWork = async () => {
+    clearMessages()
+
+    if (!user?.id || !selectedClient || !selectedLocation || !selectedLevel1 || !selectedLevel2) {
+      setErrorMessage('Please complete all fields before starting work.')
+      return
     }
 
-    updateClock()
-    const interval = setInterval(updateClock, 1000)
+    if (activeEntry) {
+      setErrorMessage('You already have an active session. Stop it before starting another.')
+      return
+    }
 
-    return () => clearInterval(interval)
-  }, [])
+    const selectedL2 = workTypesL2.find((row) => row.id === selectedLevel2)
+    const billable = selectedL2?.billable ?? false
 
-  // Get current time period (AM/PM)
-  const getTimePeriod = () => {
-    const hour = parseInt(currentTime.split(':')[0])
-    return hour >= 12 ? 'PM' : 'AM'
-  }
-
-  // Request location (mock GPS)
-  const requestGPSLocation = async (): Promise<{ latitude: number; longitude: number }> => {
-    return new Promise((resolve) => {
-      if ('geolocation' in navigator) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            setGpsLocation({
-              address: '123 Business Parkway, Suite 400',
-              city: 'New York, NY 10001',
-              accuracy: `High (${Math.round(position.coords.accuracy)}m)`
-            })
-            resolve({
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude
-            })
-          },
-          () => {
-            // Fallback if GPS denied
-            resolve({ latitude: 40.7128, longitude: -74.006 })
-          }
-        )
-      } else {
-        resolve({ latitude: 40.7128, longitude: -74.006 })
-      }
-    })
-  }
-
-  // Handle clock-in
-  const handleStartShift = async () => {
-    setIsClockingIn(true)
     try {
-      const gpsCoords = await requestGPSLocation()
+      setIsSubmitting(true)
 
-      // Prepare timecard entry (ready for Supabase insert)
-      const timecardEntry = {
-        user_id: user?.id,
-        clock_in_time: new Date().toISOString(),
-        gps_lat: gpsCoords.latitude,
-        gps_lng: gpsCoords.longitude,
-        gps_accuracy: gpsLocation.accuracy,
+      const payload = {
+        employee_id: user.id,
+        client_id: selectedClient,
+        location_id: selectedLocation,
+        level1_id: selectedLevel1,
+        level2_id: selectedLevel2,
+        billable,
+        start_time: new Date().toISOString(),
         status: 'active'
       }
 
-      // TODO: Replace with actual Supabase insert
-      // const { error } = await supabase
-      //   .from('timecards')
-      //   .insert([timecardEntry])
-      //
-      // if (error) throw error
+      const { error } = await supabase.from('time_entries').insert([payload])
+      if (error) throw error
 
-      console.log('Clock-in entry:', timecardEntry)
-      setIsClockedIn(true)
+      setSuccessMessage('Work session started successfully.')
+      await loadEntries(user.id)
     } catch (error) {
-      console.error('Clock-in failed:', error)
-      alert('Failed to clock in. Please try again.')
+      console.error('[timecard] handleStartWork failed:', error)
+      setErrorMessage('Failed to start work session.')
     } finally {
-      setIsClockingIn(false)
+      setIsSubmitting(false)
     }
   }
 
-  // Handle clock-out
-  const handleEndShift = async () => {
-    setIsClockingIn(true)
+  const handleStopWork = async () => {
+    clearMessages()
+
+    if (!user?.id || !activeEntry?.id) {
+      setErrorMessage('No active work session to stop.')
+      return
+    }
+
     try {
-      // TODO: Replace with actual Supabase update
-      // const { error } = await supabase
-      //   .from('timecards')
-      //   .update({ clock_out_time: new Date().toISOString(), status: 'completed' })
-      //   .eq('user_id', user?.id)
-      //   .is('clock_out_time', null)
-      //
-      // if (error) throw error
+      setIsSubmitting(true)
 
-      console.log('Clock-out recorded')
-      setIsClockedIn(false)
+      const now = new Date()
+      const start = new Date(activeEntry.start_time)
+      const hours = Number(((now.getTime() - start.getTime()) / 3600000).toFixed(2))
+
+      const payload = {
+        end_time: now.toISOString(),
+        hours,
+        status: 'completed'
+      }
+
+      const { error } = await supabase.from('time_entries').update(payload).eq('id', activeEntry.id)
+      if (error) throw error
+
+      setSuccessMessage('Work session completed.')
+      await loadEntries(user.id)
     } catch (error) {
-      console.error('Clock-out failed:', error)
-      alert('Failed to clock out. Please try again.')
+      console.error('[timecard] handleStopWork failed:', error)
+      setErrorMessage('Failed to stop work session.')
     } finally {
-      setIsClockingIn(false)
+      setIsSubmitting(false)
     }
   }
 
-  if (isLoading) {
+  const weeklyTotal = useMemo(() => {
+    return entries.reduce((sum, row) => sum + (row.hours || 0), 0).toFixed(2)
+  }, [entries])
+
+  if (isLoadingPage) {
     return (
-      <div className="flex items-center justify-center h-screen bg-background-light">
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#F8FAFC' }}>
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-slate-600 font-medium">Loading timecard...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-2 mx-auto mb-4" style={{ borderColor: '#E5E7EB', borderTopColor: '#5B21B6' }}></div>
+          <p className="text-sm" style={{ color: '#475569' }}>Loading timecard...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div className="min-h-screen" style={{ backgroundColor: '#F8FAFC' }}>
       <TopNavigation user={user} />
 
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Breadcrumb */}
-        <div className="bg-white border-b border-slate-200 px-8 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <span>NBE Portal</span>
-            <span className="text-[10px]">›</span>
-            <span className="text-slate-600 font-medium">Timecard & GPS Tracking</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            System Online
-          </div>
-        </div>
-
-        {/* Main Content */}
-        <div className="p-8 space-y-8 max-w-[1600px] mx-auto w-full flex-1 overflow-y-auto">
-        {/* Clock In/Out Section and Map */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Clock In/Out Card */}
-          <div className="lg:col-span-4 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex flex-col items-center justify-center text-center">
-            <div className="mb-4 flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 text-slate-500 text-xs font-bold tracking-wider">
-              <span className="w-2.5 h-2.5 rounded-full bg-slate-400 animate-pulse"></span>
-              {isClockedIn ? 'CLOCKED IN' : 'NOT CLOCKED IN'}
-            </div>
-
-            <div className="text-6xl font-black tracking-tight mb-1 text-slate-900 tabular-nums font-mono">
-              {currentTime}
-            </div>
-
-            <div className="text-sm text-slate-400 mb-8 uppercase tracking-[0.2em] font-bold">
-              {getTimePeriod()}
-            </div>
-
-            <button
-              onClick={isClockedIn ? handleEndShift : handleStartShift}
-              disabled={isClockingIn}
-              className={`w-full font-bold py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-3 active:scale-[0.98] ${
-                isClockedIn
-                  ? 'bg-red-500 hover:bg-red-600 shadow-red-500/20 text-white'
-                  : 'bg-primary hover:bg-blue-700 shadow-primary/20 text-white'
-              } ${isClockingIn ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              <Play size={20} />
-              {isClockingIn ? 'Processing...' : isClockedIn ? 'END SHIFT' : 'START SHIFT'}
-            </button>
-
-            <p className="mt-6 text-xs text-slate-400 italic flex items-center gap-1.5">
-              <AlertCircle size={14} />
-              Your GPS location will be recorded upon clock-in.
-            </p>
-          </div>
-
-          {/* Location Map Card */}
-          <div className="lg:col-span-8 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <MapPin size={20} className="text-primary" />
-                <h3 className="font-bold text-sm">Current Location</h3>
-              </div>
-              <div className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                Accuracy: {gpsLocation.accuracy}
-              </div>
-            </div>
-
-            {/* Map Container */}
-            <div
-              className="flex-1 min-h-[300px] relative bg-cover bg-center"
-              style={{
-                backgroundImage:
-                  'url(https://lh3.googleusercontent.com/aida-public/AB6AXuAWpVWtJg_TQse42MREOxpH1BYYtOzf-kK98_alUQMV12G4CSqI8a4Em-lGg_L-paJIwwNk6tqt3W6BfoVWo4E8yY49sW2NjBPK9SKhzi3WL5ZwnuEaxxDp4-1kH_qAPeDECIpwvzoTPKVcTjIGz98bVyJyK5Zu7Ca3csw2yZUJgedORSZmL6Qs-R2SXOwv5v4B9kkfomFSJrPniPlbjra49UlitdPmZpXZfBjLqNsi_TX8rCYIRN86AkTVT93J-ipAU_GTxjgL4Q)'
-              }}
-            >
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="relative">
-                  <div className="w-12 h-12 bg-primary/20 rounded-full animate-ping absolute -top-3 -left-3"></div>
-                  <div className="w-6 h-6 bg-primary border-4 border-white rounded-full shadow-xl relative z-10"></div>
-                </div>
-              </div>
-
-              {/* Address Card */}
-              <div className="absolute bottom-6 left-6 bg-white/95 backdrop-blur-sm p-4 rounded-xl shadow-xl border border-slate-200 max-w-xs">
-                <p className="text-[10px] text-primary font-black uppercase tracking-widest mb-1">
-                  Current Address
-                </p>
-                <p className="text-sm font-bold text-slate-900">{gpsLocation.address}</p>
-                <p className="text-xs text-slate-500 font-medium">{gpsLocation.city}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Timesheet Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          {/* Header */}
-          <div className="px-8 py-6 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div
+        className="border-b"
+        style={{
+          background: 'linear-gradient(135deg, #0B1020 0%, #1E1B4B 65%, #312E81 100%)',
+          borderColor: 'rgba(255,255,255,0.08)'
+        }}
+      >
+        <div className="max-w-[1280px] mx-auto px-4 md:px-6 lg:px-8 py-8">
+          <div className="rounded-xl border px-6 py-5 backdrop-blur-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4" style={{ borderColor: 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.04)' }}>
             <div>
-              <h2 className="text-lg font-bold flex items-center gap-2">
-                Weekly Timesheet
-                <span className="text-xs font-medium bg-primary/10 text-primary px-2 py-0.5 rounded">
-                  Active Period
-                </span>
-              </h2>
-              <p className="text-sm text-slate-500">Week of October 23, 2023</p>
+              <h1 className="text-2xl font-semibold tracking-tight text-white">Timecard & GPS Tracking</h1>
+              <p className="text-sm mt-2" style={{ color: '#CBD5E1' }}>
+                Track and manage your work hours efficiently
+              </p>
             </div>
-            <div className="flex gap-2">
-              <button className="px-4 py-2 border border-slate-200 text-sm font-bold rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2">
-                <Download size={16} />
-                Export PDF
-              </button>
-              <button className="px-4 py-2 bg-primary/10 text-primary text-sm font-bold rounded-lg hover:bg-primary/20 transition-colors flex items-center gap-2">
-                <FileText size={16} />
-                Request Correction
-              </button>
-            </div>
-          </div>
 
-          {/* Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50/50">
-                  <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    Date
-                  </th>
-                  <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    Clock-In
-                  </th>
-                  <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    Clock-Out
-                  </th>
-                  <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">
-                    Total Hours
-                  </th>
-                  <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">
-                    GPS Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {TIMESHEET_DATA.map(entry => (
-                  <tr
-                    key={entry.id}
-                    className="hover:bg-slate-50/50 transition-colors group"
-                  >
-                    <td className="px-8 py-5">
-                      <p className="font-bold text-sm group-hover:text-primary transition-colors">
-                        {entry.date}
-                      </p>
-                      <p className="text-xs text-slate-500">{entry.shiftType}</p>
-                    </td>
-                    <td className="px-8 py-5 text-sm font-medium tabular-nums">{entry.clockIn}</td>
-                    <td className="px-8 py-5 text-sm font-medium tabular-nums">{entry.clockOut}</td>
-                    <td className="px-8 py-5 text-center">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-bold tabular-nums ${
-                          entry.shiftType === 'Overtime'
-                            ? 'bg-primary/10 text-primary'
-                            : 'bg-slate-100 text-slate-900'
-                        }`}
-                      >
-                        {entry.totalHours}
-                      </span>
-                    </td>
-                    <td className="px-8 py-5 text-right">
-                      <div
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border ${
-                          entry.gpsStatus === 'verified'
-                            ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
-                            : entry.gpsStatus === 'off-site'
-                            ? 'bg-amber-50 text-amber-600 border-amber-100'
-                            : 'bg-slate-50 text-slate-600 border-slate-200'
-                        }`}
-                      >
-                        {entry.gpsStatus === 'verified' && <CheckCircle size={14} />}
-                        {entry.gpsStatus === 'off-site' && <MapPinOff size={14} />}
-                        {entry.gpsStatus === 'pending' && <AlertCircle size={14} />}
-                        <span className="text-[11px] font-bold uppercase tracking-tight">
-                          {entry.gpsStatus === 'verified' && 'Verified'}
-                          {entry.gpsStatus === 'off-site' && 'Off-site'}
-                          {entry.gpsStatus === 'pending' && 'Pending'}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Footer */}
-          <div className="px-8 py-5 bg-slate-50 flex justify-between items-center border-t border-slate-200">
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-              Showing {TIMESHEET_DATA.length} records for the current week
-            </p>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-slate-500">Total Week Hours:</span>
-              <span className="text-sm font-black text-slate-900">29h 47m</span>
+            <div className="inline-flex items-center gap-2 px-3 py-2 rounded-full" style={{ backgroundColor: '#DCFCE7' }}>
+              <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: '#16A34A' }}></span>
+              <span className="text-xs font-semibold" style={{ color: '#166534' }}>
+                {activeEntry ? 'Active Tracking' : 'Ready to Start'}
+              </span>
             </div>
           </div>
-        </div>
         </div>
       </div>
+
+      <main className="max-w-[1280px] mx-auto px-4 md:px-6 lg:px-8 py-8">
+        {(errorMessage || successMessage) && (
+          <div className="space-y-2 mb-8 animate-fade-in">
+            {errorMessage && (
+              <div className="rounded-xl border p-4 flex items-start gap-3" style={{ backgroundColor: '#FEF2F2', borderColor: '#FECACA' }}>
+                <AlertCircle size={18} style={{ color: '#DC2626' }} className="mt-0.5" />
+                <p className="text-sm" style={{ color: '#7F1D1D' }}>{errorMessage}</p>
+              </div>
+            )}
+
+            {successMessage && (
+              <div className="rounded-xl border p-4 flex items-start gap-3" style={{ backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }}>
+                <CheckCircle size={18} style={{ color: '#16A34A' }} className="mt-0.5" />
+                <p className="text-sm" style={{ color: '#166534' }}>{successMessage}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="space-y-8">
+          {activeEntry && (
+            <section className="rounded-xl border shadow-sm p-6" style={{ backgroundColor: '#FFFFFF', borderColor: '#F3F4F6', position: 'relative', overflow: 'hidden' }}>
+              <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: '#5B21B6' }}></div>
+
+              <div className="ml-3 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                <div className="lg:col-span-4 text-center lg:text-left">
+                  <div className="inline-flex items-center gap-2 mb-3">
+                    <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: '#16A34A' }}></span>
+                    <span className="text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Active Session</span>
+                  </div>
+                  <p className="text-4xl font-semibold font-mono" style={{ color: '#111827', fontVariantNumeric: 'tabular-nums' }}>{elapsedTime}</p>
+                  <p className="text-sm mt-2" style={{ color: '#6B7280' }}>Started at {formatTime(activeEntry.start_time)}</p>
+                </div>
+
+                <div className="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Client</p>
+                    <p className="text-base font-medium" style={{ color: '#111827' }}>{clients.find((row) => row.id === activeEntry.client_id)?.name || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Location</p>
+                    <p className="text-base font-medium" style={{ color: '#111827' }}>{entryLocationLookup[activeEntry.location_id]?.suburb || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Work Type</p>
+                    <p className="text-base font-medium" style={{ color: '#111827' }}>{workTypesL1.find((row) => row.id === activeEntry.level1_id)?.name || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Task</p>
+                    <p className="text-base font-medium" style={{ color: '#111827' }}>{entryLevel2Lookup[activeEntry.level2_id]?.name || '—'}</p>
+                  </div>
+                </div>
+
+                <div className="lg:col-span-3 flex lg:justify-end">
+                  <button
+                    onClick={handleStopWork}
+                    disabled={isSubmitting}
+                    className="w-full lg:w-auto px-6 h-11 rounded-lg text-white font-medium transition duration-200 hover:scale-[1.03] disabled:opacity-50"
+                    style={{ backgroundColor: '#DC2626' }}
+                  >
+                    <span className="inline-flex items-center gap-2"><Square size={14} /> Stop Work</span>
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
+
+          <section className="rounded-xl border shadow-sm p-6" style={{ backgroundColor: '#FFFFFF', borderColor: '#F3F4F6' }}>
+            <h2 className="text-2xl font-semibold" style={{ color: '#111827' }}>Work Entry</h2>
+
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm uppercase tracking-wide block mb-2" style={{ color: '#6B7280' }}>Client</label>
+                <select
+                  value={selectedClient}
+                  onChange={(e) => handleClientChange(e.target.value)}
+                  disabled={!!activeEntry}
+                  className="w-full h-11 rounded-lg border px-3 text-sm transition duration-200 focus:outline-none focus:ring-2 disabled:opacity-50"
+                  style={{ borderColor: '#D1D5DB', color: '#111827', '--tw-ring-color': '#5B21B6' } as any}
+                >
+                  <option value="">Select client</option>
+                  {clients.map((row) => (
+                    <option key={row.id} value={row.id}>{row.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sm uppercase tracking-wide block mb-2" style={{ color: '#6B7280' }}>Location</label>
+                <select
+                  value={selectedLocation}
+                  onChange={(e) => setSelectedLocation(e.target.value)}
+                  disabled={!selectedClient || !!activeEntry}
+                  className="w-full h-11 rounded-lg border px-3 text-sm transition duration-200 focus:outline-none focus:ring-2 disabled:opacity-50"
+                  style={{ borderColor: '#D1D5DB', color: '#111827', '--tw-ring-color': '#5B21B6' } as any}
+                >
+                  <option value="">Select location</option>
+                  {locations.map((row) => (
+                    <option key={row.id} value={row.id}>{row.suburb}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sm uppercase tracking-wide block mb-2" style={{ color: '#6B7280' }}>Work Type</label>
+                <select
+                  value={selectedLevel1}
+                  onChange={(e) => handleLevel1Change(e.target.value)}
+                  disabled={!!activeEntry}
+                  className="w-full h-11 rounded-lg border px-3 text-sm transition duration-200 focus:outline-none focus:ring-2 disabled:opacity-50"
+                  style={{ borderColor: '#D1D5DB', color: '#111827', '--tw-ring-color': '#5B21B6' } as any}
+                >
+                  <option value="">Select work type</option>
+                  {workTypesL1.map((row) => (
+                    <option key={row.id} value={row.id}>{row.code} - {row.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sm uppercase tracking-wide block mb-2" style={{ color: '#6B7280' }}>Task</label>
+                <select
+                  value={selectedLevel2}
+                  onChange={(e) => setSelectedLevel2(e.target.value)}
+                  disabled={!selectedLevel1 || !!activeEntry}
+                  className="w-full h-11 rounded-lg border px-3 text-sm transition duration-200 focus:outline-none focus:ring-2 disabled:opacity-50"
+                  style={{ borderColor: '#D1D5DB', color: '#111827', '--tw-ring-color': '#5B21B6' } as any}
+                >
+                  <option value="">Select task</option>
+                  {workTypesL2.map((row) => (
+                    <option key={row.id} value={row.id}>{row.code} - {row.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {!activeEntry && (
+              <button
+                onClick={handleStartWork}
+                disabled={isSubmitting || !selectedClient || !selectedLocation || !selectedLevel1 || !selectedLevel2}
+                className="mt-6 w-full md:w-auto px-8 h-11 rounded-lg text-white font-medium transition duration-200 hover:scale-[1.03] disabled:opacity-50"
+                style={{ background: 'linear-gradient(135deg, #7C3AED 0%, #5B21B6 100%)' }}
+              >
+                <span className="inline-flex items-center gap-2"><Play size={14} /> {isSubmitting ? 'Starting...' : 'Start Work'}</span>
+              </button>
+            )}
+          </section>
+
+          <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="rounded-xl border shadow-sm p-6" style={{ backgroundColor: '#FFFFFF', borderColor: '#F3F4F6' }}>
+              <p className="text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Entries This Week</p>
+              <p className="text-2xl font-semibold mt-2" style={{ color: '#111827' }}>{entries.length}</p>
+            </div>
+            <div className="rounded-xl border shadow-sm p-6" style={{ backgroundColor: '#FFFFFF', borderColor: '#F3F4F6' }}>
+              <p className="text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Total Hours</p>
+              <p className="text-2xl font-semibold mt-2" style={{ color: '#111827' }}>{weeklyTotal}</p>
+            </div>
+          </section>
+
+          <section className="rounded-xl border shadow-sm" style={{ backgroundColor: '#FFFFFF', borderColor: '#F3F4F6' }}>
+            <div className="px-6 py-4 border-b" style={{ borderColor: '#E5E7EB' }}>
+              <h2 className="text-2xl font-semibold" style={{ color: '#111827' }}>Weekly Activity</h2>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px]">
+                <thead>
+                  <tr style={{ backgroundColor: '#F9FAFB' }}>
+                    <th className="px-6 py-3 text-left text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Date</th>
+                    <th className="px-6 py-3 text-left text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Client</th>
+                    <th className="px-6 py-3 text-left text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Type</th>
+                    <th className="px-6 py-3 text-left text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Start</th>
+                    <th className="px-6 py-3 text-left text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>End</th>
+                    <th className="px-6 py-3 text-left text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Duration</th>
+                    <th className="px-6 py-3 text-left text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Status</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {isLoadingEntries ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-10 text-center text-sm" style={{ color: '#6B7280' }}>Loading weekly activity...</td>
+                    </tr>
+                  ) : entries.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-10 text-center text-sm" style={{ color: '#6B7280' }}>No entries found.</td>
+                    </tr>
+                  ) : (
+                    entries.map((entry) => (
+                      <tr key={entry.id} className="transition duration-200 hover:bg-slate-50" style={{ borderTop: '1px solid #F1F5F9' }}>
+                        <td className="px-6 py-4 text-base font-medium" style={{ color: '#111827' }}>{formatDate(entry.start_time)}</td>
+                        <td className="px-6 py-4 text-base font-medium" style={{ color: '#111827' }}>{clients.find((row) => row.id === entry.client_id)?.name || '—'}</td>
+                        <td className="px-6 py-4 text-base font-medium" style={{ color: '#111827' }}>{entryLevel2Lookup[entry.level2_id]?.name || '—'}</td>
+                        <td className="px-6 py-4 text-base font-medium" style={{ color: '#111827' }}>{formatTime(entry.start_time)}</td>
+                        <td className="px-6 py-4 text-base font-medium" style={{ color: '#111827' }}>{entry.end_time ? formatTime(entry.end_time) : '—'}</td>
+                        <td className="px-6 py-4 text-base font-semibold" style={{ color: '#111827' }}>{entry.hours ? `${entry.hours.toFixed(2)}h` : '—'}</td>
+                        <td className="px-6 py-4">
+                          <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium" style={entry.status === 'completed' ? { backgroundColor: '#DCFCE7', color: '#166534' } : { backgroundColor: '#DBEAFE', color: '#1E40AF' }}>
+                            {entry.status === 'completed' ? 'Completed' : 'Active'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <style>{`
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(-6px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .animate-fade-in {
+          animation: fadeIn 0.2s ease-out;
+        }
+      `}</style>
     </div>
   )
 }

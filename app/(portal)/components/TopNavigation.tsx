@@ -41,16 +41,12 @@ export function TopNavigation({ user }: TopNavigationProps) {
   return (
     <header className="h-20 bg-white border-b border-slate-200 flex items-center px-8 shrink-0 z-10">
       {/* Logo */}
-      <div className="flex items-center gap-3 mr-10 shrink-0">
-        <div className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center text-white">
-          <span className="material-symbols-outlined">shield_person</span>
-        </div>
-        <div>
-          <h1 className="text-slate-900 font-bold text-lg leading-none">NBE Portal</h1>
-          <span className="text-xs uppercase tracking-widest font-semibold text-slate-400">
-            Enterprise
-          </span>
-        </div>
+      <div className="flex items-center mr-10 shrink-0">
+        <img
+          src="/Logo_black.png"
+          alt="NBE Australia"
+          className="h-12 w-auto object-contain"
+        />
       </div>
 
       {/* Navigation Items */}
