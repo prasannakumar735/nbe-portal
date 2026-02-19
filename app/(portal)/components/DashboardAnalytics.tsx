@@ -140,7 +140,11 @@ export default function DashboardAnalytics({ userId, userRole }: DashboardAnalyt
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-2">Billable</label>
               <select
-                value={filters.billable === undefined ? '' : filters.billable.toString()}
+                value={
+  filters.billable === undefined || filters.billable === null
+    ? ''
+    : String(filters.billable)
+}
                 onChange={(e) => setFilters(prev => ({ 
                   ...prev, 
                   billable: e.target.value === '' ? undefined : e.target.value === 'true' 
