@@ -1,0 +1,17 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .nbe-black { fill: #000000; }
+      .nbe-purple { fill: #5B21B6; }
+    </style>
+  </defs>
+  
+  <!-- Main hexagonal shape -->
+  <g>
+    <!-- Outer hexagon outline -->
+    <path class="nbe-black" d="M 100 20 L 160 50 L 160 110 L 100 140 L 40 110 L 40 50 Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+    
+    <!-- Inner vertical bar (purple accent) -->
+    <rect class="nbe-purple" x="85" y="40" width="30" height="100" rx="3"/>
+  </g>
+</svg>
