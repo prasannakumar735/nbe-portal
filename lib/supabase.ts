@@ -1,32 +1,12 @@
-import { createBrowserClient } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 
-const rawSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
-const supabaseUrl = rawSupabaseUrl
-	? rawSupabaseUrl.startsWith('http')
-		? rawSupabaseUrl
-		: `https://${rawSupabaseUrl}.supabase.co`
-	: ''
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-const supabasePublishableKey =
-	process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
-	process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim()
-
-if (!supabaseUrl) {
+if (!supabaseUrl || !supabaseAnonKey) {
 	throw new Error(
-		'NEXT_PUBLIC_SUPABASE_URL is required. Use full URL (https://<project>.supabase.co) or project ref only.'
+		'Missing Supabase environment variables. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your .env.local file.'
 	)
 }
 
-if (!supabasePublishableKey) {
-	throw new Error(
-		'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY) is required.'
-	)
-}
-
-if (supabasePublishableKey.startsWith('sb_secret_')) {
-	throw new Error(
-		'Supabase secret keys (sb_secret_*) must never be exposed via NEXT_PUBLIC_* variables. Use a publishable/anon key for client-side access.'
-	)
-}
-
-export const supabase = createBrowserClient(supabaseUrl, supabasePublishableKey)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
