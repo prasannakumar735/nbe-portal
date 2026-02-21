@@ -72,8 +72,8 @@ export default function TimeEntryForm({
       if (editingEntry?.work_type_level1_id) {
         const level1 = workTypes.find(wt => wt.id === editingEntry.work_type_level1_id)
         if (level1) {
-          setLevel2Options(level1.level2Options)
-          const level2 = level1.level2Options.find(l2 => l2.id === editingEntry.work_type_level2_id)
+          setLevel2Options(level1.level2Options || [])
+          const level2 = (level1.level2Options || []).find(l2 => l2.id === editingEntry.work_type_level2_id)
           setSelectedLevel2(level2 || null)
         }
       }
@@ -159,7 +159,7 @@ export default function TimeEntryForm({
     }
 
     // Require project unless it's a leave type
-    if (!selectedLevel2?.isLeaveType && !formData.project_id) {
+    if (!selectedLevel2?.is_leave_type && !formData.project_id) {
       newErrors.project_id = 'Project is required for non-leave entries'
     }
 
@@ -357,7 +357,7 @@ export default function TimeEntryForm({
               <span className="text-sm font-bold">
                 {selectedLevel2.billable ? 'Billable' : 'Non-Billable'}
               </span>
-              {selectedLevel2.isLeaveType && (
+              {selectedLevel2.is_leave_type && (
                 <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-bold ml-2">
                   LEAVE TYPE
                 </span>
@@ -367,7 +367,7 @@ export default function TimeEntryForm({
         )}
 
         {/* Project/Client */}
-        {selectedLevel2 && !selectedLevel2.isLeaveType && (
+        {selectedLevel2 && !selectedLevel2.is_leave_type && (
           <div className="md:col-span-2">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Project / Client <span className="text-red-500">*</span>

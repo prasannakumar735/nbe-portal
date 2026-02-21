@@ -194,7 +194,7 @@ export class ClientLocationService {
     }
     const { data, error } = await supabase
       .from('client_locations')
-      .select('id, suburb')
+      .select('id, client_id, suburb')
       .eq('client_id', clientId)
 
     if (error) throw error
@@ -676,7 +676,10 @@ export class WeeklySubmissionService {
 // AUDIT SERVICE
 // ============================================
 export class AuditService {
-  static async log(entry: Omit<AuditLog, 'id' | 'changed_at' | 'ip_address' | 'user_agent'>): Promise<void> {
+  static async log(
+    entry: Omit<AuditLog, 'id' | 'changed_at' | 'ip_address' | 'user_agent' | 'field_name' | 'old_value' | 'new_value'>
+      & Partial<Pick<AuditLog, 'field_name' | 'old_value' | 'new_value'>>
+  ): Promise<void> {
     const { error } = await supabase
       .from('audit_logs')
       .insert([entry])
@@ -866,12 +869,18 @@ export class DashboardService {
     ;(data || []).forEach(entry => {
       if (!entry.project_id || !entry.projects) return
 
+      const projectDetails = Array.isArray(entry.projects)
+        ? entry.projects[0]
+        : entry.projects
+
+      if (!projectDetails) return
+
       if (!projectMap.has(entry.project_id)) {
         projectMap.set(entry.project_id, {
           project_id: entry.project_id,
-          project_code: entry.projects.project_code,
-          project_name: entry.projects.project_name,
-          client_name: entry.projects.client_name,
+          project_code: projectDetails.project_code,
+          project_name: projectDetails.project_name,
+          client_name: projectDetails.client_name,
           total_hours: 0,
           billable_hours: 0,
           entry_count: 0

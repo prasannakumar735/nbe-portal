@@ -9,17 +9,39 @@ export default function Home() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleLogin = async () => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    if (!email || !password) {
+      alert('Please enter both email and password.')
+      return
+    }
 
-    if (error) {
-      alert(error.message)
-    } else {
+    try {
+      setIsSubmitting(true)
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      if (error) {
+        alert(error.message)
+        return
+      }
+
       router.push('/dashboard')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unexpected login error.'
+
+      if (message.toLowerCase().includes('failed to fetch')) {
+        alert('Unable to reach Supabase. Check NEXT_PUBLIC_SUPABASE_URL/NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local and verify internet access.')
+        return
+      }
+
+      alert(message)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -45,9 +67,10 @@ export default function Home() {
 
       <button
         onClick={handleLogin}
-        className="bg-blue-500 text-white px-4 py-2"
+        disabled={isSubmitting}
+        className="bg-blue-500 text-white px-4 py-2 disabled:opacity-60"
       >
-        Login
+        {isSubmitting ? 'Logging in...' : 'Login'}
       </button>
     </div>
   )
