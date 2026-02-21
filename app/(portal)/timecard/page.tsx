@@ -1,632 +1,516 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { 
+  Play, 
+  Square, 
+  CheckCircle2, 
+  Clock, 
+  Briefcase, 
+  MapPin, 
+  FolderOpen, 
+  FileText,
+  Timer
+} from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { TopNavigation } from '../components/TopNavigation'
-import { AlertCircle, CheckCircle, Play, Square } from 'lucide-react'
+import { 
+  ClientService, 
+  ClientLocationService, 
+  TimeEntryService, 
+  WorkTypeService 
+} from '@/lib/services/timecard.service'
+import type { 
+  ActiveWorkEntry, 
+  Client, 
+  ClientLocation, 
+  WorkTypeLevel1, 
+  WorkTypeLevel2 
+} from '@/lib/types/timecard.types'
 
-interface TimeEntry {
-  id: string
-  employee_id: string
-  client_id: string
-  location_id: string
-  level1_id: string
-  level2_id: string
-  billable: boolean
-  start_time: string
-  end_time: string | null
-  hours: number | null
-  status: 'active' | 'completed'
-  created_at: string
-  updated_at?: string
-}
-
-interface Client {
-  id: string
-  name: string
-}
-
-interface ClientLocation {
-  id: string
-  client_id: string
-  suburb: string
-}
-
-interface WorkTypeLevel1 {
-  id: string
-  code: string
-  name: string
-}
-
-interface WorkTypeLevel2 {
-  id: string
-  level1_id: string
-  code: string
-  name: string
-  billable: boolean
-}
-
-export default function TimeCardPage() {
-  const router = useRouter()
-
-  const [user, setUser] = useState<any>(null)
-  const [isLoadingPage, setIsLoadingPage] = useState(true)
-  const [isLoadingEntries, setIsLoadingEntries] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-
-  const [entries, setEntries] = useState<TimeEntry[]>([])
-  const [activeEntry, setActiveEntry] = useState<TimeEntry | null>(null)
-  const [elapsedTime, setElapsedTime] = useState('00:00:00')
-
+export default function TimecardPage() {
+  const [currentUser, setCurrentUser] = useState<{ id: string } | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  
+  // Data State
   const [clients, setClients] = useState<Client[]>([])
   const [locations, setLocations] = useState<ClientLocation[]>([])
-  const [workTypesL1, setWorkTypesL1] = useState<WorkTypeLevel1[]>([])
-  const [workTypesL2, setWorkTypesL2] = useState<WorkTypeLevel2[]>([])
+  const [workTypesLevel1, setWorkTypesLevel1] = useState<WorkTypeLevel1[]>([])
+  const [level2Options, setLevel2Options] = useState<WorkTypeLevel2[]>([])
 
-  const [entryLocationLookup, setEntryLocationLookup] = useState<Record<string, ClientLocation>>({})
-  const [entryLevel2Lookup, setEntryLevel2Lookup] = useState<Record<string, WorkTypeLevel2>>({})
+  // Selection State
+  const [selectedClientId, setSelectedClientId] = useState('')
+  const [selectedLocationId, setSelectedLocationId] = useState('')
+  const [selectedLevel1Id, setSelectedLevel1Id] = useState('')
+  const [selectedLevel2Id, setSelectedLevel2Id] = useState('')
+  
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null)
+  const [selectedLocation, setSelectedLocation] = useState<ClientLocation | null>(null)
+  const [selectedLevel1, setSelectedLevel1] = useState<WorkTypeLevel1 | null>(null)
+  const [selectedLevel2, setSelectedLevel2] = useState<WorkTypeLevel2 | null>(null)
 
-  const [selectedClient, setSelectedClient] = useState('')
-  const [selectedLocation, setSelectedLocation] = useState('')
-  const [selectedLevel1, setSelectedLevel1] = useState('')
-  const [selectedLevel2, setSelectedLevel2] = useState('')
+  // Active Entry State
+  const [activeEntry, setActiveEntry] = useState<ActiveWorkEntry | null>(null)
+  const [elapsedTimeStr, setElapsedTimeStr] = useState('00:00:00')
 
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  // UI State
+  const [isWorking, setIsWorking] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
-  const clearMessages = () => {
-    setErrorMessage(null)
-    setSuccessMessage(null)
-  }
-
-  const formatTime = (iso: string) =>
-    new Date(iso).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
-
-  const formatDate = (iso: string) =>
-    new Date(iso).toLocaleDateString('en-AU', { year: 'numeric', month: 'short', day: 'numeric' })
-
-  const loadBaseOptions = useCallback(async () => {
-    try {
-      const [{ data: clientRows, error: clientError }, { data: l1Rows, error: l1Error }] = await Promise.all([
-        supabase.from('clients').select('id, name').order('name', { ascending: true }),
-        supabase.from('work_type_level1').select('id, code, name').order('code', { ascending: true })
-      ])
-
-      if (clientError) throw clientError
-      if (l1Error) throw l1Error
-
-      setClients(clientRows || [])
-      setWorkTypesL1(l1Rows || [])
-    } catch (error) {
-      console.error('[timecard] loadBaseOptions failed:', error)
-      setErrorMessage('Failed to load form options.')
-    }
-  }, [])
-
-  const loadLocationsByClient = useCallback(async (clientId: string) => {
-    if (!clientId) {
-      setLocations([])
-      setSelectedLocation('')
-      return
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('client_locations')
-        .select('id, client_id, suburb')
-        .eq('client_id', clientId)
-        .order('suburb', { ascending: true })
-
-      if (error) throw error
-      setLocations(data || [])
-    } catch (error) {
-      console.error('[timecard] loadLocationsByClient failed:', error)
-      setErrorMessage('Failed to load locations for selected client.')
-    }
-  }, [])
-
-  const loadLevel2ByLevel1 = useCallback(async (level1Id: string) => {
-    if (!level1Id) {
-      setWorkTypesL2([])
-      setSelectedLevel2('')
-      return
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('work_type_level2')
-        .select('id, level1_id, code, name, billable')
-        .eq('level1_id', level1Id)
-        .order('code', { ascending: true })
-
-      if (error) throw error
-      setWorkTypesL2(data || [])
-    } catch (error) {
-      console.error('[timecard] loadLevel2ByLevel1 failed:', error)
-      setErrorMessage('Failed to load tasks for selected work type.')
-    }
-  }, [])
-
-  const buildEntryLookups = useCallback(async (rows: TimeEntry[]) => {
-    const locationIds = [...new Set(rows.map((entry) => entry.location_id).filter(Boolean))]
-    const level2Ids = [...new Set(rows.map((entry) => entry.level2_id).filter(Boolean))]
-
-    if (locationIds.length > 0) {
-      const { data, error } = await supabase
-        .from('client_locations')
-        .select('id, client_id, suburb')
-        .in('id', locationIds)
-
-      if (!error && data) {
-        const map: Record<string, ClientLocation> = {}
-        data.forEach((row) => {
-          map[row.id] = row
-        })
-        setEntryLocationLookup(map)
-      }
-    } else {
-      setEntryLocationLookup({})
-    }
-
-    if (level2Ids.length > 0) {
-      const { data, error } = await supabase
-        .from('work_type_level2')
-        .select('id, level1_id, code, name, billable')
-        .in('id', level2Ids)
-
-      if (!error && data) {
-        const map: Record<string, WorkTypeLevel2> = {}
-        data.forEach((row) => {
-          map[row.id] = row
-        })
-        setEntryLevel2Lookup(map)
-      }
-    } else {
-      setEntryLevel2Lookup({})
-    }
-  }, [])
-
-  const loadEntries = useCallback(
-    async (employeeId: string) => {
-      if (!employeeId) {
-        console.error('[timecard] loadEntries missing employeeId')
-        return
-      }
-
-      try {
-        setIsLoadingEntries(true)
-
-        const { data, error } = await supabase
-          .from('time_entries')
-          .select('id, employee_id, client_id, location_id, level1_id, level2_id, billable, start_time, end_time, hours, status, created_at, updated_at')
-          .eq('employee_id', employeeId)
-          .order('start_time', { ascending: false })
-
-        if (error) throw error
-
-        const rows = (data || []) as TimeEntry[]
-        setEntries(rows)
-
-        const active = rows.find((entry) => entry.status === 'active' && !entry.end_time) || null
-        setActiveEntry(active)
-
-        await buildEntryLookups(rows)
-      } catch (error) {
-        console.error('[timecard] loadEntries failed:', error)
-        setErrorMessage('Failed to load weekly activity.')
-      } finally {
-        setIsLoadingEntries(false)
-      }
-    },
-    [buildEntryLookups]
-  )
-
+  // Initialize: Get User & Load Data
   useEffect(() => {
-    if (!activeEntry) {
-      setElapsedTime('00:00:00')
-      return
+    async function init() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return // Handle redirect?
+        setCurrentUser(user)
+
+        const [active, clientData, level1Data] = await Promise.all([
+          TimeEntryService.getActiveEntry(user.id),
+          ClientService.getAll(),
+          supabase.from('work_type_level1').select('*').eq('active', true).order('name')
+        ])
+
+        // Transform level 1 data
+        const transformedLevel1 = (level1Data.data || []).map(item => ({
+          id: item.id,
+          code: item.code,
+          description: item.name,
+          active: item.active
+        }))
+
+        setClients(clientData)
+        setWorkTypesLevel1(transformedLevel1)
+
+        if (active) {
+          setActiveEntry(active)
+          await loadActiveEntryDetails(active, clientData, transformedLevel1)
+        }
+      } catch (error) {
+        console.error('Error initializing timecard:', error)
+      } finally {
+        setIsLoading(false)
+      }
     }
+    init()
+  }, [])
 
-    const interval = setInterval(() => {
-      const start = new Date(activeEntry.start_time)
-      const diff = Date.now() - start.getTime()
-      const hours = Math.floor(diff / 3600000)
-      const minutes = Math.floor((diff % 3600000) / 60000)
-      const seconds = Math.floor((diff % 60000) / 1000)
+  // Timer Effect
+  useEffect(() => {
+    let interval: NodeJS.Timeout
 
-      setElapsedTime(`${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`)
-    }, 1000)
+    if (activeEntry) {
+      const updateTimer = () => {
+        const start = new Date(activeEntry.start_time).getTime()
+        const now = new Date().getTime()
+        const diff = now - start
+        
+        const hours = Math.floor(diff / (1000 * 60 * 60))
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+        
+        setElapsedTimeStr(
+          `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+        )
+      }
+      
+      updateTimer() // Initial update
+      interval = setInterval(updateTimer, 1000)
+    } else {
+      setElapsedTimeStr('00:00:00')
+    }
 
     return () => clearInterval(interval)
   }, [activeEntry])
 
-  useEffect(() => {
-    const checkUser = async () => {
-      try {
-        const { data } = await supabase.auth.getUser()
-        if (!data.user) {
-          router.push('/')
-          return
-        }
+  const loadActiveEntryDetails = async (
+    entry: ActiveWorkEntry, 
+    currentClients: Client[], 
+    currentLevel1: WorkTypeLevel1[]
+  ) => {
+    try {
+      const client = currentClients.find(c => c.id === entry.client_id)
+      const location = await ClientLocationService.getById(entry.location_id!)
+      const level1 = currentLevel1.find(w => w.id === entry.level1_id)
+      
+      const { data: level2 } = await supabase
+        .from('work_type_level2')
+        .select('id, code, name, billable')
+        .eq('id', entry.level2_id)
+        .single()
 
-        setUser(data.user)
-        await loadBaseOptions()
-        await loadEntries(data.user.id)
-      } catch (error) {
-        console.error('[timecard] auth check failed:', error)
-        router.push('/')
-      } finally {
-        setIsLoadingPage(false)
+      setSelectedClient(client || null)
+      setSelectedLocation(location || null)
+      setSelectedLevel1(level1 || null)
+      
+      if (level2) {
+        setSelectedLevel2({
+          id: level2.id,
+          level1_id: entry.level1_id!,
+          code: level2.code,
+          description: level2.name,
+          billable: level2.billable,
+          is_leave_type: false,
+          active: true
+        })
       }
+    } catch (error) {
+      console.error('Error loading active entry details:', error)
     }
+  }
 
-    checkUser()
-  }, [router, loadBaseOptions, loadEntries])
-
-  const handleClientChange = async (clientId: string) => {
-    setSelectedClient(clientId)
-    setSelectedLocation('')
+  // Handle Changes
+  const handleClientChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const clientId = e.target.value
+    setSelectedClientId(clientId)
+    setSelectedLocationId('')
+    setSelectedLevel1Id('')
+    setSelectedLevel2Id('')
+    
+    setSelectedClient(clients.find(c => c.id === clientId) || null)
+    setSelectedLocation(null)
+    setSelectedLevel1(null)
+    setSelectedLevel2(null)
     setLocations([])
-    await loadLocationsByClient(clientId)
+
+    if (clientId) {
+      const locs = await ClientLocationService.getByClient(clientId)
+      setLocations(locs)
+    }
   }
 
-  const handleLevel1Change = async (level1Id: string) => {
-    setSelectedLevel1(level1Id)
-    setSelectedLevel2('')
-    setWorkTypesL2([])
-    await loadLevel2ByLevel1(level1Id)
+  const handleLocationChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const locationId = e.target.value
+    setSelectedLocationId(locationId)
+    setSelectedLevel1Id('')
+    setSelectedLevel2Id('')
+    
+    setSelectedLocation(locations.find(l => l.id === locationId) || null)
+    setSelectedLevel1(null)
+    setSelectedLevel2(null)
+    setLevel2Options([])
   }
+
+  const handleLevel1Change = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const level1Id = e.target.value
+    setSelectedLevel1Id(level1Id)
+    setSelectedLevel2Id('')
+    
+    setSelectedLevel1(workTypesLevel1.find(w => w.id === level1Id) || null)
+    setSelectedLevel2(null)
+
+    if (level1Id) {
+      const level2s = await WorkTypeService.getLevel2ByLevel1(level1Id)
+      setLevel2Options(level2s)
+    }
+  }
+
+  const handleLevel2Change = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const level2Id = e.target.value
+    setSelectedLevel2Id(level2Id)
+    const level2 = level2Options.find(l => l.id === level2Id)
+    setSelectedLevel2(level2 || null)
+  }
+
+  const canStart = selectedClientId && selectedLocationId && selectedLevel1Id && selectedLevel2Id
 
   const handleStartWork = async () => {
-    clearMessages()
+    if (!canStart || !currentUser) return
 
-    if (!user?.id || !selectedClient || !selectedLocation || !selectedLevel1 || !selectedLevel2) {
-      setErrorMessage('Please complete all fields before starting work.')
-      return
-    }
-
-    if (activeEntry) {
-      setErrorMessage('You already have an active session. Stop it before starting another.')
-      return
-    }
-
-    const selectedL2 = workTypesL2.find((row) => row.id === selectedLevel2)
-    const billable = selectedL2?.billable ?? false
+    setIsWorking(true)
+    setErrors({})
 
     try {
-      setIsSubmitting(true)
+      const billable = selectedLevel2?.billable ?? false
 
-      const payload = {
-        employee_id: user.id,
-        client_id: selectedClient,
-        location_id: selectedLocation,
-        level1_id: selectedLevel1,
-        level2_id: selectedLevel2,
+      const newEntry = await TimeEntryService.startWork({
+        employee_id: currentUser.id,
+        client_id: selectedClientId,
+        location_id: selectedLocationId,
+        level1_id: selectedLevel1Id,
+        level2_id: selectedLevel2Id,
         billable,
         start_time: new Date().toISOString(),
-        status: 'active'
-      }
+        end_time: null,
+        status: 'active',
+        hours: 0
+      })
 
-      const { error } = await supabase.from('time_entries').insert([payload])
-      if (error) throw error
-
-      setSuccessMessage('Work session started successfully.')
-      await loadEntries(user.id)
+      setActiveEntry(newEntry)
+      // Reset form
+      setSelectedClientId('')
+      setSelectedLocationId('')
+      setSelectedLevel1Id('')
+      setSelectedLevel2Id('')
     } catch (error) {
-      console.error('[timecard] handleStartWork failed:', error)
-      setErrorMessage('Failed to start work session.')
+      console.error('Error starting work:', error)
+      setErrors({ general: 'Failed to start work. Please try again.' })
     } finally {
-      setIsSubmitting(false)
+      setIsWorking(false)
     }
   }
 
-  const handleStopWork = async () => {
-    clearMessages()
+  const handleEndWork = async () => {
+    if (!activeEntry) return
 
-    if (!user?.id || !activeEntry?.id) {
-      setErrorMessage('No active work session to stop.')
-      return
-    }
-
+    setIsWorking(true)
     try {
-      setIsSubmitting(true)
-
-      const now = new Date()
-      const start = new Date(activeEntry.start_time)
-      const hours = Number(((now.getTime() - start.getTime()) / 3600000).toFixed(2))
-
-      const payload = {
-        end_time: now.toISOString(),
-        hours,
-        status: 'completed'
-      }
-
-      const { error } = await supabase.from('time_entries').update(payload).eq('id', activeEntry.id)
-      if (error) throw error
-
-      setSuccessMessage('Work session completed.')
-      await loadEntries(user.id)
+      await TimeEntryService.endWork(activeEntry.id, new Date(activeEntry.start_time))
+      setActiveEntry(null)
+      setElapsedTimeStr('00:00:00')
+      
+      // Reset selection display
+      setSelectedClient(null)
+      setSelectedLocation(null)
+      setSelectedLevel1(null)
+      setSelectedLevel2(null)
     } catch (error) {
-      console.error('[timecard] handleStopWork failed:', error)
-      setErrorMessage('Failed to stop work session.')
+      console.error('Error ending work:', error)
+      setErrors({ general: 'Failed to stop work. Please try again.' })
     } finally {
-      setIsSubmitting(false)
+      setIsWorking(false)
     }
   }
 
-  const weeklyTotal = useMemo(() => {
-    return entries.reduce((sum, row) => sum + (row.hours || 0), 0).toFixed(2)
-  }, [entries])
-
-  if (isLoadingPage) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#F8FAFC' }}>
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-2 mx-auto mb-4" style={{ borderColor: '#E5E7EB', borderTopColor: '#5B21B6' }}></div>
-          <p className="text-sm" style={{ color: '#475569' }}>Loading timecard...</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#F8FAFC' }}>
-      <TopNavigation user={user} />
+    <div className="flex-1 bg-gray-50 h-full overflow-y-auto">
+      {/* 1️⃣ Purple Hero Header Section */}
+      <div className="bg-gradient-to-r from-[#1e1b4b] via-[#312e81] to-[#4338ca] text-white py-12 px-8 shadow-md relative overflow-hidden">
+        {/* Background Accents */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl -ml-20 -mb-20 pointer-events-none"></div>
 
-      <div
-        className="border-b"
-        style={{
-          background: 'linear-gradient(135deg, #0B1020 0%, #1E1B4B 65%, #312E81 100%)',
-          borderColor: 'rgba(255,255,255,0.08)'
-        }}
-      >
-        <div className="max-w-[1280px] mx-auto px-4 md:px-6 lg:px-8 py-8">
-          <div className="rounded-xl border px-6 py-5 backdrop-blur-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4" style={{ borderColor: 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.04)' }}>
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-white">Timecard & GPS Tracking</h1>
-              <p className="text-sm mt-2" style={{ color: '#CBD5E1' }}>
-                Track and manage your work hours efficiently
-              </p>
-            </div>
-
-            <div className="inline-flex items-center gap-2 px-3 py-2 rounded-full" style={{ backgroundColor: '#DCFCE7' }}>
-              <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: '#16A34A' }}></span>
-              <span className="text-xs font-semibold" style={{ color: '#166534' }}>
-                {activeEntry ? 'Active Tracking' : 'Ready to Start'}
-              </span>
-            </div>
+        <div className="max-w-[1600px] mx-auto relative z-10 flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight mb-2 text-white">Timecard</h1>
+            <p className="text-indigo-200 text-lg font-light tracking-wide">
+              Track, log, and manage work hours across all projects
+            </p>
           </div>
+          
+          {activeEntry && (
+            <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-full px-4 py-2 flex items-center gap-2 shadow-sm">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+              </span>
+              <span className="text-sm font-medium text-emerald-100 tracking-wide uppercase">Time Running</span>
+            </div>
+          )}
         </div>
       </div>
 
-      <main className="max-w-[1280px] mx-auto px-4 md:px-6 lg:px-8 py-8">
-        {(errorMessage || successMessage) && (
-          <div className="space-y-2 mb-8 animate-fade-in">
-            {errorMessage && (
-              <div className="rounded-xl border p-4 flex items-start gap-3" style={{ backgroundColor: '#FEF2F2', borderColor: '#FECACA' }}>
-                <AlertCircle size={18} style={{ color: '#DC2626' }} className="mt-0.5" />
-                <p className="text-sm" style={{ color: '#7F1D1D' }}>{errorMessage}</p>
+      <div className="max-w-[1600px] mx-auto px-8 py-8 space-y-8 -mt-8 relative z-20">
+        
+        {/* 2️⃣ Active Session Card (Premium Style) */}
+        {activeEntry ? (
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden relative">
+            <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-purple-600 to-indigo-600"></div>
+            
+            <div className="p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+              {/* Left: Timer & Status */}
+              <div className="lg:col-span-4 space-y-4">
+                <div className="flex items-center gap-3 text-purple-600 mb-1">
+                  <div className="p-2 bg-purple-50 rounded-lg">
+                    <Timer className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-bold tracking-widest uppercase">Active Session</span>
+                </div>
+                
+                <div>
+                  <div className="text-7xl font-mono font-bold text-gray-900 tracking-tighter tabular-nums leading-none">
+                    {elapsedTimeStr}
+                  </div>
+                  <div className="text-sm text-gray-400 font-medium mt-3 flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    Started at {new Date(activeEntry.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Middle: Session Details Grid */}
+              <div className="lg:col-span-6">
+                <div className="grid grid-cols-2 gap-y-6 gap-x-8">
+                  <div className="group">
+                    <div className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1 group-hover:text-purple-600 transition-colors">Client</div>
+                    <div className="font-semibold text-gray-800 text-lg">{selectedClient?.name || 'Loading...'}</div>
+                  </div>
+                  <div className="group">
+                    <div className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1 group-hover:text-purple-600 transition-colors">Location</div>
+                    <div className="font-semibold text-gray-800 text-lg flex items-center gap-1.5">
+                      <MapPin className="w-4 h-4 text-gray-400" />
+                      {selectedLocation?.name || 'Loading...'}
+                    </div>
+                  </div>
+                  <div className="group">
+                    <div className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1 group-hover:text-purple-600 transition-colors">Work Type</div>
+                    <div className="font-semibold text-gray-800 text-lg">{selectedLevel1?.description || 'Loading...'}</div>
+                  </div>
+                  <div className="group">
+                    <div className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1 group-hover:text-purple-600 transition-colors">Task</div>
+                    <div className="font-semibold text-gray-800 text-lg">{selectedLevel2?.description || 'Loading...'}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: Actions */}
+              <div className="lg:col-span-2 flex flex-col gap-3 justify-end items-end h-full border-l border-gray-100 pl-8">
+                <button 
+                  onClick={handleEndWork}
+                  disabled={isWorking}
+                  className="w-full py-3 px-6 bg-red-50 text-red-600 border border-red-100 hover:bg-red-600 hover:text-white rounded-xl shadow-sm transition-all duration-200 font-semibold flex items-center justify-center gap-2 group disabled:opacity-70"
+                >
+                  <Square className="w-4 h-4 fill-current group-hover:fill-white transition-colors" />
+                  {isWorking ? 'Stopping...' : 'Stop Work'}
+                </button>
+              </div>
+            </div>
+            
+            {/* Progress Bar Loader (Visual flair) */}
+            <div className="h-1 w-full bg-gray-50">
+              <div className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 w-1/3 animate-[pulse_3s_ease-in-out_infinite]"></div>
+            </div>
+          </div>
+        ) : (
+          /* 3️⃣ Work in Progress Section (New Entry) */
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
+            <div className="flex items-center gap-3 mb-8 pb-4 border-b border-gray-50">
+              <div className="bg-indigo-50 p-2.5 rounded-lg text-indigo-600">
+                <Play className="w-5 h-5 fill-indigo-600" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Start New Session</h2>
+                <p className="text-gray-500 text-sm">Select project details to begin tracking time</p>
+              </div>
+            </div>
+
+            {errors.general && (
+              <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-xl border border-red-100 flex gap-2 items-center">
+                <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                {errors.general}
               </div>
             )}
 
-            {successMessage && (
-              <div className="rounded-xl border p-4 flex items-start gap-3" style={{ backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }}>
-                <CheckCircle size={18} style={{ color: '#16A34A' }} className="mt-0.5" />
-                <p className="text-sm" style={{ color: '#166534' }}>{successMessage}</p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-8">
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                    <Briefcase className="w-3.5 h-3.5" /> Client
+                  </label>
+                  <div className="relative">
+                    <select 
+                      value={selectedClientId}
+                      onChange={handleClientChange}
+                      className="w-full pl-4 pr-10 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-700 font-medium focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all appearance-none cursor-pointer hover:bg-gray-100/50"
+                    >
+                      <option value="">Select Client...</option>
+                      {clients.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                      <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                    <MapPin className="w-3.5 h-3.5" /> Location
+                  </label>
+                  <div className="relative">
+                    <select 
+                      value={selectedLocationId}
+                      onChange={handleLocationChange}
+                      disabled={!selectedClientId}
+                      className="w-full pl-4 pr-10 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-700 font-medium focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all appearance-none cursor-pointer hover:bg-gray-100/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <option value="">Select Location...</option>
+                      {locations.map(l => (
+                        <option key={l.id} value={l.id}>{l.name}</option>
+                      ))}
+                    </select>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                      <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
               </div>
-            )}
+
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                    <FolderOpen className="w-3.5 h-3.5" /> Work Type
+                  </label>
+                  <div className="relative">
+                    <select 
+                      value={selectedLevel1Id}
+                      onChange={handleLevel1Change}
+                      disabled={!selectedLocationId}
+                      className="w-full pl-4 pr-10 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-700 font-medium focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all appearance-none cursor-pointer hover:bg-gray-100/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <option value="">Select Work Type...</option>
+                      {workTypesLevel1.map(w => (
+                        <option key={w.id} value={w.id}>{w.description}</option>
+                      ))}
+                    </select>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                      <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                    <FileText className="w-3.5 h-3.5" /> Task
+                  </label>
+                  <div className="relative">
+                    <select 
+                      value={selectedLevel2Id}
+                      onChange={handleLevel2Change}
+                      disabled={!selectedLevel1Id}
+                      className="w-full pl-4 pr-10 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-700 font-medium focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all appearance-none cursor-pointer hover:bg-gray-100/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <option value="">Select Task...</option>
+                      {level2Options.map(l => (
+                        <option key={l.id} value={l.id}>{l.description}</option>
+                      ))}
+                    </select>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                      <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-10 flex justify-end">
+              <button 
+                onClick={handleStartWork}
+                disabled={!canStart || isWorking}
+                className="px-10 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl shadow-lg shadow-purple-500/30 font-bold text-lg tracking-wide transition-all duration-200 transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+              >
+                {isWorking ? 'Starting...' : 'Start Work'}
+              </button>
+            </div>
           </div>
         )}
-
-        <div className="space-y-8">
-          {activeEntry && (
-            <section className="rounded-xl border shadow-sm p-6" style={{ backgroundColor: '#FFFFFF', borderColor: '#F3F4F6', position: 'relative', overflow: 'hidden' }}>
-              <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: '#5B21B6' }}></div>
-
-              <div className="ml-3 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                <div className="lg:col-span-4 text-center lg:text-left">
-                  <div className="inline-flex items-center gap-2 mb-3">
-                    <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: '#16A34A' }}></span>
-                    <span className="text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Active Session</span>
-                  </div>
-                  <p className="text-4xl font-semibold font-mono" style={{ color: '#111827', fontVariantNumeric: 'tabular-nums' }}>{elapsedTime}</p>
-                  <p className="text-sm mt-2" style={{ color: '#6B7280' }}>Started at {formatTime(activeEntry.start_time)}</p>
-                </div>
-
-                <div className="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Client</p>
-                    <p className="text-base font-medium" style={{ color: '#111827' }}>{clients.find((row) => row.id === activeEntry.client_id)?.name || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Location</p>
-                    <p className="text-base font-medium" style={{ color: '#111827' }}>{entryLocationLookup[activeEntry.location_id]?.suburb || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Work Type</p>
-                    <p className="text-base font-medium" style={{ color: '#111827' }}>{workTypesL1.find((row) => row.id === activeEntry.level1_id)?.name || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Task</p>
-                    <p className="text-base font-medium" style={{ color: '#111827' }}>{entryLevel2Lookup[activeEntry.level2_id]?.name || '—'}</p>
-                  </div>
-                </div>
-
-                <div className="lg:col-span-3 flex lg:justify-end">
-                  <button
-                    onClick={handleStopWork}
-                    disabled={isSubmitting}
-                    className="w-full lg:w-auto px-6 h-11 rounded-lg text-white font-medium transition duration-200 hover:scale-[1.03] disabled:opacity-50"
-                    style={{ backgroundColor: '#DC2626' }}
-                  >
-                    <span className="inline-flex items-center gap-2"><Square size={14} /> Stop Work</span>
-                  </button>
-                </div>
-              </div>
-            </section>
-          )}
-
-          <section className="rounded-xl border shadow-sm p-6" style={{ backgroundColor: '#FFFFFF', borderColor: '#F3F4F6' }}>
-            <h2 className="text-2xl font-semibold" style={{ color: '#111827' }}>Work Entry</h2>
-
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm uppercase tracking-wide block mb-2" style={{ color: '#6B7280' }}>Client</label>
-                <select
-                  value={selectedClient}
-                  onChange={(e) => handleClientChange(e.target.value)}
-                  disabled={!!activeEntry}
-                  className="w-full h-11 rounded-lg border px-3 text-sm transition duration-200 focus:outline-none focus:ring-2 disabled:opacity-50"
-                  style={{ borderColor: '#D1D5DB', color: '#111827', '--tw-ring-color': '#5B21B6' } as any}
-                >
-                  <option value="">Select client</option>
-                  {clients.map((row) => (
-                    <option key={row.id} value={row.id}>{row.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-sm uppercase tracking-wide block mb-2" style={{ color: '#6B7280' }}>Location</label>
-                <select
-                  value={selectedLocation}
-                  onChange={(e) => setSelectedLocation(e.target.value)}
-                  disabled={!selectedClient || !!activeEntry}
-                  className="w-full h-11 rounded-lg border px-3 text-sm transition duration-200 focus:outline-none focus:ring-2 disabled:opacity-50"
-                  style={{ borderColor: '#D1D5DB', color: '#111827', '--tw-ring-color': '#5B21B6' } as any}
-                >
-                  <option value="">Select location</option>
-                  {locations.map((row) => (
-                    <option key={row.id} value={row.id}>{row.suburb}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-sm uppercase tracking-wide block mb-2" style={{ color: '#6B7280' }}>Work Type</label>
-                <select
-                  value={selectedLevel1}
-                  onChange={(e) => handleLevel1Change(e.target.value)}
-                  disabled={!!activeEntry}
-                  className="w-full h-11 rounded-lg border px-3 text-sm transition duration-200 focus:outline-none focus:ring-2 disabled:opacity-50"
-                  style={{ borderColor: '#D1D5DB', color: '#111827', '--tw-ring-color': '#5B21B6' } as any}
-                >
-                  <option value="">Select work type</option>
-                  {workTypesL1.map((row) => (
-                    <option key={row.id} value={row.id}>{row.code} - {row.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-sm uppercase tracking-wide block mb-2" style={{ color: '#6B7280' }}>Task</label>
-                <select
-                  value={selectedLevel2}
-                  onChange={(e) => setSelectedLevel2(e.target.value)}
-                  disabled={!selectedLevel1 || !!activeEntry}
-                  className="w-full h-11 rounded-lg border px-3 text-sm transition duration-200 focus:outline-none focus:ring-2 disabled:opacity-50"
-                  style={{ borderColor: '#D1D5DB', color: '#111827', '--tw-ring-color': '#5B21B6' } as any}
-                >
-                  <option value="">Select task</option>
-                  {workTypesL2.map((row) => (
-                    <option key={row.id} value={row.id}>{row.code} - {row.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {!activeEntry && (
-              <button
-                onClick={handleStartWork}
-                disabled={isSubmitting || !selectedClient || !selectedLocation || !selectedLevel1 || !selectedLevel2}
-                className="mt-6 w-full md:w-auto px-8 h-11 rounded-lg text-white font-medium transition duration-200 hover:scale-[1.03] disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg, #7C3AED 0%, #5B21B6 100%)' }}
-              >
-                <span className="inline-flex items-center gap-2"><Play size={14} /> {isSubmitting ? 'Starting...' : 'Start Work'}</span>
-              </button>
-            )}
-          </section>
-
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="rounded-xl border shadow-sm p-6" style={{ backgroundColor: '#FFFFFF', borderColor: '#F3F4F6' }}>
-              <p className="text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Entries This Week</p>
-              <p className="text-2xl font-semibold mt-2" style={{ color: '#111827' }}>{entries.length}</p>
-            </div>
-            <div className="rounded-xl border shadow-sm p-6" style={{ backgroundColor: '#FFFFFF', borderColor: '#F3F4F6' }}>
-              <p className="text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Total Hours</p>
-              <p className="text-2xl font-semibold mt-2" style={{ color: '#111827' }}>{weeklyTotal}</p>
-            </div>
-          </section>
-
-          <section className="rounded-xl border shadow-sm" style={{ backgroundColor: '#FFFFFF', borderColor: '#F3F4F6' }}>
-            <div className="px-6 py-4 border-b" style={{ borderColor: '#E5E7EB' }}>
-              <h2 className="text-2xl font-semibold" style={{ color: '#111827' }}>Weekly Activity</h2>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px]">
-                <thead>
-                  <tr style={{ backgroundColor: '#F9FAFB' }}>
-                    <th className="px-6 py-3 text-left text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Date</th>
-                    <th className="px-6 py-3 text-left text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Client</th>
-                    <th className="px-6 py-3 text-left text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Type</th>
-                    <th className="px-6 py-3 text-left text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Start</th>
-                    <th className="px-6 py-3 text-left text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>End</th>
-                    <th className="px-6 py-3 text-left text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Duration</th>
-                    <th className="px-6 py-3 text-left text-sm uppercase tracking-wide" style={{ color: '#6B7280' }}>Status</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {isLoadingEntries ? (
-                    <tr>
-                      <td colSpan={7} className="px-6 py-10 text-center text-sm" style={{ color: '#6B7280' }}>Loading weekly activity...</td>
-                    </tr>
-                  ) : entries.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-6 py-10 text-center text-sm" style={{ color: '#6B7280' }}>No entries found.</td>
-                    </tr>
-                  ) : (
-                    entries.map((entry) => (
-                      <tr key={entry.id} className="transition duration-200 hover:bg-slate-50" style={{ borderTop: '1px solid #F1F5F9' }}>
-                        <td className="px-6 py-4 text-base font-medium" style={{ color: '#111827' }}>{formatDate(entry.start_time)}</td>
-                        <td className="px-6 py-4 text-base font-medium" style={{ color: '#111827' }}>{clients.find((row) => row.id === entry.client_id)?.name || '—'}</td>
-                        <td className="px-6 py-4 text-base font-medium" style={{ color: '#111827' }}>{entryLevel2Lookup[entry.level2_id]?.name || '—'}</td>
-                        <td className="px-6 py-4 text-base font-medium" style={{ color: '#111827' }}>{formatTime(entry.start_time)}</td>
-                        <td className="px-6 py-4 text-base font-medium" style={{ color: '#111827' }}>{entry.end_time ? formatTime(entry.end_time) : '—'}</td>
-                        <td className="px-6 py-4 text-base font-semibold" style={{ color: '#111827' }}>{entry.hours ? `${entry.hours.toFixed(2)}h` : '—'}</td>
-                        <td className="px-6 py-4">
-                          <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium" style={entry.status === 'completed' ? { backgroundColor: '#DCFCE7', color: '#166534' } : { backgroundColor: '#DBEAFE', color: '#1E40AF' }}>
-                            {entry.status === 'completed' ? 'Completed' : 'Active'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </div>
-      </main>
-
-      <style>{`
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(-6px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .animate-fade-in {
-          animation: fadeIn 0.2s ease-out;
-        }
-      `}</style>
+      </div>
     </div>
   )
 }
