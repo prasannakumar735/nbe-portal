@@ -4,14 +4,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { TopNavigation } from '../components/TopNavigation'
-import { TimecardHero } from './components/TimecardHero'
-import { ActiveSessionCard } from './components/ActiveSessionCard'
-import { TimecardSummaryCards } from './components/TimecardSummaryCards'
-import { TimeEntryForm } from './components/TimeEntryForm'
-import { WeeklyActivityTable } from './components/WeeklyActivityTable'
-import { WeekNavigation } from './components/WeekNavigation'
+import { 
+  TimecardHero, 
+  ActiveSessionCard, 
+  TimecardSummaryCards, 
+  TimeEntryForm, 
+  WeeklyActivityTable, 
+  WeekNavigation,
+  BadgeStatus
+} from './components'
 import { AlertCircle, CheckCircle } from 'lucide-react'
-import { BadgeStatus } from './components/StatusBadge'
 
 // ==========================================
 // TYPES
@@ -61,7 +63,7 @@ interface WorkTypeLevel2 {
 // MAIN COMPONENT
 // ==========================================
 
-export default function TimeCardPage() {
+export default function TimecardPage() {
   const router = useRouter()
 
   const [user, setUser] = useState<any>(null)
@@ -109,7 +111,7 @@ export default function TimeCardPage() {
       if (l1Res.error) throw l1Res.error
 
       setClients(clientRes.data || [])
-      setWorkTypesL1(l1Res.data || [])
+      setWorkTypesL1((l1Res.data || []).map(l => ({ ...l, code: l.code || '', name: l.name || '' })))
 
       const cMap: Record<string, Client> = {}
       ;(clientRes.data || []).forEach(c => cMap[c.id] = c)
@@ -133,7 +135,7 @@ export default function TimeCardPage() {
         .select('*')
         .eq('employee_id', userId)
         .order('start_time', { ascending: false })
-        .limit(50)
+        .limit(100)
 
       if (error) throw error
 
@@ -188,18 +190,18 @@ export default function TimeCardPage() {
 
   useEffect(() => {
     const init = async () => {
-      const { data } = await supabase.auth.getUser()
-      if (data.user) {
-        setUser(data.user)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        setUser(user)
         await loadBaseOptions()
-        await loadEntries(data.user.id)
+        await loadEntries(user.id)
       } else {
         router.push('/')
       }
       setIsLoadingPage(false)
     }
     init()
-  }, [router, loadBaseOptions])
+  }, [router, loadBaseOptions, loadEntries])
 
   // ==========================================
   // HANDLERS
@@ -292,7 +294,7 @@ export default function TimeCardPage() {
       const now = new Date()
       const start = new Date(activeEntry.start_time)
       const diffMs = now.getTime() - start.getTime()
-      const hours = parseFloat((diffMs / 3600000).toFixed(2))
+      const hours = Math.max(0.01, parseFloat((diffMs / 3600000).toFixed(2)))
 
       const payload = {
         end_time: now.toISOString(),
@@ -428,8 +430,8 @@ export default function TimeCardPage() {
       entry.client,
       entry.workType,
       entry.task,
-      new Date(entry.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }),
-      entry.endTime ? new Date(entry.endTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : '—',
+      new Date(entry.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true }),
+      entry.endTime ? new Date(entry.endTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—',
       entry.duration?.toFixed(2) || '0.00',
       entry.status
     ])
@@ -461,7 +463,7 @@ export default function TimeCardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 pb-20">
       <TopNavigation user={user} />
       
       <TimecardHero isActiveSession={!!activeEntry} />
@@ -470,15 +472,15 @@ export default function TimeCardPage() {
         
         {/* Alerts */}
         {(errorMessage || successMessage) && (
-          <div className="space-y-2">
+          <div className="space-y-2 animate-in fade-in slide-in-from-top-4 duration-300">
             {errorMessage && (
-              <div className="rounded-lg border px-4 py-3 flex items-center gap-3 bg-red-50 border-red-200 text-red-700">
+              <div className="rounded-lg border px-4 py-3 flex items-center gap-3 bg-red-50 border-red-200 text-red-700 shadow-sm">
                 <AlertCircle className="w-5 h-5 flex-shrink-0" />
                 <span className="text-sm font-medium">{errorMessage}</span>
               </div>
             )}
             {successMessage && (
-              <div className="rounded-lg border px-4 py-3 flex items-center gap-3 bg-emerald-50 border-emerald-200 text-emerald-700">
+              <div className="rounded-lg border px-4 py-3 flex items-center gap-3 bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm">
                 <CheckCircle className="w-5 h-5 flex-shrink-0" />
                 <span className="text-sm font-medium">{successMessage}</span>
               </div>
@@ -511,7 +513,7 @@ export default function TimeCardPage() {
         {/* Work Entry Form */}
         <TimeEntryForm
           clients={clients.map(c => ({ id: c.id, name: c.name }))}
-          workTypes={workTypesL1.map(w => ({ id: w.id, name: w.name, code: w.code }))}
+          workTypes={workTypesL1}
           isDisabled={!!activeEntry}
           onSubmit={handleStartWork}
           onClientChange={handleClientChange}
@@ -519,9 +521,13 @@ export default function TimeCardPage() {
         />
 
         {/* Weekly Activity Table */}
-        <WeeklyActivityTable entries={weeklyTableData} />
+        <WeeklyActivityTable 
+          entries={weeklyTableData} 
+          isLoading={false}
+        />
 
       </main>
     </div>
   )
 }
+

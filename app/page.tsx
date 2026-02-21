@@ -11,7 +11,9 @@ export default function Home() {
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleLogin = async () => {
+  const handleLogin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    
     if (!email || !password) {
       alert('Please enter both email and password.')
       return
@@ -20,7 +22,7 @@ export default function Home() {
     try {
       setIsSubmitting(true)
 
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
@@ -30,7 +32,9 @@ export default function Home() {
         return
       }
 
-      router.push('/dashboard')
+      if (data.user) {
+        router.push('/dashboard')
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unexpected login error.'
 
@@ -46,32 +50,48 @@ export default function Home() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen gap-4">
-      <h1 className="text-2xl font-bold">NBE Portal Login</h1>
+    <div className="flex flex-col items-center justify-center h-screen gap-6 bg-slate-50">
+      <div className="bg-white p-8 rounded-xl shadow-lg border border-slate-200 w-full max-w-md">
+        <h1 className="text-2xl font-bold text-slate-900 mb-6 text-center">NBE Portal Login</h1>
 
-      <input
-        type="email"
-        placeholder="Email"
-        className="border p-2"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-      />
+        <form onSubmit={handleLogin} className="flex flex-col gap-4">
+          <div className="space-y-1">
+            <label htmlFor="login-email" className="text-sm font-medium text-slate-700">Email Address</label>
+            <input
+              id="login-email"
+              name="email"
+              type="email"
+              placeholder="name@company.com"
+              className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
 
-      <input
-        type="password"
-        placeholder="Password"
-        className="border p-2"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
+          <div className="space-y-1">
+            <label htmlFor="login-password" className="text-sm font-medium text-slate-700">Password</label>
+            <input
+              id="login-password"
+              name="password"
+              type="password"
+              placeholder="••••••••"
+              className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
 
-      <button
-        onClick={handleLogin}
-        disabled={isSubmitting}
-        className="bg-blue-500 text-white px-4 py-2 disabled:opacity-60"
-      >
-        {isSubmitting ? 'Logging in...' : 'Login'}
-      </button>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-lg disabled:opacity-60 transition-colors shadow-sm"
+          >
+            {isSubmitting ? 'Signing in...' : 'Sign In'}
+          </button>
+        </form>
+      </div>
     </div>
   )
 }
