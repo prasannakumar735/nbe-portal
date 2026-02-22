@@ -7,9 +7,8 @@ import { AdminDashboard } from '@/components/dashboard/admin/AdminDashboard'
 import { EmployeeDashboard } from '@/components/dashboard/employee/EmployeeDashboard'
 import { DashboardErrorState } from '@/components/dashboard/DashboardErrorState'
 import { LoadingSkeleton } from '@/components/ui/LoadingSkeleton'
-import { DashboardAuthGuard } from '../components/DashboardAuthGuard'
-import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { getServerUserId } from '@/lib/auth/server'
+import { createServerClient } from '@/lib/supabase/server'
+import { getServerUser } from '@/lib/auth/server'
 import { calculateWeeklyStats } from '@/lib/analytics/calculateWeeklyStats'
 import { calculateProjectBreakdown } from '@/lib/analytics/calculateProjectBreakdown'
 import { calculateTrendComparison } from '@/lib/analytics/calculateTrendComparison'
@@ -153,21 +152,13 @@ function buildBillableStacked(entries: TimeEntryRow[]): BillableStackedDatum[] {
 }
 
 export default async function DashboardPage({ searchParams }: { searchParams: SearchParams }) {
-  // Server-side session check: verify user is logged in
-  const userId = getServerUserId()
-  
-  if (!userId) {
+  // Server-side auth check
+  const user = await getServerUser()
+  if (!user) {
     redirect('/login')
   }
 
-  const supabase = await createSupabaseServerClient()
-  const { data: authData, error: authError } = await supabase.auth.getUser()
-
-  if (authError || !authData.user) {
-    redirect('/login')
-  }
-
-  const user = authData.user
+  const supabase = await createServerClient()
   const period = resolvePeriod(searchParams.period)
   const projectId = searchParams.project || 'all'
   const range = getDateRange(period, searchParams.start, searchParams.end)
@@ -386,49 +377,47 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
   }
 
   return (
-    <DashboardAuthGuard>
-      <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
-        <TopNavigation user={{ id: user.id, email: user.email, user_metadata: user.user_metadata }} />
-        <main className="flex-1 overflow-y-auto">
-          <div className="max-w-[1600px] mx-auto px-8 pb-10">
-            <div className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur border-b border-gray-100 py-6">
-              <DashboardHeader
-                title="Dashboard"
-                subtitle="Time insights & performance overview"
-                actions={
-                  <FilterBar
-                    projects={projectOptions}
-                    defaultPeriod="this_week"
-                    defaultProject="all"
-                  />
-                }
-              />
-            </div>
-
-            <div className="space-y-8 pt-6">
-              {errorMessage ? (
-                <DashboardErrorState message={errorMessage} />
-              ) : isCustomIncomplete ? (
-                <DashboardErrorState message="Select a custom date range to view analytics." />
-              ) : (
-                <Suspense fallback={<LoadingSkeleton rows={3} />}>
-                  {role === 'admin' || role === 'manager' ? (
-                    <AdminDashboard
-                      data={adminData}
-                      charts={charts}
-                      entriesCount={entries.length}
-                      employeeLeaderboard={employeeLeaderboard}
-                      recentEntries={recentEntries}
-                    />
-                  ) : (
-                    <EmployeeDashboard data={employeeData} charts={charts} entriesCount={entries.length} />
-                  )}
-                </Suspense>
-              )}
-            </div>
+    <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
+      <TopNavigation user={{ id: user.id, email: user.email, user_metadata: user.user_metadata }} />
+      <main className="flex-1 overflow-y-auto">
+        <div className="max-w-[1600px] mx-auto px-8 pb-10">
+          <div className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur border-b border-gray-100 py-6">
+            <DashboardHeader
+              title="Dashboard"
+              subtitle="Time insights & performance overview"
+              actions={
+                <FilterBar
+                  projects={projectOptions}
+                  defaultPeriod="this_week"
+                  defaultProject="all"
+                />
+              }
+            />
           </div>
-        </main>
-      </div>
-    </DashboardAuthGuard>
+
+          <div className="space-y-8 pt-6">
+            {errorMessage ? (
+              <DashboardErrorState message={errorMessage} />
+            ) : isCustomIncomplete ? (
+              <DashboardErrorState message="Select a custom date range to view analytics." />
+            ) : (
+              <Suspense fallback={<LoadingSkeleton rows={3} />}>
+                {role === 'admin' || role === 'manager' ? (
+                  <AdminDashboard
+                    data={adminData}
+                    charts={charts}
+                    entriesCount={entries.length}
+                    employeeLeaderboard={employeeLeaderboard}
+                    recentEntries={recentEntries}
+                  />
+                ) : (
+                  <EmployeeDashboard data={employeeData} charts={charts} entriesCount={entries.length} />
+                )}
+              </Suspense>
+            )}
+          </div>
+        </div>
+      </main>
+    </div>
   )
 }
