@@ -2,15 +2,23 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { createSupabaseClient } from '@/lib/supabase/client'
 
 /**
  * Login Page
  * 
- * IMPORTANT: This is a client component that should NOT check auth on render.
- * Auth checks happen inside useEffect only.
+ * IMPORTANT:
+ * - This is a client component
+ * - Auth checks happen only in form submission (not in render)
+ * - After successful login, session is persisted by Supabase
+ * - Uses router.replace() to prevent back-button issues
+ * - After login, AuthProvider context updates automatically
+ * - User is redirected to /dashboard
  * 
- * After successful login, uses router.replace() (not push) to avoid back-button issues.
+ * PRODUCTION FIX:
+ * - Uses singleton Supabase client (no multiple instances)
+ * - Session automatically persists to storage
+ * - Vercel environment variables validated at build time
  */
 
 export default function LoginPage() {
@@ -20,13 +28,13 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError(null)
     setLoading(true)
 
     try {
-      const supabase = createClient()
+      const supabase = createSupabaseClient()
 
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
@@ -39,8 +47,8 @@ export default function LoginPage() {
         return
       }
 
-      // Login successful - session is automatically persisted by Supabase
-      // Use replace() to prevent back button returning to login
+      // Login successful - AuthProvider will detect the session
+      // and update its state automatically
       router.replace('/dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')

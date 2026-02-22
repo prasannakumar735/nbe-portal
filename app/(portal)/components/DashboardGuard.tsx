@@ -1,61 +1,52 @@
 'use client'
 
-import { useEffect, useState, ReactNode } from 'react'
+import { useEffect, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { useAuth } from '@/app/providers/AuthProvider'
 
-type DashboardGuardProps = {
+type RouteGuardProps = {
   children: ReactNode
 }
 
 /**
- * DashboardGuard - Protects dashboard routes from unauthenticated access
+ * RouteGuard - Protects all routes inside (portal) group
  * 
  * KEY FEATURES:
- * - Auth check happens in useEffect (not render body) - prevents hydration mismatch
- * - Only redirects when session is definitively NULL
- * - Loading state prevents content flash
- * - No infinite render loops
+ * - Uses AuthProvider context (not direct session checks)
+ * - Prevents flash of login content
+ * - No infinite redirect loops
+ * - Respects session persistence across routes
  * 
- * IMPORTANT:
- * - This is a client component wrapper
- * - Place it around dashboard content, not at page level
- * - Use router.replace() to prevent back-button issues
+ * FLOW:
+ * 1. Component mounts → reads session from AuthProvider context
+ * 2. If loading → show spinner (don't render children yet)
+ * 3. If no session → redirect to /login using router.replace()
+ * 4. If session exists → render children
+ * 
+ * CRITICAL:
+ * - Do NOT call getSession() directly here (already done in AuthProvider)
+ * - Do NOT redirect in render body (only in useEffect)
+ * - Do NOT create infinite redirects
+ * 
+ * PRODUCTION FIX:
+ * - Uses context instead of creating new auth checks
+ * - Session is shared across all protected routes
+ * - Navigating /login → /dashboard → /timecard maintains session
  */
 
-export function DashboardGuard({ children }: DashboardGuardProps) {
+export function RouteGuard({ children }: RouteGuardProps) {
   const router = useRouter()
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
+  const { session, isLoading } = useAuth()
 
+  // Redirect to login if no session (after loading completes)
   useEffect(() => {
-    // Check authentication status
-    const checkAuth = async () => {
-      try {
-        const supabase = createClient()
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-
-        if (!session) {
-          // No session - redirect to login
-          router.replace('/login')
-          return
-        }
-
-        // Session exists - allow render
-        setIsAuthenticated(true)
-      } catch (error) {
-        console.error('Auth check error:', error)
-        // On error, treat as unauthenticated
-        router.replace('/login')
-      }
+    if (!isLoading && !session) {
+      router.replace('/login')
     }
+  }, [isLoading, session, router])
 
-    checkAuth()
-  }, [router])
-
-  // Show loading state while checking authentication
-  if (isAuthenticated === null) {
+  // Show loading state while checking auth
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-50">
         <div className="text-center">
@@ -66,10 +57,11 @@ export function DashboardGuard({ children }: DashboardGuardProps) {
     )
   }
 
-  // Only render children if authenticated
-  if (!isAuthenticated) {
+  // If no session and not loading, don't render children (redirect will happen)
+  if (!session) {
     return null
   }
 
+  // Session exists, render protected content
   return <>{children}</>
 }
