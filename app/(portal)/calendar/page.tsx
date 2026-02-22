@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { TopNavigation } from '../components/TopNavigation'
 import {
   ChevronLeft,
   ChevronRight,
@@ -259,8 +258,7 @@ export default function CalendarPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
-      <TopNavigation user={user} />
+    <div className="flex flex-col h-full overflow-hidden">
 
       <div className="flex-1 flex overflow-hidden">
         {/* Main Calendar */}

@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { TopNavigation } from '../components/TopNavigation'
 import { Plus, X, Download, AlertCircle } from 'lucide-react'
 
 interface Reimbursement {
@@ -268,11 +267,9 @@ export default function ReimbursementPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
-      <TopNavigation user={user} />
+    <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-      <main className="flex-1 max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 overflow-y-auto">
-        {/* Header */}
+      {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
             <h2 className="text-2xl font-bold">Reimbursement Claims</h2>
@@ -415,7 +412,6 @@ export default function ReimbursementPage() {
             </div>
           )}
         </div>
-      </main>
 
       {/* New Claim Modal */}
       {showModal && (

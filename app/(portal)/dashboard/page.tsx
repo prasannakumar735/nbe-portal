@@ -1,6 +1,5 @@
 import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
-import { TopNavigation } from '../components/TopNavigation'
 import { DashboardHeader } from '@/components/dashboard/DashboardHeader'
 import { FilterBar } from '@/components/ui/FilterBar'
 import { AdminDashboard } from '@/components/dashboard/admin/AdminDashboard'
@@ -377,10 +376,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
-      <TopNavigation user={{ id: user.id, email: user.email, user_metadata: user.user_metadata }} />
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-[1600px] mx-auto px-8 pb-10">
+    <div className="max-w-[1600px] mx-auto px-8 pb-10">
           <div className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur border-b border-gray-100 py-6">
             <DashboardHeader
               title="Dashboard"
@@ -417,7 +413,5 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
             )}
           </div>
         </div>
-      </main>
-    </div>
   )
 }

@@ -13,7 +13,6 @@ import {
   List
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { TopNavigation } from '../components/TopNavigation'
 import TimeEntryForm from '../components/TimeEntryForm'
 import WeeklySubmissionCard from '../components/WeeklySubmissionCard'
 import DashboardAnalytics from '../components/DashboardAnalytics'
@@ -137,8 +136,7 @@ export default function TimecardEnhancedPage() {
   const billableHours = entries.reduce((sum, e) => sum + (e.billable ? e.hours : 0), 0)
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
-      <TopNavigation user={user} />
+    <div className="flex flex-col h-full overflow-hidden">
 
       <div className="flex-1 flex flex-col min-w-0">
         {/* Breadcrumb */}

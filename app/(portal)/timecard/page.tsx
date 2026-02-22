@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { TopNavigation } from '../components/TopNavigation'
 import { 
   TimecardHero, 
   ActiveSessionCard, 
@@ -463,8 +462,7 @@ export default function TimecardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20">
-      <TopNavigation user={user} />
+    <div className="pb-20">
       
       <TimecardHero isActiveSession={!!activeEntry} />
 
