@@ -1,295 +1,182 @@
-'use client'
-
-import { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
-import { useParams } from 'next/navigation'
-import { createSupabaseClient } from '@/lib/supabase/client'
-import { supabasePublic } from '@/lib/supabasePublic'
+import Link from 'next/link'
+import { notFound } from 'next/navigation'
+import { createServerClient } from '@/lib/supabase/server'
 
-type DoorLocation = {
+const EMERGENCY_CONTACT_NUMBER = '(03) 9357 5858'
+type DoorPageProps = {
+  params: Promise<{ doorId: string }>
+}
+
+type DoorRow = {
+  id: string
+  door_label?: string | null
+  door_type?: string | null
+  install_date?: string | null
+  client_location_id?: string | null
+  manufactured_by?: string | null
+}
+
+type LocationRow = {
+  id: string
+  client_id?: string | null
+  location_name?: string | null
+  name?: string | null
   suburb?: string | null
+  site_name?: string | null
   address?: string | null
 }
 
-type DoorPublicDetails = {
-  door_label: string | null
-  door_type: string | null
-  install_date: string | null
-  client_locations: DoorLocation | DoorLocation[] | null
+type ClientRow = {
+  id: string
+  client_name?: string | null
+  name?: string | null
+  company_name?: string | null
 }
 
-type LatestInspection = {
-  created_at: string | null
-  technician_notes: string | null
+type InspectionRow = {
+  created_at?: string | null
+  report_id?: string | null
 }
 
-const EMERGENCY_CONTACT_NUMBER = '(03) 9357 5858'
+function formatDate(value?: string | null, fallback = 'Not available'): string {
+  if (!value) return fallback
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return fallback
+  return date.toLocaleDateString('en-AU', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+}
 
-export default function DoorInfoPage() {
-  const params = useParams<{ doorId: string }>()
-  const doorId = params?.doorId
+export default async function DoorInfoPage({ params }: DoorPageProps) {
+  const { doorId } = await params
+  const supabase = await createServerClient()
 
-  const [door, setDoor] = useState<DoorPublicDetails | null>(null)
-  const [inspection, setInspection] = useState<LatestInspection | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [session, setSession] = useState<any>(null)
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  const supabase = useMemo(() => createSupabaseClient(), [])
+  const { data: doorData, error: doorError } = await supabase
+    .from('doors')
+    .select('*')
+    .eq('id', doorId)
+    .maybeSingle()
 
-  useEffect(() => {
-    let isActive = true
+  if (doorError || !doorData) {
+    notFound()
+  }
 
-    const fetchData = async () => {
-      if (!doorId || typeof doorId !== 'string') {
-        setError('Door not found.')
-        setIsLoading(false)
-        return
-      }
+  const door = doorData as DoorRow
 
-      setIsLoading(true)
-      setError(null)
+  let locationLabel = 'Not available'
+  let clientLabel = 'Not available'
 
-      try {
-        // 1. Fetch door by ID (no join)
-        const { data: doorData, error: doorError } = await supabasePublic
-          .from('doors')
+  const clientLocationId = String(door.client_location_id ?? '').trim()
+  if (clientLocationId) {
+    const { data: locationData } = await supabase
+      .from('client_locations')
+      .select('*')
+      .eq('id', clientLocationId)
+      .maybeSingle()
+
+    const location = locationData as LocationRow | null
+    if (location) {
+      locationLabel = String(
+        location.location_name ?? location.name ?? location.suburb ?? location.site_name ?? location.address ?? ''
+      ).trim() || 'Not available'
+
+      const clientId = String(location.client_id ?? '').trim()
+      if (clientId) {
+        const { data: clientData } = await supabase
+          .from('clients')
           .select('*')
-          .eq('id', doorId)
+          .eq('id', clientId)
           .maybeSingle()
 
-        if (!isActive) return
-
-        console.log('Door query result:', doorData)
-        console.log('Door query error:', doorError)
-
-        if (!doorData) {
-          setError('Door not found.')
-          setDoor(null)
-          setInspection(null)
-          return
-        }
-
-        // 2. Fetch client location for this door (safe, separate query)
-        let location: DoorLocation | null = null
-        if (doorData.client_location_id) {
-          const { data: locationData } = await supabasePublic
-            .from('client_locations')
-            .select('suburb,address')
-            .eq('id', doorData.client_location_id)
-            .maybeSingle()
-
-          if (!isActive) return
-
-          if (locationData) {
-            location = {
-              suburb: (locationData as { suburb?: string | null }).suburb ?? null,
-              address: (locationData as { address?: string | null }).address ?? null,
-            }
-          }
-        }
-
-        const doorDetails: DoorPublicDetails = {
-          door_label: (doorData as { door_label?: string | null }).door_label ?? null,
-          door_type: (doorData as { door_type?: string | null }).door_type ?? null,
-          install_date: (doorData as { install_date?: string | null }).install_date ?? null,
-          client_locations: location,
-        }
-
-        setDoor(doorDetails)
-
-        // 3. Fetch latest inspection (only exposes date + technician notes)
-        const { data: inspectionData } = await supabasePublic
-          .from('door_inspections')
-          .select('created_at, technician_notes')
-          .eq('door_id', doorId)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-
-        if (!isActive) return
-
-        if (inspectionData) {
-          setInspection(inspectionData as LatestInspection)
-        } else {
-          setInspection(null)
-        }
-      } catch (err) {
-        if (!isActive) return
-        console.error('[DoorInfoPage] Unexpected error loading door info:', { doorId, err })
-        setError('Unable to load door information at this time.')
-        setDoor(null)
-        setInspection(null)
-      } finally {
-        if (isActive) {
-          setIsLoading(false)
+        const client = clientData as ClientRow | null
+        if (client) {
+          clientLabel = String(client.client_name ?? client.name ?? client.company_name ?? '').trim() || 'Not available'
         }
       }
     }
+  }
 
-    void fetchData()
+  const { data: latestInspectionData } = await supabase
+    .from('door_inspections')
+    .select('created_at, report_id')
+    .eq('door_id', doorId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
 
-    return () => {
-      isActive = false
+  const latestInspection = latestInspectionData as InspectionRow | null
+  let servicedBy = 'NBE Australia'
+  if (latestInspection?.report_id) {
+    const { data: reportData } = await supabase
+      .from('maintenance_reports')
+      .select('technician_name')
+      .eq('id', latestInspection.report_id)
+      .maybeSingle()
+
+    const technicianName = String((reportData as { technician_name?: string | null } | null)?.technician_name ?? '').trim()
+    if (technicianName) {
+      servicedBy = technicianName
     }
-  }, [doorId])
+  }
 
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const { data } = await supabase.auth.getSession()
-        setSession(data.session)
-        setIsLoggedIn(!!data.session)
-      } catch {
-        setSession(null)
-        setIsLoggedIn(false)
-      }
-    }
-
-    checkSession()
-  }, [supabase])
-
-  const resolvedLocation = (() => {
-    if (!door?.client_locations) return null
-    if (Array.isArray(door.client_locations)) {
-      return door.client_locations[0] ?? null
-    }
-    return door.client_locations
-  })()
-
-  const installDateLabel = door?.install_date
-    ? new Date(door.install_date).toLocaleDateString('en-AU', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      })
-    : 'Not available'
-
-  const lastServiceDateLabel = inspection?.created_at
-    ? new Date(inspection.created_at).toLocaleDateString('en-AU', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      })
-    : 'Not yet serviced'
-
-  const technicianNotesLabel = inspection?.technician_notes?.trim() || 'Not available'
-
-  const doorNumberLabel = door?.door_label || 'Unknown door'
-  const doorTypeLabel = door?.door_type || 'Door'
-  const suburbLabel = resolvedLocation?.suburb || 'Not available'
+  const doorNumberLabel = String(door.door_label ?? '').trim() || door.id
+  const doorTypeLabel = String(door.door_type ?? '').trim() || 'Not available'
+  const manufacturerLabel = String(door.manufactured_by ?? '').trim() || 'NBE Australia'
+  const installDateLabel = formatDate(door.install_date)
+  const lastServicedLabel = formatDate(latestInspection?.created_at, 'Not yet serviced')
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-8">
-      <div className="mx-auto flex w-full max-w-xl flex-col items-stretch gap-4">
+      <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
         <header className="text-center">
-          <div className="flex flex-col items-center mb-8">
+          <div className="mb-8 flex flex-col items-center">
             <Image
-              src="/logo.png"
+              src="/nbe-logo.png"
               alt="NBE Australia"
-              width={200}
-              height={70}
+              width={220}
+              height={72}
               className="object-contain"
               priority
             />
-
-            <p className="text-xs md:text-sm text-gray-500 mt-2 tracking-wider">
-              INDUSTRIAL DOOR INFORMATION
-            </p>
+            <p className="mt-2 text-xs tracking-wider text-slate-500 md:text-sm">INDUSTRIAL DOOR INFORMATION</p>
           </div>
         </header>
 
         <main className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          {isLoading ? (
-            <p className="text-sm text-slate-600">Loading door information…</p>
-          ) : error ? (
-            <p className="text-sm font-semibold text-red-600">{error}</p>
-          ) : !door ? (
-            <p className="text-sm font-semibold text-slate-700">
-              Door not found. Please contact NBE Australia for assistance.
-            </p>
-          ) : (
-            <div className="space-y-5">
-              <section className="space-y-2">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Door Details
-                </h2>
-                <div className="grid grid-cols-1 gap-2 text-sm text-slate-800">
-                  <div className="flex justify-between gap-4">
-                    <span className="font-semibold text-slate-600">Door Number</span>
-                    <span>{doorNumberLabel}</span>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <span className="font-semibold text-slate-600">Door Type</span>
-                    <span>{doorTypeLabel}</span>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <span className="font-semibold text-slate-600">Location</span>
-                    <span>{suburbLabel}</span>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <span className="font-semibold text-slate-600">Manufactured By</span>
-                    <span>NBE Australia</span>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <span className="font-semibold text-slate-600">Installed Date</span>
-                    <span>{installDateLabel}</span>
-                  </div>
-                </div>
-              </section>
+          <div className="space-y-5">
+            <section className="space-y-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Door Details</h2>
+              <div className="grid grid-cols-1 gap-2 text-sm text-slate-800">
+                <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Door Number</span><span>{doorNumberLabel}</span></div>
+                <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Door Type</span><span>{doorTypeLabel}</span></div>
+                <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Location</span><span>{locationLabel}</span></div>
+                <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Client Name</span><span>{clientLabel}</span></div>
+                <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Manufactured By</span><span>{manufacturerLabel}</span></div>
+                <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Installed Date</span><span>{installDateLabel}</span></div>
+                <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Last Serviced</span><span>{lastServicedLabel}</span></div>
+                <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Serviced By</span><span>{servicedBy}</span></div>
+                <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Emergency Contact</span><span>{EMERGENCY_CONTACT_NUMBER}</span></div>
+              </div>
+            </section>
 
-              <section className="space-y-2">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Service Information
-                </h2>
-                <div className="grid grid-cols-1 gap-2 text-sm text-slate-800">
-                  <div className="flex justify-between gap-4">
-                    <span className="font-semibold text-slate-600">Last Serviced</span>
-                    <span>{lastServiceDateLabel}</span>
-                  </div>
-                  {isLoggedIn && (
-                    <div className="flex justify-between gap-4">
-                      <span className="font-semibold text-slate-600">Technician Notes</span>
-                      <span className="max-w-[60%] text-right">
-                        {technicianNotesLabel}
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex justify-between gap-4">
-                    <span className="font-semibold text-slate-600">Serviced By</span>
-                    <span>NBE Australia</span>
-                  </div>
-                </div>
+            {user && (
+              <section className="pt-2">
+                <Link
+                  href={`/maintenance/new?doorId=${encodeURIComponent(doorId)}`}
+                  className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+                >
+                  Start Maintenance Inspection
+                </Link>
               </section>
-
-              <section className="space-y-2">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Emergency Contact
-                </h2>
-                <p className="text-sm font-semibold text-slate-900">
-                  {EMERGENCY_CONTACT_NUMBER}
-                </p>
-                <p className="text-xs text-slate-500">
-                  For urgent issues with this door, please call NBE Australia.
-                </p>
-              </section>
-
-              {isLoggedIn && (
-                <section className="pt-2">
-                  <button
-                    type="button"
-                    className="mt-6 inline-flex h-11 items-center justify-center rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white hover:bg-blue-700"
-                    onClick={() => {
-                      window.location.href = `/maintenance/new?doorId=${encodeURIComponent(String(doorId))}`
-                    }}
-                  >
-                    Start Inspection
-                  </button>
-                </section>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </main>
       </div>
     </div>
