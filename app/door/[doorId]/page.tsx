@@ -1,6 +1,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@/lib/supabase/server'
 
 const EMERGENCY_CONTACT_NUMBER = '(03) 9357 5858'
@@ -50,15 +51,28 @@ function formatDate(value?: string | null, fallback = 'Not available'): string {
   })
 }
 
+function createServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) {
+    throw new Error('Missing Supabase service role configuration.')
+  }
+
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+}
+
 export default async function DoorInfoPage({ params }: DoorPageProps) {
   const { doorId } = await params
   const supabase = await createServerClient()
+  const serviceSupabase = createServiceClient()
 
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const { data: doorData, error: doorError } = await supabase
+  const { data: doorData, error: doorError } = await serviceSupabase
     .from('doors')
     .select('*')
     .eq('id', doorId)
@@ -75,7 +89,7 @@ export default async function DoorInfoPage({ params }: DoorPageProps) {
 
   const clientLocationId = String(door.client_location_id ?? '').trim()
   if (clientLocationId) {
-    const { data: locationData } = await supabase
+    const { data: locationData } = await serviceSupabase
       .from('client_locations')
       .select('*')
       .eq('id', clientLocationId)
@@ -89,7 +103,7 @@ export default async function DoorInfoPage({ params }: DoorPageProps) {
 
       const clientId = String(location.client_id ?? '').trim()
       if (clientId) {
-        const { data: clientData } = await supabase
+        const { data: clientData } = await serviceSupabase
           .from('clients')
           .select('*')
           .eq('id', clientId)
@@ -103,7 +117,7 @@ export default async function DoorInfoPage({ params }: DoorPageProps) {
     }
   }
 
-  const { data: latestInspectionData } = await supabase
+  const { data: latestInspectionData } = await serviceSupabase
     .from('door_inspections')
     .select('created_at, report_id')
     .eq('door_id', doorId)
@@ -114,7 +128,7 @@ export default async function DoorInfoPage({ params }: DoorPageProps) {
   const latestInspection = latestInspectionData as InspectionRow | null
   let servicedBy = 'NBE Australia'
   if (latestInspection?.report_id) {
-    const { data: reportData } = await supabase
+    const { data: reportData } = await serviceSupabase
       .from('maintenance_reports')
       .select('technician_name')
       .eq('id', latestInspection.report_id)
@@ -131,6 +145,15 @@ export default async function DoorInfoPage({ params }: DoorPageProps) {
   const manufacturerLabel = String(door.manufactured_by ?? '').trim() || 'NBE Australia'
   const installDateLabel = formatDate(door.install_date)
   const lastServicedLabel = formatDate(latestInspection?.created_at, 'Not yet serviced')
+  let nextMaintenanceServiceDateLabel = 'Not available'
+
+  if (latestInspection?.created_at) {
+    const servicedAt = new Date(latestInspection.created_at)
+    if (!Number.isNaN(servicedAt.getTime())) {
+      servicedAt.setMonth(servicedAt.getMonth() + 6)
+      nextMaintenanceServiceDateLabel = formatDate(servicedAt.toISOString(), 'Not available')
+    }
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-8">
@@ -161,6 +184,7 @@ export default async function DoorInfoPage({ params }: DoorPageProps) {
                 <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Manufactured By</span><span>{manufacturerLabel}</span></div>
                 <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Installed Date</span><span>{installDateLabel}</span></div>
                 <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Last Serviced</span><span>{lastServicedLabel}</span></div>
+                <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Next Maintenance Service Date</span><span>{nextMaintenanceServiceDateLabel}</span></div>
                 <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Serviced By</span><span>{servicedBy}</span></div>
                 <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Emergency Contact</span><span>{EMERGENCY_CONTACT_NUMBER}</span></div>
               </div>
