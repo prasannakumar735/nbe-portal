@@ -30,7 +30,7 @@ export function LayoutWrapper({ children, user }: LayoutWrapperProps) {
 
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 1024)
+      setIsMobile(window.innerWidth < 768)
     }
     checkMobile()
     window.addEventListener('resize', checkMobile)
@@ -53,12 +53,12 @@ export function LayoutWrapper({ children, user }: LayoutWrapperProps) {
   const sidebarWidth = isMobile ? 0 : (isCollapsed ? 72 : 240)
   
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
+    <div className="flex min-h-screen overflow-hidden bg-slate-50">
       {/* Mobile Hamburger Button */}
       {isMobile && (
         <button
           onClick={handleToggleMobile}
-          className="fixed top-4 left-4 z-50 lg:hidden p-2 bg-white rounded-lg shadow-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+          className="fixed left-4 top-4 z-50 p-2 bg-white rounded-lg shadow-lg border border-slate-200 hover:bg-slate-50 transition-colors md:hidden"
           aria-label="Toggle menu"
         >
           <span className="material-symbols-outlined text-slate-700">
@@ -70,7 +70,7 @@ export function LayoutWrapper({ children, user }: LayoutWrapperProps) {
       {/* Mobile Overlay */}
       {isMobile && isMobileOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-30 md:hidden"
           onClick={handleCloseMobile}
         />
       )}
@@ -85,7 +85,7 @@ export function LayoutWrapper({ children, user }: LayoutWrapperProps) {
       
       {/* Main Content Area - Dynamically adjusts based on sidebar state */}
       <div 
-        className="flex flex-col flex-1 overflow-hidden transition-all duration-300"
+        className="flex min-h-screen min-w-0 flex-1 flex-col overflow-hidden transition-all duration-300"
         style={{ 
           marginLeft: isMobile ? '0px' : `${sidebarWidth}px`
         }}
@@ -94,7 +94,7 @@ export function LayoutWrapper({ children, user }: LayoutWrapperProps) {
         <Header user={user} />
 
         {/* Page Content - Scrollable */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden">
+        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
           {children}
         </main>
       </div>

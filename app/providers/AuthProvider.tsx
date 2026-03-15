@@ -3,20 +3,30 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { createSupabaseClient } from '@/lib/supabase/client'
+import type { ProfileFromTable } from '@/lib/auth/roles'
+import { isAdmin as checkIsAdmin, isEmployee as checkIsEmployee, isManager as checkIsManager } from '@/lib/auth/roles'
 
 /**
- * Auth Context - Provides session state to entire app
- * 
- * This context stores:
- * - session: Current user session (or null if logged out)
- * - user: Current user data (or null if logged out)
- * - isLoading: Whether auth state is being checked
- * - isError: Whether an error occurred during auth check
+ * Profile loaded from profiles table (single source of truth for roles).
+ * Do NOT introduce new role tables; always use profiles.role.
+ */
+export type AuthProfile = ProfileFromTable
+
+/**
+ * Auth Context - Provides session and profile (role) to entire app
+ *
+ * - session, user: from Supabase Auth
+ * - profile: from profiles table (role, first_name, last_name)
+ * - isAdmin, isManager, isEmployee: derived from profile.role
  */
 
 type AuthContextType = {
   session: Session | null
   user: User | null
+  profile: AuthProfile | null
+  isAdmin: boolean
+  isManager: boolean
+  isEmployee: boolean
   isLoading: boolean
   isError: boolean
 }
@@ -61,11 +71,35 @@ type AuthProviderProps = {
  * - Singleton client prevents GoTrueClient warnings
  */
 
+async function fetchProfile(supabase: ReturnType<typeof createSupabaseClient>, userId: string): Promise<AuthProfile | null> {
+  const { data } = await supabase
+    .from('profiles')
+    .select('role, first_name, last_name')
+    .eq('id', userId)
+    .single()
+  return data as AuthProfile | null
+}
+
 export function AuthProvider({ children }: AuthProviderProps) {
   const [session, setSession] = useState<Session | null>(null)
   const [user, setUser] = useState<User | null>(null)
+  const [profile, setProfile] = useState<AuthProfile | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isError, setIsError] = useState(false)
+
+  // Load profile from profiles table when user changes (single source of truth for role)
+  useEffect(() => {
+    if (!user?.id) {
+      setProfile(null)
+      return
+    }
+    let cancelled = false
+    const supabase = createSupabaseClient()
+    fetchProfile(supabase, user.id).then((p) => {
+      if (!cancelled) setProfile(p)
+    })
+    return () => { cancelled = true }
+  }, [user?.id])
 
   // Initialize auth state on mount
   useEffect(() => {
@@ -73,7 +107,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       try {
         const supabase = createSupabaseClient()
 
-        // Check for existing session
         const {
           data: { session: initialSession },
           error,
@@ -104,7 +137,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, newSession) => {
-      // Update context with new session
       setSession(newSession)
       setUser(newSession?.user || null)
       setIsLoading(false)
@@ -114,7 +146,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     })
 
-    // Cleanup subscription on unmount
     return () => {
       subscription?.unsubscribe()
     }
@@ -123,6 +154,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const value: AuthContextType = {
     session,
     user,
+    profile,
+    isAdmin: checkIsAdmin(profile),
+    isManager: checkIsManager(profile),
+    isEmployee: checkIsEmployee(profile),
     isLoading,
     isError,
   }

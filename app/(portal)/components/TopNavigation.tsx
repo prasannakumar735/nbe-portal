@@ -10,6 +10,7 @@ interface TopNavigationProps {
 
 const NAV_ITEMS = [
   { label: 'Dashboard', icon: 'dashboard', href: '/dashboard' },
+  { label: 'Service Quotes', icon: 'request_quote', href: '/dashboard/quotes/service' },
   { label: 'Timecard', icon: 'schedule', href: '/timecard' },
   { label: 'Maintenance Service', icon: 'build', href: '/maintenance' },
   { label: 'Reimbursement', icon: 'payments', href: '/reimbursement' },

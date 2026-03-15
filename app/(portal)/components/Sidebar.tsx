@@ -12,9 +12,11 @@ interface SidebarProps {
 
 const NAV_ITEMS = [
   { label: 'Dashboard', icon: 'dashboard', href: '/dashboard' },
+  { label: 'Service Quotes', icon: 'request_quote', href: '/dashboard/quotes/service' },
   { label: 'Timecard', icon: 'schedule', href: '/timecard' },
   { label: 'Maintenance Service', icon: 'build', href: '/maintenance' },
   { label: 'Reimbursement', icon: 'payments', href: '/reimbursement' },
+  { label: 'PVC Strip Calculator', icon: 'calculate', href: '/pvc-calculator' },
   { label: 'Shared Calendar', icon: 'calendar_today', href: '/calendar' },
   { label: 'Job Card & Client GPS', icon: 'location_on', href: '/job-card' },
   { label: 'Knowledge Share', icon: 'menu_book', href: '/knowledge' },
@@ -29,7 +31,7 @@ export function Sidebar({ isCollapsed, onToggleCollapse, isMobileOpen, onCloseMo
   // Detect mobile screen size
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 1024)
+      setIsMobile(window.innerWidth < 768)
     }
     checkMobile()
     window.addEventListener('resize', checkMobile)
@@ -51,10 +53,10 @@ export function Sidebar({ isCollapsed, onToggleCollapse, isMobileOpen, onCloseMo
       <aside
         className={`
           fixed top-0 left-0 h-screen bg-white border-r border-slate-200 z-40
-          transition-all duration-300 ease-in-out flex flex-col overflow-hidden
+          transition-all duration-300 ease-in-out flex-col overflow-hidden
           ${isMobile 
-            ? `w-64 ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'}` 
-            : `${isCollapsed ? 'w-[72px]' : 'w-[240px]'}`
+            ? `w-64 ${isMobileOpen ? 'flex translate-x-0' : 'hidden -translate-x-full'}` 
+            : `hidden md:flex ${isCollapsed ? 'w-[72px]' : 'w-[240px]'}`
           }
         `}
       >
