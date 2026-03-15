@@ -75,7 +75,7 @@ export async function GET(
     const zipBlob = await zip.generateAsync({ type: 'nodebuffer' })
     const filename = `maintenance-photos-${reportId.slice(0, 8)}.zip`
 
-    return new NextResponse(zipBlob, {
+    return new NextResponse(new Uint8Array(zipBlob), {
       status: 200,
       headers: {
         'Content-Type': 'application/zip',
