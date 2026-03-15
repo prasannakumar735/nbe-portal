@@ -60,7 +60,7 @@ const ChecklistRow = memo(function ChecklistRow({
                 <p className="text-sm text-slate-700">{item.label}</p>
               </div>
               <ChecklistRadioGroup
-                value={field.value ?? ''}
+                value={typeof field.value === 'string' ? field.value : ''}
                 onValueChange={field.onChange}
                 name={radioName}
                 variant="mobile"
@@ -81,7 +81,7 @@ const ChecklistRow = memo(function ChecklistRow({
             </div>
             <div className="col-span-4 flex items-center py-3">
               <ChecklistRadioGroup
-                value={field.value ?? ''}
+                value={typeof field.value === 'string' ? field.value : ''}
                 onValueChange={field.onChange}
                 name={radioName}
                 variant="desktop"
