@@ -34,6 +34,7 @@ export async function buildMaintenancePdfOptions(params: {
   let technicianContact = ''
 
   type ReportRow = {
+    id?: string
     client_location_id?: string | null
     address?: string | null
     technician_email?: string | null
@@ -50,6 +51,9 @@ export async function buildMaintenancePdfOptions(params: {
     suburb?: string | null
     site_name?: string | null
     address?: string | null
+    site_address?: string | null
+    location_address?: string | null
+    Company_address?: string | null
   }
 
   type ClientRow = {
@@ -68,6 +72,158 @@ export async function buildMaintenancePdfOptions(params: {
   const report = reportData as ReportRow | null
   technicianEmail = String(report?.technician_email ?? report?.submitter_email ?? '').trim()
   technicianContact = String(report?.technician_contact ?? report?.submitter_contact ?? '').trim()
+
+  if (!technicianEmail || !technicianContact) {
+    const { data: previousReports } = await supabase
+      .from('maintenance_reports')
+      .select('technician_email, submitter_email, technician_contact, submitter_contact')
+      .eq('technician_name', String(form.technician_name ?? '').trim())
+      .neq('id', reportId)
+      .order('created_at', { ascending: false })
+      .limit(20)
+
+    for (const row of (previousReports ?? [])) {
+      const candidate = row as {
+        technician_email?: string | null
+        submitter_email?: string | null
+        technician_contact?: string | null
+        submitter_contact?: string | null
+      }
+
+      if (!technicianEmail) {
+        technicianEmail = String(candidate.technician_email ?? candidate.submitter_email ?? '').trim()
+      }
+
+      if (!technicianContact) {
+        technicianContact = String(candidate.technician_contact ?? candidate.submitter_contact ?? '').trim()
+      }
+
+      if (technicianEmail && technicianContact) {
+        break
+      }
+    }
+  }
+
+  if (!technicianEmail || !technicianContact) {
+    const normalize = (value: string) =>
+      String(value ?? '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+
+    const scoreMatch = (source: string, tokens: string[]) => {
+      if (!source || tokens.length === 0) return 0
+      const words = new Set(source.split(' ').filter(Boolean))
+      let hits = 0
+      for (const token of tokens) {
+        if (words.has(token) || source.includes(token)) hits += 1
+      }
+      return hits / tokens.length
+    }
+
+    const normalizedTechnicianName = normalize(String(form.technician_name ?? ''))
+    const nameTokens = normalizedTechnicianName.split(' ').filter(Boolean)
+
+    if (normalizedTechnicianName) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .limit(1000)
+
+      let bestProfileId = ''
+      let bestScore = 0
+
+      for (const row of (profiles ?? [])) {
+        const r = row as { id?: string | null; first_name?: string | null; last_name?: string | null }
+        const fullName = normalize(`${String(r.first_name ?? '').trim()} ${String(r.last_name ?? '').trim()}`)
+        const currentScore = scoreMatch(fullName, nameTokens)
+        if (currentScore > bestScore) {
+          bestScore = currentScore
+          bestProfileId = String(r.id ?? '').trim()
+        }
+      }
+
+      let matchedUserId = bestScore >= 0.66 ? bestProfileId : ''
+
+      if (!matchedUserId) {
+        const adminApi = (supabase as unknown as {
+          auth?: { admin?: { listUsers?: (params?: { page?: number; perPage?: number }) => Promise<{ data?: { users?: Array<{ id?: string | null; email?: string | null; phone?: string | null; user_metadata?: Record<string, unknown> | null }> } }> } }
+        }).auth?.admin
+
+        if (adminApi?.listUsers) {
+          const listed = await adminApi.listUsers({ page: 1, perPage: 1000 })
+          let bestAuthId = ''
+          let bestAuthScore = 0
+
+          for (const user of (listed?.data?.users ?? [])) {
+            const metadata = (user.user_metadata ?? {}) as Record<string, unknown>
+            const fullName = normalize(String(metadata.full_name ?? metadata.name ?? ''))
+            const emailLocal = normalize(String(user.email ?? '').split('@')[0] ?? '')
+            const combined = `${fullName} ${emailLocal}`.trim()
+            const currentScore = scoreMatch(combined, nameTokens)
+            if (currentScore > bestAuthScore) {
+              bestAuthScore = currentScore
+              bestAuthId = String(user.id ?? '').trim()
+              if (!technicianEmail) {
+                technicianEmail = String(user.email ?? '').trim()
+              }
+              if (!technicianContact) {
+                technicianContact = String(
+                  user.phone ?? metadata.contact ?? metadata.phone ?? metadata.mobile ?? metadata.mobile_number ?? ''
+                ).trim()
+              }
+            }
+          }
+
+          if (bestAuthScore >= 0.66) {
+            matchedUserId = bestAuthId
+          }
+        }
+      }
+
+      if (matchedUserId) {
+        const adminApi = (supabase as unknown as {
+          auth?: { admin?: { getUserById?: (id: string) => Promise<{ data?: { user?: { email?: string | null; phone?: string | null; user_metadata?: Record<string, unknown> | null } | null } }> } }
+        }).auth?.admin
+
+        if (adminApi?.getUserById) {
+          const authRes = await adminApi.getUserById(matchedUserId)
+          const user = authRes?.data?.user
+
+          if (!technicianEmail) {
+            technicianEmail = String(user?.email ?? '').trim()
+          }
+
+          if (!technicianContact) {
+            const metadata = (user?.user_metadata ?? {}) as Record<string, unknown>
+            technicianContact = String(
+              user?.phone ?? metadata.contact ?? metadata.phone ?? metadata.mobile ?? metadata.mobile_number ?? ''
+            ).trim()
+          }
+        }
+      }
+    }
+
+    if ((technicianEmail || technicianContact) && report?.id) {
+      const backfillUpdate: Record<string, string> = {}
+      if (technicianEmail) {
+        backfillUpdate.technician_email = technicianEmail
+        backfillUpdate.submitter_email = technicianEmail
+      }
+      if (technicianContact) {
+        backfillUpdate.technician_contact = technicianContact
+        backfillUpdate.submitter_contact = technicianContact
+      }
+
+      if (Object.keys(backfillUpdate).length > 0) {
+        await supabase
+          .from('maintenance_reports')
+          .update(backfillUpdate)
+          .eq('id', report.id)
+      }
+    }
+  }
 
   if (!clientLocationId) {
     clientLocationId = report?.client_location_id ?? ''
@@ -116,8 +272,14 @@ export async function buildMaintenancePdfOptions(params: {
         location.location_name ?? location.name ?? location.suburb ?? location.site_name ?? ''
       ).trim()
 
-      if (!form.address && location.address) {
-        ;(form as MaintenanceFormValues).address = String(location.address ?? '').trim()
+      const companyAddress = String(location.Company_address ?? '').trim()
+      const normalizedCompanyAddress = companyAddress.toLowerCase() === 'null' ? '' : companyAddress
+      const resolvedAddress = String(
+        normalizedCompanyAddress || location.address || location.site_address || location.location_address || ''
+      ).trim()
+
+      if (!form.address && resolvedAddress) {
+        ;(form as MaintenanceFormValues).address = resolvedAddress
       }
 
       const locationClientId = String(location.client_id ?? '').trim()

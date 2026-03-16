@@ -3,11 +3,14 @@ import { createServerClient } from '@/lib/supabase/server'
 
 function mapLocationRow(row: Record<string, unknown>) {
   const name = String(row.location_name ?? row.name ?? row.suburb ?? row.site_name ?? '').trim()
+  const companyAddress = String(row.Company_address ?? '').trim()
+  const normalizedCompanyAddress = companyAddress.toLowerCase() === 'null' ? '' : companyAddress
+  const fallbackAddress = String(row.address ?? row.site_address ?? row.location_address ?? '')
   return {
     id: String(row.id ?? ''),
     client_id: String(row.client_id ?? ''),
     name: name || 'Unknown Location',
-    address: String(row.address ?? row.site_address ?? row.location_address ?? ''),
+    address: String(normalizedCompanyAddress || fallbackAddress),
   }
 }
 

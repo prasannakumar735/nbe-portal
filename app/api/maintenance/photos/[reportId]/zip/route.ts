@@ -19,6 +19,54 @@ async function listReportPhotoPaths(
   reportId: string,
 ): Promise<Array<{ path: string; name: string }>> {
   const out: Array<{ path: string; name: string }> = []
+  const seen = new Set<string>()
+
+  const addPath = (path: string) => {
+    const normalized = String(path || '').trim().replace(/^\/+/, '')
+    if (!normalized || seen.has(normalized)) return
+    const name = normalized.split('/').pop() || `photo-${seen.size + 1}`
+    seen.add(normalized)
+    out.push({ path: normalized, name })
+  }
+
+  const storagePublicPrefix = '/storage/v1/object/public'
+  const bucketSegment = `/${BUCKET}/`
+
+  const { data: doorRows } = await supabase
+    .from('maintenance_doors')
+    .select('id')
+    .eq('report_id', reportId)
+
+  const doorIds = (doorRows ?? [])
+    .map(row => String((row as { id?: string | null }).id ?? '').trim())
+    .filter(Boolean)
+
+  if (doorIds.length > 0) {
+    const { data: photoRows } = await supabase
+      .from('maintenance_photos')
+      .select('image_url')
+      .in('door_id', doorIds)
+
+    for (const row of (photoRows ?? [])) {
+      const imageUrl = String((row as { image_url?: string | null }).image_url ?? '').trim()
+      if (!imageUrl) continue
+
+      if (/^https?:\/\//i.test(imageUrl)) {
+        const marker = `${storagePublicPrefix}${bucketSegment}`
+        const markerIndex = imageUrl.indexOf(marker)
+        if (markerIndex >= 0) {
+          addPath(imageUrl.slice(markerIndex + marker.length))
+        }
+      } else {
+        addPath(imageUrl)
+      }
+    }
+  }
+
+  if (out.length > 0) {
+    return out
+  }
+
   const safeReportId = reportId.replace(/[^a-zA-Z0-9_-]/g, '_')
 
   const { data: topLevel } = await supabase.storage.from(BUCKET).list(safeReportId, { limit: 500 })
@@ -32,8 +80,7 @@ async function listReportPhotoPaths(
     if (files) {
       for (const file of files) {
         if (!file.name) continue
-        const path = `${safeReportId}/${item.name}/${file.name}`
-        out.push({ path, name: file.name })
+        addPath(`${safeReportId}/${item.name}/${file.name}`)
       }
     }
   }

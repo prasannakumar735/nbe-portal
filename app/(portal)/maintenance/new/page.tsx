@@ -248,10 +248,12 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   const supabase = useMemo(() => createSupabaseClient(), [])
   const router = useRouter()
   const searchParams = useSearchParams()
-  const initialDoorId = searchParams.get('doorId')
+  const initialDoorId = searchParams.get('door_id') ?? searchParams.get('doorId')
   const isFreshMode = searchParams.get('fresh') === '1'
   const [clients, setClients] = useState<ClientOption[]>([])
   const [locations, setLocations] = useState<ClientLocationOption[]>([])
+  const [savedClientName, setSavedClientName] = useState('')
+  const [savedLocationName, setSavedLocationName] = useState('')
   const [availableDoors, setAvailableDoors] = useState<Array<{ id: string; door_label: string; door_type: string }>>([])
   const [isSavingDraft, setIsSavingDraft] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -304,10 +306,23 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   })
 
   const watchedClientLocationId = useWatch({ control, name: 'client_location_id', defaultValue: '' })
+  const watchedClientId = useWatch({ control, name: 'client_id', defaultValue: '' })
   const watchedTotalDoors = useWatch({ control, name: 'total_doors', defaultValue: 1 })
   const watchedReportId = useWatch({ control, name: 'report_id', defaultValue: undefined })
   const watchedNotes = useWatch({ control, name: 'notes', defaultValue: '' })
   const watchedDoors = useWatch({ control, name: 'doors', defaultValue: [] }) as MaintenanceDoorForm[]
+
+  const clientOptions = useMemo(() => {
+    if (!watchedClientId) return clients
+    if (clients.some(client => client.id === watchedClientId)) return clients
+    return [{ id: watchedClientId, name: savedClientName || 'Saved client' }, ...clients]
+  }, [clients, watchedClientId, savedClientName])
+
+  const locationOptions = useMemo(() => {
+    if (!watchedClientLocationId) return locations
+    if (locations.some(location => location.id === watchedClientLocationId)) return locations
+    return [{ id: watchedClientLocationId, client_id: watchedClientId || '', name: savedLocationName || 'Saved location', address: '' }, ...locations]
+  }, [locations, watchedClientLocationId, watchedClientId, savedLocationName])
 
   const loadLocationsForClient = useCallback(async (clientId: string) => {
     if (!clientId) {
@@ -321,6 +336,104 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     setLocations(locationOptions)
     return locationOptions
   }, [])
+
+  const prepareFormForSave = useCallback(async () => {
+    const form = getValues()
+    const clientId = String(form.client_id ?? '').trim()
+    const locationId = String(form.client_location_id ?? '').trim()
+
+    if (clientId || !locationId) {
+      return form
+    }
+
+    const { data: locationRow } = await supabase
+      .from('client_locations')
+      .select('*')
+      .eq('id', locationId)
+      .maybeSingle()
+
+    const location = locationRow as {
+      client_id?: string | null
+      address?: string | null
+      site_address?: string | null
+      location_address?: string | null
+      Company_address?: string | null
+      company_address?: string | null
+    } | null
+
+    const recoveredClientId = String(location?.client_id ?? '').trim()
+    if (recoveredClientId) {
+      setValue('client_id', recoveredClientId, { shouldDirty: false, shouldValidate: true })
+      await loadLocationsForClient(recoveredClientId)
+    }
+
+    const currentAddress = String(form.address ?? '').trim()
+    if (!currentAddress) {
+      const companyAddress = String(location?.Company_address ?? location?.company_address ?? '').trim()
+      const normalizedCompanyAddress = companyAddress.toLowerCase() === 'null' ? '' : companyAddress
+      const recoveredAddress = String(
+        normalizedCompanyAddress || location?.address || location?.site_address || location?.location_address || ''
+      ).trim()
+      if (recoveredAddress) {
+        setValue('address', recoveredAddress, { shouldDirty: false, shouldValidate: true })
+      }
+    }
+
+    return getValues()
+  }, [getValues, loadLocationsForClient, setValue, supabase])
+
+  const hydrateClientFromLocation = useCallback(async (rawReport: Record<string, unknown>) => {
+    const reportClientId = String(rawReport.client_id ?? '').trim()
+    const reportLocationId = String(rawReport.client_location_id ?? '').trim()
+    const currentAddress = String(rawReport.address ?? '').trim()
+
+    if (!reportLocationId) {
+      return reportClientId
+    }
+
+    let resolvedClientId = reportClientId
+
+    const { data: locationRow } = await supabase
+      .from('client_locations')
+      .select('*')
+      .eq('id', reportLocationId)
+      .maybeSingle()
+
+    const location = locationRow as {
+      client_id?: string | null
+      address?: string | null
+      site_address?: string | null
+      location_address?: string | null
+      Company_address?: string | null
+      company_address?: string | null
+    } | null
+
+    if (!resolvedClientId) {
+      resolvedClientId = String(location?.client_id ?? '').trim()
+      if (resolvedClientId) {
+        setValue('client_id', resolvedClientId, { shouldDirty: false, shouldValidate: true })
+      }
+    }
+
+    if (!currentAddress) {
+      const companyAddress = String(location?.Company_address ?? location?.company_address ?? '').trim()
+      const normalizedCompanyAddress = companyAddress.toLowerCase() === 'null' ? '' : companyAddress
+      const resolvedAddress = String(
+        normalizedCompanyAddress || location?.address || location?.site_address || location?.location_address || ''
+      ).trim()
+
+      if (resolvedAddress) {
+        setValue('address', resolvedAddress, { shouldDirty: false, shouldValidate: true })
+      }
+    }
+
+    if (resolvedClientId) {
+      await loadLocationsForClient(resolvedClientId)
+      setValue('client_location_id', reportLocationId, { shouldDirty: false, shouldValidate: true })
+    }
+
+    return resolvedClientId
+  }, [loadLocationsForClient, setValue, supabase])
 
   const loadDoorsForLocation = useCallback(async (locationId: string) => {
     if (!locationId) {
@@ -458,12 +571,17 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         return
       }
 
-      const response = await fetch(`/api/maintenance/draft?reportId=${encodeURIComponent(reportId)}`)
+      const response = await fetch(`/api/maintenance/draft?reportId=${encodeURIComponent(reportId)}`, {
+        cache: 'no-store',
+      })
       const data = await response.json()
       if (!data.report) {
         restoreFromLocalBackup()
         return
       }
+
+      setSavedClientName(String(data.report.client_name ?? '').trim())
+      setSavedLocationName(String(data.report.client_location_name ?? '').trim())
 
       const reportStatus = String(data.report.status ?? '').toLowerCase()
       if (!reportIdFromRoute && reportStatus !== 'draft') {
@@ -485,9 +603,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         }
       })
 
-      if (data.report.client_id) {
-        await loadLocationsForClient(String(data.report.client_id))
-      }
+      await hydrateClientFromLocation(data.report as Record<string, unknown>)
 
       const maintenanceDoors: unknown[] = Array.isArray(data.report.doors) ? data.report.doors : []
       const doors = maintenanceDoors.map((door, index) => normalizeLoadedDoor(door, index))
@@ -513,19 +629,19 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
 
     loadClients()
     loadDraft()
-  }, [loadLocationsForClient, replace, reset, setValue, reportIdFromRoute, initialReport, isAdminMode, isFreshMode])
+  }, [hydrateClientFromLocation, replace, reset, setValue, reportIdFromRoute, initialReport, isAdminMode, isFreshMode])
 
   useEffect(() => {
     if (!reportIdFromRoute || !initialReport || !isAdminMode || adminFormPopulated) return
     const report = initialReport as Record<string, unknown>
+    setSavedClientName(String(report.client_name ?? '').trim())
+    setSavedLocationName(String(report.client_location_name ?? '').trim())
     Object.entries(report).forEach(([key, value]) => {
       if (key !== 'doors') {
         setValue(key as keyof MaintenanceFormValues, value as never)
       }
     })
-    if (report.client_id) {
-      loadLocationsForClient(String(report.client_id))
-    }
+    void hydrateClientFromLocation(report)
     const maintenanceDoors: unknown[] = Array.isArray(report.doors) ? report.doors : []
     const doors = maintenanceDoors.map((door: unknown, index: number) => normalizeLoadedDoor(door, index))
     replace(doors.length > 0 ? doors : [createDoor(0)])
@@ -542,7 +658,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     setValue('report_id', reportIdFromRoute)
     setAdminFormPopulated(true)
     showStatus('Report loaded. You can edit all fields and save.')
-  }, [reportIdFromRoute, initialReport, isAdminMode, adminFormPopulated, replace, setValue, loadLocationsForClient, showStatus])
+  }, [reportIdFromRoute, initialReport, isAdminMode, adminFormPopulated, replace, setValue, hydrateClientFromLocation, showStatus])
 
   useEffect(() => {
     const expected = Number(watchedTotalDoors || 0)
@@ -576,7 +692,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       setStatusMessage('')
     }
 
-    const form = getValues()
+    const form = await prepareFormForSave()
 
     try {
       const response = await fetch('/api/maintenance/draft', {
@@ -590,9 +706,14 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         }),
       })
 
-      const result = await response.json()
+      const result = await response.json().catch(() => ({} as Record<string, unknown>))
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to save draft')
+        const details = (result as { details?: { message?: string } }).details
+        const serverMessage = details?.message || (result as { error?: string }).error || 'Failed to save draft'
+        if (!silent) {
+          showStatus(serverMessage, 'error')
+        }
+        return false
       }
 
       if (result.report_id) {
@@ -624,7 +745,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
 
       return false
     }
-  }, [getValues, isLocked, saveOfflineDraft, setValue])
+  }, [getValues, isLocked, prepareFormForSave, saveOfflineDraft, setValue])
 
   useEffect(() => {
     if (isLocked) return
@@ -694,10 +815,10 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
 
   const faultDetection = useMaintenanceFaultDetection(watchedDoors ?? [])
 
-  // Auto-prefill from QR-scanned door when opening /maintenance/new?doorId=...
+  // Auto-prefill from QR-scanned door when opening /maintenance/new?door_id=... or /maintenance/new?doorId=...
   useEffect(() => {
     const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
-    const doorId = params?.get('doorId') ?? initialDoorId
+    const doorId = params?.get('door_id') ?? params?.get('doorId') ?? initialDoorId
     console.log('Prefill doorId:', doorId)
 
     if (!doorId) return
@@ -733,18 +854,30 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       if (doorRecord.client_location_id) {
         const { data: locationData } = await supabase
           .from('client_locations')
-          .select('client_id, address')
+          .select('*')
           .eq('id', doorRecord.client_location_id)
           .maybeSingle()
 
         if (locationData) {
-          const loc = locationData as { client_id?: string | null; address?: string | null }
+          const loc = locationData as {
+            client_id?: string | null
+            address?: string | null
+            site_address?: string | null
+            location_address?: string | null
+            Company_address?: string | null
+            company_address?: string | null
+          }
           if (loc.client_id) {
             setValue('client_id', loc.client_id, { shouldDirty: true, shouldValidate: true })
             await loadLocationsForClient(loc.client_id)
           }
-          if (loc.address) {
-            setValue('address', loc.address, { shouldDirty: true, shouldValidate: true })
+          const companyAddress = String(loc.Company_address ?? loc.company_address ?? '').trim()
+          const resolvedAddress =
+            companyAddress && companyAddress.toLowerCase() !== 'null'
+              ? companyAddress
+              : String(loc.address ?? loc.site_address ?? loc.location_address ?? '').trim()
+          if (resolvedAddress) {
+            setValue('address', resolvedAddress, { shouldDirty: true, shouldValidate: true })
           }
         }
 
@@ -997,6 +1130,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
               Client
               <select
                 {...register('client_id')}
+                value={watchedClientId || ''}
                 className="mt-1 h-12 w-full rounded-xl border border-slate-300 px-3 text-base"
                 onChange={async event => {
                   const selectedId = event.target.value
@@ -1007,7 +1141,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                 }}
               >
                 <option value="">Select client</option>
-                {clients.map(client => (
+                {clientOptions.map(client => (
                   <option key={client.id} value={client.id}>{client.name}</option>
                 ))}
               </select>
@@ -1018,6 +1152,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
               Location
               <select
                 {...register('client_location_id')}
+                value={watchedClientLocationId || ''}
                 className="mt-1 h-12 w-full rounded-xl border border-slate-300 px-3 text-base"
                 onChange={event => {
                   const selectedLocationId = event.target.value
@@ -1027,7 +1162,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                 }}
               >
                 <option value="">Select location</option>
-                {locations.map(location => (
+                {locationOptions.map(location => (
                   <option key={location.id} value={location.id}>{location.name}</option>
                 ))}
               </select>
@@ -1209,6 +1344,11 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                   onClick={async () => {
                     if (!reportIdFromRoute) return
                     try {
+                      const saved = await persistDraft('reviewing', { adminEdit: true, silent: true })
+                      if (!saved) {
+                        showStatus('Unable to save latest changes before generating PDF. Please try Save changes first.', 'error')
+                        return
+                      }
                       const res = await fetch(`/api/maintenance/pdf/${reportIdFromRoute}`)
                       if (!res.ok) throw new Error('Download failed')
                       const blob = await res.blob()
@@ -1232,6 +1372,11 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                   onClick={async () => {
                     if (!reportIdFromRoute) return
                     try {
+                      const saved = await persistDraft('reviewing', { adminEdit: true, silent: true })
+                      if (!saved) {
+                        showStatus('Unable to save latest changes before downloading report. Please try Save changes first.', 'error')
+                        return
+                      }
                       const res = await fetch(`/api/maintenance/pdf/${reportIdFromRoute}`)
                       if (!res.ok) throw new Error('Download failed')
                       const blob = await res.blob()

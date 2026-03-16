@@ -68,17 +68,6 @@ export async function GET(
     const supabase = createServiceClient()
     const pdfOptions = await buildMaintenancePdfOptions({ form, reportId, supabase })
 
-    if (!pdfOptions.technicianEmail) {
-      pdfOptions.technicianEmail = String(user.email ?? '').trim()
-    }
-
-    if (!pdfOptions.technicianContact) {
-      const metadata = (user.user_metadata ?? {}) as Record<string, unknown>
-      pdfOptions.technicianContact = String(
-        user.phone ?? metadata.contact ?? metadata.phone ?? metadata.mobile ?? metadata.mobile_number ?? ''
-      ).trim()
-    }
-
     const pdfBytes = await generateMaintenanceReportPdf(pdfOptions)
 
     const filename = `maintenance-report-${pdfOptions.reportNumber}.pdf`

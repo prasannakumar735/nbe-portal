@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, Camera, ImagePlus, Loader2, Trash2, X } from 'lucide-react'
+import { AlertCircle, Camera, Download, ImagePlus, Loader2, Trash2, X } from 'lucide-react'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import { compressInspectionImage, validateImageFile } from '@/lib/services/imageCompression'
 import { uploadInspectionImage } from '@/lib/services/maintenancePhotoUploadHelper'
@@ -36,6 +36,7 @@ const MAX_FILE_SIZE_MB = 10
 
 export function PhotoUploader({ reportId, doorId, photos, disabled = false, onChange }: PhotoUploaderProps) {
   const supabase = useMemo(() => createSupabaseClient(), [])
+  const cameraInputRef = useRef<HTMLInputElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [uploads, setUploads] = useState<UploadItem[]>([])
@@ -71,6 +72,11 @@ export function PhotoUploader({ reportId, doorId, photos, disabled = false, onCh
       })
     }
   }, [uploads])
+
+  const handleCameraClick = () => {
+    if (disabled || isUploading) return
+    cameraInputRef.current?.click()
+  }
 
   const handleUploadClick = () => {
     if (disabled || isUploading) return
@@ -170,13 +176,43 @@ export function PhotoUploader({ reportId, doorId, photos, disabled = false, onCh
     }
   }
 
+  const downloadPhoto = async (photo: MaintenanceDoorPhoto) => {
+    try {
+      const response = await fetch(photo.url)
+      if (!response.ok) {
+        throw new Error('Failed to download photo.')
+      }
+      const blob = await response.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      const extension = blob.type.includes('png') ? 'png' : blob.type.includes('webp') ? 'webp' : 'jpg'
+      link.href = objectUrl
+      link.download = `maintenance-photo-${Date.now()}.${extension}`
+      link.click()
+      URL.revokeObjectURL(objectUrl)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to download photo.'
+      showToast('error', message)
+    }
+  }
+
   return (
     <div className="w-full space-y-3">
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        multiple
+        className="hidden w-full"
+        onChange={handleFileChange}
+        disabled={disabled || isUploading}
+      />
+
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
-        capture="environment"
         multiple
         className="hidden w-full"
         onChange={handleFileChange}
@@ -210,16 +246,26 @@ export function PhotoUploader({ reportId, doorId, photos, disabled = false, onCh
 
           <p className="text-sm font-semibold text-slate-800">📷 Upload Photos</p>
           <p className="text-xs text-slate-500">Drag and drop images</p>
-          <p className="text-xs text-slate-500">or tap to take photo</p>
+          <p className="text-xs text-slate-500">or choose camera / files</p>
 
-          <button
-            type="button"
-            onClick={handleUploadClick}
-            disabled={disabled || isUploading}
-            className="mt-2 h-14 w-full rounded-xl bg-slate-900 px-5 text-sm font-bold text-white disabled:opacity-50 md:w-auto"
-          >
-            {isUploading ? 'Uploading...' : 'Upload Photo'}
-          </button>
+          <div className="mt-2 flex w-full flex-col gap-2 md:w-auto md:flex-row">
+            <button
+              type="button"
+              onClick={handleCameraClick}
+              disabled={disabled || isUploading}
+              className="h-12 w-full rounded-xl bg-slate-900 px-5 text-sm font-bold text-white disabled:opacity-50"
+            >
+              {isUploading ? 'Uploading...' : 'Take Photo'}
+            </button>
+            <button
+              type="button"
+              onClick={handleUploadClick}
+              disabled={disabled || isUploading}
+              className="h-12 w-full rounded-xl border border-slate-300 bg-white px-5 text-sm font-bold text-slate-800 disabled:opacity-50"
+            >
+              Upload from Files
+            </button>
+          </div>
         </div>
       </div>
 
@@ -260,6 +306,16 @@ export function PhotoUploader({ reportId, doorId, photos, disabled = false, onCh
           {photos.map(photo => (
             <div key={photo.path} className="relative overflow-hidden rounded-xl border border-slate-200 bg-white">
               <img src={photo.url} alt="Inspection upload preview" className="h-24 w-full object-cover" />
+              <button
+                type="button"
+                onClick={() => {
+                  void downloadPhoto(photo)
+                }}
+                className="absolute right-11 top-1 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-slate-900 shadow"
+                aria-label="Download photo"
+              >
+                <Download className="h-4 w-4" />
+              </button>
               <button
                 type="button"
                 onClick={() => {

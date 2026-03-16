@@ -16,9 +16,8 @@ export async function GET(
 
   try {
     const url = new URL(request.url)
-    const origin = `${url.protocol}//${url.host}`
-
-    const doorUrl = `${origin}/door/${encodeURIComponent(doorId)}`
+    const baseUrl = `${url.protocol}//${url.host}`.replace(/\/+$/, '')
+    const doorUrl = `${baseUrl}/door/${encodeURIComponent(doorId)}`
 
     const pngBuffer = await QRCode.toBuffer(doorUrl, {
       type: "png",

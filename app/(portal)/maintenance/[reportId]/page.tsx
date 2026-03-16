@@ -45,7 +45,9 @@ export default function MaintenanceReportEditPage() {
     const managerOrAdmin = role === 'admin' || role === 'manager'
     setIsManagerView(managerOrAdmin)
 
-    const res = await fetch(`/api/maintenance/draft?reportId=${encodeURIComponent(reportId)}`)
+    const res = await fetch(`/api/maintenance/draft?reportId=${encodeURIComponent(reportId)}`, {
+      cache: 'no-store',
+    })
     const data = await res.json()
 
     if (!res.ok || !data.report) {

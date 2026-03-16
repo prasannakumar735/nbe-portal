@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { label: 'Service Quotes', icon: 'request_quote', href: '/dashboard/quotes/service' },
   { label: 'Timecard', icon: 'schedule', href: '/timecard' },
   { label: 'Maintenance Service', icon: 'build', href: '/maintenance' },
+  { label: 'QR Codes', icon: 'qr_code_2', href: '/qr-codes' },
   { label: 'Reimbursement', icon: 'payments', href: '/reimbursement' },
   { label: 'PVC Strip Calculator', icon: 'calculate', href: '/pvc-calculator' },
   { label: 'Shared Calendar', icon: 'calendar_today', href: '/calendar' },

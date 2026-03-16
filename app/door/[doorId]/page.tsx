@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@/lib/supabase/server'
+import { isEmployee, isManager, type ProfileFromTable } from '@/lib/auth/roles'
 
 const EMERGENCY_CONTACT_NUMBER = '(03) 9357 5858'
 type DoorPageProps = {
@@ -38,6 +39,8 @@ type ClientRow = {
 type InspectionRow = {
   created_at?: string | null
   report_id?: string | null
+  technician_notes?: string | null
+  ai_summary?: string | null
 }
 
 function formatDate(value?: string | null, fallback = 'Not available'): string {
@@ -71,6 +74,16 @@ export default async function DoorInfoPage({ params }: DoorPageProps) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
+
+  let profile: ProfileFromTable | null = null
+  if (user?.id) {
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('role, first_name, last_name')
+      .eq('id', user.id)
+      .maybeSingle()
+    profile = (profileData as ProfileFromTable | null) ?? null
+  }
 
   const { data: doorData, error: doorError } = await serviceSupabase
     .from('doors')
@@ -119,7 +132,7 @@ export default async function DoorInfoPage({ params }: DoorPageProps) {
 
   const { data: latestInspectionData } = await serviceSupabase
     .from('door_inspections')
-    .select('created_at, report_id')
+    .select('created_at, report_id, technician_notes, ai_summary')
     .eq('door_id', doorId)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -140,6 +153,10 @@ export default async function DoorInfoPage({ params }: DoorPageProps) {
     }
   }
 
+  const latestInspectionDate = formatDate(latestInspection?.created_at, 'NA')
+  const latestTechnicianNotes = String(latestInspection?.technician_notes ?? '').trim() || 'NA'
+  const latestAiSummary = String(latestInspection?.ai_summary ?? '').trim() || 'NA'
+
   const doorNumberLabel = String(door.door_label ?? '').trim() || door.id
   const doorTypeLabel = String(door.door_type ?? '').trim() || 'Not available'
   const manufacturerLabel = String(door.manufactured_by ?? '').trim() || 'NBE Australia'
@@ -154,6 +171,8 @@ export default async function DoorInfoPage({ params }: DoorPageProps) {
       nextMaintenanceServiceDateLabel = formatDate(servicedAt.toISOString(), 'Not available')
     }
   }
+
+  const canStartInspection = Boolean(profile && (isEmployee(profile) || isManager(profile)))
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-8">
@@ -190,10 +209,32 @@ export default async function DoorInfoPage({ params }: DoorPageProps) {
               </div>
             </section>
 
-            {user && (
+            {!user ? (
+              <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <h3 className="text-sm font-bold text-slate-800">Previous Inspection Notes</h3>
+                <p className="mt-1 text-sm text-slate-600">NA</p>
+                <p className="mt-2 text-xs text-slate-500">Technicians must login to view maintenance data.</p>
+              </section>
+            ) : (
+              <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <h3 className="text-sm font-bold text-slate-800">Previous Inspection</h3>
+                {latestInspection ? (
+                  <div className="mt-2 space-y-1 text-sm text-slate-700">
+                    <p><span className="font-semibold text-slate-600">Date:</span> {latestInspectionDate}</p>
+                    <p><span className="font-semibold text-slate-600">Technician:</span> {servicedBy || 'NA'}</p>
+                    <p><span className="font-semibold text-slate-600">Notes:</span> {latestTechnicianNotes}</p>
+                    <p><span className="font-semibold text-slate-600">AI Summary:</span> {latestAiSummary}</p>
+                  </div>
+                ) : (
+                  <p className="mt-1 text-sm text-slate-600">Previous Inspection Notes: NA</p>
+                )}
+              </section>
+            )}
+
+            {canStartInspection && (
               <section className="pt-2">
                 <Link
-                  href={`/maintenance/new?doorId=${encodeURIComponent(doorId)}`}
+                  href={`/maintenance/new?door_id=${encodeURIComponent(doorId)}`}
                   className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800"
                 >
                   Start Maintenance Inspection

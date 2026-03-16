@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { label: 'Service Quotes', icon: 'request_quote', href: '/dashboard/quotes/service' },
   { label: 'Timecard', icon: 'schedule', href: '/timecard' },
   { label: 'Maintenance Service', icon: 'build', href: '/maintenance' },
+  { label: 'QR Codes', icon: 'qr_code_2', href: '/qr-codes' },
   { label: 'Reimbursement', icon: 'payments', href: '/reimbursement' },
   { label: 'Shared Calendar', icon: 'calendar_today', href: '/calendar' },
   { label: 'Job Card & Client GPS', icon: 'location_on', href: '/job-card' },

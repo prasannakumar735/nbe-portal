@@ -257,6 +257,8 @@ export async function POST(request: NextRequest) {
       adminUserId = user.id
     }
 
+    let existingStatus: string | undefined
+
     if (payload.report_id) {
       const { data: existing, error: existingError } = await supabase
         .from('maintenance_reports')
@@ -274,7 +276,14 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'This report has already been submitted and is locked.' }, { status: 409 })
         }
       }
+
+      existingStatus = String(existing?.status ?? '').trim() || undefined
     }
+
+    const persistedStatus =
+      payload.admin_edit === true
+        ? (existingStatus ?? payload.status ?? 'submitted')
+        : (payload.status ?? 'draft')
 
     const reportInsert: Record<string, unknown> = {
       technician_name: String(payload.form.technician_name ?? '').trim() || 'Technician',
@@ -288,11 +297,11 @@ export async function POST(request: NextRequest) {
       total_doors: Number(payload.form.total_doors) ?? 1,
       notes: payload.form.notes ?? null,
       signature_url: payload.form.signature_storage_url || null,
-      status: payload.status ?? 'draft',
+      status: persistedStatus,
     }
     if (!payload.report_id) {
       reportInsert.submitted_at =
-        payload.status === 'submitted' || payload.status === 'reviewing'
+        persistedStatus === 'submitted' || persistedStatus === 'reviewing'
           ? new Date().toISOString()
           : null
     }
@@ -343,11 +352,11 @@ export async function POST(request: NextRequest) {
       supabase,
       reportId!,
       payload.form.client_location_id,
-      payload.status,
+      persistedStatus as 'draft' | 'submitted' | 'reviewing',
       payload.form.doors,
     )
 
-    return NextResponse.json({ report_id: reportId, status: payload.status })
+    return NextResponse.json({ report_id: reportId, status: persistedStatus })
   } catch (error) {
     console.error('Supabase error:', error)
     const serializable =
@@ -421,14 +430,54 @@ export async function GET(request: NextRequest) {
     }
 
     let clientId = ''
+    let clientName = ''
+    let locationName = ''
+    let resolvedAddress = String(report.address ?? '').trim()
     if (resolvedClientLocationId) {
       const { data: locationData } = await supabase
         .from('client_locations')
-        .select('client_id')
+        .select('*')
         .eq('id', resolvedClientLocationId)
-        .single()
+        .maybeSingle()
 
       clientId = String(locationData?.client_id ?? '')
+      locationName = String(
+        (locationData as { location_name?: string | null; name?: string | null; suburb?: string | null; site_name?: string | null } | null)?.location_name ??
+        (locationData as { location_name?: string | null; name?: string | null; suburb?: string | null; site_name?: string | null } | null)?.name ??
+        (locationData as { location_name?: string | null; name?: string | null; suburb?: string | null; site_name?: string | null } | null)?.suburb ??
+        (locationData as { location_name?: string | null; name?: string | null; suburb?: string | null; site_name?: string | null } | null)?.site_name ??
+        ''
+      ).trim()
+      const companyAddress = String(
+        (locationData as { Company_address?: string | null; company_address?: string | null } | null)?.Company_address ??
+        (locationData as { Company_address?: string | null; company_address?: string | null } | null)?.company_address ??
+        ''
+      ).trim()
+      const normalizedCompanyAddress = companyAddress.toLowerCase() === 'null' ? '' : companyAddress
+      if (!resolvedAddress) {
+        resolvedAddress = String(
+          normalizedCompanyAddress ||
+          (locationData as { address?: string | null; site_address?: string | null; location_address?: string | null } | null)?.address ||
+          (locationData as { address?: string | null; site_address?: string | null; location_address?: string | null } | null)?.site_address ||
+          (locationData as { address?: string | null; site_address?: string | null; location_address?: string | null } | null)?.location_address ||
+          ''
+        ).trim()
+      }
+
+      if (clientId) {
+        const { data: clientData } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('id', clientId)
+          .maybeSingle()
+
+        clientName = String(
+          (clientData as { client_name?: string | null; name?: string | null; company_name?: string | null } | null)?.client_name ??
+          (clientData as { client_name?: string | null; name?: string | null; company_name?: string | null } | null)?.name ??
+          (clientData as { client_name?: string | null; name?: string | null; company_name?: string | null } | null)?.company_name ??
+          ''
+        ).trim()
+      }
     }
 
     const { data: doors, error: doorsError } = await supabase
@@ -523,8 +572,10 @@ export async function GET(request: NextRequest) {
         submission_date: report.submission_date,
         source_app: report.source_app,
         client_id: clientId,
+        client_name: clientName,
         client_location_id: resolvedClientLocationId,
-        address: report.address,
+        client_location_name: locationName,
+        address: resolvedAddress,
         inspection_date: report.inspection_date,
         inspection_start: report.inspection_start,
         inspection_end: report.inspection_end,
