@@ -1,15 +1,27 @@
 import { generateVCard } from '@/lib/generateVCard'
 import type { Contact, ContactInput } from '@/lib/types/contact.types'
 
-const FALLBACK_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || ''
+function getBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_SITE_URL) {
+    return process.env.NEXT_PUBLIC_SITE_URL
+  }
+
+  if (process.env.VERCEL_URL) {
+    return process.env.VERCEL_URL.startsWith('http')
+      ? process.env.VERCEL_URL
+      : `https://${process.env.VERCEL_URL}`
+  }
+
+  return 'http://localhost:3000'
+}
 
 export function getContactDisplayName(contact: Pick<ContactInput, 'first_name' | 'last_name'>): string {
   return [contact.first_name, contact.last_name].filter(Boolean).join(' ').trim() || 'Contact'
 }
 
 export function buildContactUrl(slug: string): string {
-  if (!FALLBACK_BASE_URL) return `/contact/${slug}`
-  return `${FALLBACK_BASE_URL.replace(/\/$/, '')}/contact/${slug}`
+  const baseUrl = getBaseUrl().replace(/\/$/, '')
+  return `${baseUrl}/contact/${slug}`
 }
 
 export function getContactQrPayload(
