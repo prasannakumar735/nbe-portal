@@ -2,6 +2,7 @@
 
 import { useRouter, usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
+import { useAuth } from '@/app/providers/AuthProvider'
 
 interface SidebarProps {
   isCollapsed: boolean
@@ -27,7 +28,16 @@ const NAV_ITEMS = [
 export function Sidebar({ isCollapsed, onToggleCollapse, isMobileOpen, onCloseMobile }: SidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
+  const { isAdmin, isManager } = useAuth()
   const [isMobile, setIsMobile] = useState(false)
+
+  const navItems = (isAdmin || isManager)
+    ? [
+        ...NAV_ITEMS,
+        { label: 'Inventory', icon: 'inventory_2', href: '/admin/inventory' },
+        { label: 'Contacts', icon: 'contacts', href: '/admin/contacts' },
+      ]
+    : NAV_ITEMS
 
   // Detect mobile screen size
   useEffect(() => {
@@ -77,7 +87,7 @@ export function Sidebar({ isCollapsed, onToggleCollapse, isMobileOpen, onCloseMo
 
         {/* Navigation Items - No Scroll */}
         <nav className="flex-1 flex flex-col py-2 px-2 overflow-hidden">
-          {NAV_ITEMS.map((item, index) => {
+          {navItems.map((item, index) => {
             const isActive = isNavItemActive(item.href)
             const isDashboard = item.label === 'Dashboard'
             
