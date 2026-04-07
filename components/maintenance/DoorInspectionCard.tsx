@@ -61,27 +61,43 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
   const [history, setHistory] = useState<DoorInspectionHistoryItem[]>([])
   const [isHistoryLoading, setIsHistoryLoading] = useState(false)
 
-  if (!door) return null
-
+  // Must run before any early return — avoids hook-order bugs and request storms in production/dev.
   useEffect(() => {
-    const doorId = door.door_id
-    console.log('Door ID:', doorId)
+    const doorId = door?.door_id ? String(door.door_id).trim() : ''
 
-    if (!doorId) {
+    const networkBlocked =
+      isOffline ||
+      (typeof navigator !== 'undefined' && !navigator.onLine) ||
+      !isOnline
+
+    if (networkBlocked || !doorId) {
       setHistory([])
       setIsHistoryLoading(false)
       return
     }
 
+    let cancelled = false
+
     const loadHistory = async () => {
+      // Double-check right before hitting the network (DevTools offline / flaky navigator.onLine).
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        if (!cancelled) {
+          setHistory([])
+          setIsHistoryLoading(false)
+        }
+        return
+      }
+
       try {
-        setIsHistoryLoading(true)
+        if (!cancelled) setIsHistoryLoading(true)
         const { data, error } = await supabase
           .from('door_inspections')
           .select('technician_notes, created_at')
           .eq('door_id', doorId)
           .order('created_at', { ascending: false })
           .limit(5)
+
+        if (cancelled) return
 
         if (error) {
           console.error('Failed to load door inspection history:', { doorId, error })
@@ -100,15 +116,23 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
 
         setHistory(nextHistory)
       } catch (error) {
-        console.error('Unexpected error while loading history:', { doorId, error })
-        setHistory([])
+        if (!cancelled) {
+          console.error('Unexpected error while loading history:', { doorId, error })
+          setHistory([])
+        }
       } finally {
-        setIsHistoryLoading(false)
+        if (!cancelled) setIsHistoryLoading(false)
       }
     }
 
     void loadHistory()
-  }, [door.door_id])
+
+    return () => {
+      cancelled = true
+    }
+  }, [door?.door_id, isOffline, isOnline, supabase])
+
+  if (!door) return null
 
   const formatHistoryDate = (item: DoorInspectionHistoryItem) => {
     const raw = item.created_at
@@ -157,11 +181,15 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
                       door_type: selected.door_type || '',
                     })
                   } else {
+                    // Offline-safe fallback: allow selection even if availableDoors is empty/stale.
+                    // This prevents the dropdown from instantly "snapping back" to empty.
+                    const rawLabel = String(event.target.selectedOptions?.[0]?.text ?? '').trim()
+                    const [labelPart, typePart] = rawLabel.split(' - ').map(s => s.trim())
                     update(index, {
                       ...door,
-                      door_id: undefined,
-                      door_number: '',
-                      door_type: '',
+                      door_id: selectedDoorId ? selectedDoorId : undefined,
+                      door_number: selectedDoorId ? (labelPart || door.door_number) : '',
+                      door_type: selectedDoorId ? (typePart || door.door_type) : '',
                     })
                   }
                 }}

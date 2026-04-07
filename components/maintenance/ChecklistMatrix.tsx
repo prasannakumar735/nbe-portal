@@ -46,6 +46,10 @@ const ChecklistRow = memo(function ChecklistRow({
       defaultValue={null}
       render={({ field }) => {
         const radioName = `checklist-${doorIndex}-${item.code}`
+        const onValueChange = (value: string) => {
+          console.log('Updating checklist:', doorIndex, item.code, value)
+          field.onChange(value)
+        }
 
         if (variant === 'mobile') {
           return (
@@ -61,7 +65,7 @@ const ChecklistRow = memo(function ChecklistRow({
               </div>
               <ChecklistRadioGroup
                 value={typeof field.value === 'string' ? field.value : ''}
-                onValueChange={field.onChange}
+                onValueChange={onValueChange}
                 name={radioName}
                 variant="mobile"
               />
@@ -82,7 +86,7 @@ const ChecklistRow = memo(function ChecklistRow({
             <div className="col-span-4 flex items-center py-3">
               <ChecklistRadioGroup
                 value={typeof field.value === 'string' ? field.value : ''}
-                onValueChange={field.onChange}
+                onValueChange={onValueChange}
                 name={radioName}
                 variant="desktop"
               />

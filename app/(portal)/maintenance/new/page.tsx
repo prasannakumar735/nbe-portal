@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useFieldArray, useForm, useWatch } from 'react-hook-form'
+import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import { DoorInspectionCard } from '@/components/maintenance/DoorInspectionCard'
@@ -387,18 +387,19 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   const watchedNotes = useWatch({ control, name: 'notes', defaultValue: '' })
   const watchedDoors = useWatch({ control, name: 'doors', defaultValue: [] }) as MaintenanceDoorForm[]
 
-  // Debug logs (temporary)
-  useEffect(() => {
-    if (!isOffline) return
-    console.log('Selected client:', watchedClientId)
-    console.log('Clients:', clients)
-  }, [clients, isOffline, watchedClientId])
+  /** Which client the current `locations` list belongs to (avoids skipping reload after client change). */
+  const locationsForClientIdRef = useRef<string | null>(null)
+  /** Which location the current `availableDoors` list belongs to (avoids reloading + replacing doors repeatedly). */
+  const doorsForLocationIdRef = useRef<string | null>(null)
+  /** One-time client list fetch; draft hydration runs separately so loader churn does not re-run hydration. */
+  const clientsInitializedRef = useRef(false)
+  /** Apply IndexedDB last-selection restore at most once per offline stint (avoids effect dependency churn). */
+  const offlineRestoredRef = useRef(false)
 
   useEffect(() => {
-    if (!isOffline) return
-    console.log('Selected location:', watchedClientLocationId)
-    console.log('Locations:', locations)
-  }, [isOffline, locations, watchedClientLocationId])
+    console.log('client:', watchedClientId || '')
+    console.log('location:', watchedClientLocationId || '')
+  }, [watchedClientId, watchedClientLocationId])
 
   const clientOptions = useMemo(() => {
     if (!watchedClientId) return clients
@@ -415,19 +416,26 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   const loadLocationsForClient = useCallback(async (clientId: string) => {
     if (!clientId) {
       setLocations([])
+      locationsForClientIdRef.current = null
       return [] as ClientLocationOption[]
+    }
+
+    if (locationsForClientIdRef.current !== clientId) {
+      setLocations([])
+      locationsForClientIdRef.current = null
     }
 
     if (!navigator.onLine) {
       const cached = await offlineGetCachedLocations(clientId)
       console.log('Offline locations:', cached)
-      if (cached && cached.length > 0) {
-        setLocations(cached)
-        return cached
+      const list = cached && cached.length > 0 ? cached : []
+      setLocations(list)
+      locationsForClientIdRef.current = clientId
+      if (!list.length) {
+        setStatusMessage('No offline data available. Please connect to internet once.')
+        setStatusType('info')
       }
-      setLocations([])
-      showStatus('No offline data available. Please connect to internet once.', 'info')
-      return [] as ClientLocationOption[]
+      return list
     }
 
     try {
@@ -435,13 +443,22 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       const data = (await response.json()) as { locations?: ClientLocationOption[] }
       const locationOptions = data.locations ?? []
       setLocations(locationOptions)
+      locationsForClientIdRef.current = clientId
       void offlineCacheLocations(clientId, locationOptions)
       return locationOptions
     } catch {
-      showStatus('Offline: failed to load locations. Continue offline and sync later.', 'info')
-      return locations
+      // If navigator.onLine is wrong (common in iOS PWA), fall back to cached locations.
+      const cached = await offlineGetCachedLocations(clientId)
+      const list = cached && cached.length > 0 ? cached : []
+      setLocations(list)
+      locationsForClientIdRef.current = clientId
+      if (!list.length) {
+        setStatusMessage('Offline: failed to load locations. Continue offline and sync later.')
+        setStatusType('info')
+      }
+      return list
     }
-  }, [locations])
+  }, [])
 
   const prepareFormForSave = useCallback(async () => {
     const form = getValues()
@@ -544,9 +561,15 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   const loadDoorsForLocation = useCallback(async (locationId: string) => {
     if (!locationId) {
       setAvailableDoors([])
+      doorsForLocationIdRef.current = null
       replace([createDoor(0)])
       setValue('total_doors', 1, { shouldDirty: true, shouldValidate: true })
       return []
+    }
+
+    // If we already loaded doors for this location, don't reload/replace again.
+    if (doorsForLocationIdRef.current === locationId && availableDoors.length > 0) {
+      return availableDoors
     }
 
     if (!navigator.onLine) {
@@ -554,10 +577,12 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       console.log('Offline doors:', cached)
       if (cached?.doors && cached.doors.length > 0) {
         setAvailableDoors(cached.doors)
+        doorsForLocationIdRef.current = locationId
         return cached.doors
       }
       showStatus('No offline doors available. Please connect once.', 'info')
       setAvailableDoors([])
+      doorsForLocationIdRef.current = locationId
       return []
     }
 
@@ -568,8 +593,17 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       }
       const doorsForLocation = payload.doors ?? []
       setAvailableDoors(doorsForLocation)
+      doorsForLocationIdRef.current = locationId
       void offlineCacheDoors(locationId, doorsForLocation)
 
+      const current = getValues()
+      const existingDoors = current.doors ?? []
+      const hasUserEdits =
+        existingDoors.some(d => Boolean(String(d.notes ?? '').trim())) ||
+        existingDoors.some(d => Array.isArray(d.photos) && d.photos.length > 0) ||
+        existingDoors.some(d => Object.values(d.checklist ?? {}).some(v => Boolean(v)))
+
+      // Only auto-populate door rows on first load/new location when user hasn't started editing.
       const loadedDoors = doorsForLocation.map((door, index) => ({
         door_id: door.id,
         local_id: crypto.randomUUID(),
@@ -584,24 +618,30 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       }))
 
       if (loadedDoors.length === 0) {
-        replace([createDoor(0)])
-        setValue('total_doors', 1, { shouldDirty: true, shouldValidate: true })
+        if (!hasUserEdits) {
+          replace([createDoor(0)])
+          setValue('total_doors', 1, { shouldDirty: true, shouldValidate: true })
+        }
         return doorsForLocation
       }
 
-      replace(loadedDoors)
-      setValue('total_doors', loadedDoors.length, { shouldDirty: true, shouldValidate: true })
+      if (!hasUserEdits) {
+        replace(loadedDoors)
+        setValue('total_doors', loadedDoors.length, { shouldDirty: true, shouldValidate: true })
+      }
       return doorsForLocation
     } catch {
       const cached = await offlineGetCachedDoors(locationId)
       if (cached?.doors && cached.doors.length > 0) {
         setAvailableDoors(cached.doors)
+        doorsForLocationIdRef.current = locationId
         return cached.doors
       }
       setAvailableDoors([])
+      doorsForLocationIdRef.current = locationId
       return []
     }
-  }, [offlineCacheDoors, offlineGetCachedDoors, replace, setValue])
+  }, [availableDoors, getValues, offlineCacheDoors, offlineGetCachedDoors, replace, setValue])
 
   useEffect(() => {
     const locationId = watchedClientLocationId
@@ -628,7 +668,80 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     }
   }, [watchedClientLocationId, loadDoorsForLocation])
 
+  const loadClientsIntoState = useCallback(async () => {
+    if (!navigator.onLine) {
+      const cached = await offlineGetCachedClients()
+      if (cached && cached.length > 0) {
+        setClients(cached)
+      }
+      return
+    }
+    try {
+      const response = await fetch('/api/maintenance/clients')
+      const data = (await response.json()) as { clients?: ClientOption[] }
+      const list = data.clients ?? []
+      setClients(list)
+      void offlineCacheClients(list)
+
+      void (async () => {
+        for (const c of list) {
+          if (!navigator.onLine) break
+          try {
+            const res = await fetch(`/api/maintenance/locations?clientId=${encodeURIComponent(c.id)}`)
+            const payload = (await res.json().catch(() => ({}))) as { locations?: ClientLocationOption[] }
+            if (res.ok && Array.isArray(payload.locations)) {
+              await offlineCacheLocations(c.id, payload.locations)
+
+              for (const loc of payload.locations) {
+                if (!navigator.onLine) break
+                try {
+                  const doorsRes = await fetch(`/api/maintenance/doors?locationId=${encodeURIComponent(loc.id)}`)
+                  const doorsPayload = (await doorsRes.json().catch(() => ({}))) as {
+                    doors?: Array<{ id: string; door_label: string; door_type: string }>
+                  }
+                  if (doorsRes.ok && Array.isArray(doorsPayload.doors)) {
+                    await offlineCacheDoors(loc.id, doorsPayload.doors)
+                  }
+                } catch {
+                  // ignore
+                }
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+      })()
+    } catch {
+      // If navigator.onLine is wrong (common in iOS PWA), fall back to cached clients.
+      const cached = await offlineGetCachedClients()
+      if (cached && cached.length > 0) {
+        setClients(cached)
+      }
+    }
+  }, [])
+
+  const draftHydrationKey = useMemo(
+    () =>
+      [
+        reportIdFromRoute ?? '',
+        offlineEditId ?? '',
+        isFreshMode ? '1' : '0',
+        isAdminMode ? '1' : '0',
+        initialReport ? 'ir' : 'no',
+      ].join('|'),
+    [reportIdFromRoute, offlineEditId, isFreshMode, isAdminMode, initialReport],
+  )
+
   useEffect(() => {
+    if (clientsInitializedRef.current) return
+    clientsInitializedRef.current = true
+    void loadClientsIntoState()
+  }, [loadClientsIntoState])
+
+  useEffect(() => {
+    let cancelled = false
+
     const restoreFromLocalBackup = () => {
       const raw = localStorage.getItem(STORAGE_KEY)
       if (!raw) return false
@@ -655,61 +768,10 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       }
     }
 
-    const loadClients = async () => {
-      if (!navigator.onLine) {
-        const cached = await offlineGetCachedClients()
-        if (cached && cached.length > 0) {
-          setClients(cached)
-        }
-        return
-      }
-      try {
-        const response = await fetch('/api/maintenance/clients')
-        const data = (await response.json()) as { clients?: ClientOption[] }
-        const list = data.clients ?? []
-        setClients(list)
-        void offlineCacheClients(list)
-
-        // Warm-cache locations so offline client selection works reliably.
-        // Runs best-effort in background; safe to skip if offline mid-way.
-        void (async () => {
-          for (const c of list) {
-            if (!navigator.onLine) break
-            try {
-              const res = await fetch(`/api/maintenance/locations?clientId=${encodeURIComponent(c.id)}`)
-              const payload = (await res.json().catch(() => ({}))) as { locations?: ClientLocationOption[] }
-              if (res.ok && Array.isArray(payload.locations)) {
-                await offlineCacheLocations(c.id, payload.locations)
-
-                // Warm-cache doors for each location so offline door selection works.
-                for (const loc of payload.locations) {
-                  if (!navigator.onLine) break
-                  try {
-                    const doorsRes = await fetch(`/api/maintenance/doors?locationId=${encodeURIComponent(loc.id)}`)
-                    const doorsPayload = (await doorsRes.json().catch(() => ({}))) as {
-                      doors?: Array<{ id: string; door_label: string; door_type: string }>
-                    }
-                    if (doorsRes.ok && Array.isArray(doorsPayload.doors)) {
-                      await offlineCacheDoors(loc.id, doorsPayload.doors)
-                    }
-                  } catch {
-                    // ignore
-                  }
-                }
-              }
-            } catch {
-              // ignore
-            }
-          }
-        })()
-      } catch {
-        // ignore offline fetch errors
-      }
-    }
-
     const loadDraft = async () => {
       if (offlineEditId) {
         const record = await offlineGet(offlineEditId)
+        if (cancelled) return
         if (record?.report_data) {
           const draft = record.report_data as Partial<MaintenanceFormValues>
           Object.entries(draft).forEach(([key, value]) => {
@@ -727,6 +789,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
           if (selectedClientId) {
             await loadLocationsForClient(selectedClientId)
           }
+          if (cancelled) return
           if (selectedLocationId) {
             await loadDoorsForLocation(selectedLocationId)
           }
@@ -741,8 +804,6 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       }
 
       if (isFreshMode && !reportIdFromRoute) {
-        // If the device is offline, keep local backup so dropdowns/selections still restore on reload.
-        // This prevents a "blank" offline form after refresh (especially in PWA mode).
         if (navigator.onLine) {
           localStorage.removeItem('maintenance:lastReportId')
           localStorage.removeItem(STORAGE_KEY)
@@ -761,6 +822,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
           if (selectedClientId) {
             await loadLocationsForClient(selectedClientId)
           }
+          if (cancelled) return
           if (selectedLocationId) {
             await loadDoorsForLocation(selectedLocationId)
           }
@@ -771,6 +833,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       const response = await fetch(`/api/maintenance/draft?reportId=${encodeURIComponent(reportId)}`, {
         cache: 'no-store',
       })
+      if (cancelled) return
       const data = await response.json()
       if (!data.report) {
         restoreFromLocalBackup()
@@ -801,17 +864,18 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       })
 
       await hydrateClientFromLocation(data.report as Record<string, unknown>)
+      if (cancelled) return
 
       const maintenanceDoors: unknown[] = Array.isArray(data.report.doors) ? data.report.doors : []
       const doors = maintenanceDoors.map((door, index) => normalizeLoadedDoor(door, index))
       replace(doors.length > 0 ? doors : [createDoor(0)])
 
-      // Ensure dependent option lists are populated (client → locations → doors)
       const selectedClientId = String((data.report as Record<string, unknown>).client_id ?? '').trim()
       const selectedLocationId = String((data.report as Record<string, unknown>).client_location_id ?? '').trim()
       if (selectedClientId) {
         await loadLocationsForClient(selectedClientId)
       }
+      if (cancelled) return
       if (selectedLocationId) {
         await loadDoorsForLocation(selectedLocationId)
       }
@@ -834,13 +898,22 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data.report))
     }
 
-    loadClients()
-    loadDraft()
-  }, [hydrateClientFromLocation, replace, reset, setValue, reportIdFromRoute, initialReport, isAdminMode, isFreshMode, offlineEditId, getValues, loadDoorsForLocation, loadLocationsForClient])
+    void loadDraft()
 
-  // On offline reload (including /maintenance/new?fresh=1), restore last selection so dropdowns show cached data.
+    return () => {
+      cancelled = true
+    }
+  }, [draftHydrationKey]) // eslint-disable-line react-hooks/exhaustive-deps -- keyed by route/query only; stable loaders
+
+  // On offline reload, restore last selection once per offline stint without re-fighting user input.
   useEffect(() => {
-    if (!isOffline) return
+    if (!isOffline) {
+      offlineRestoredRef.current = false
+      return
+    }
+    if (offlineRestoredRef.current) return
+    offlineRestoredRef.current = true
+
     let cancelled = false
 
     const restoreSelection = async () => {
@@ -849,18 +922,24 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
 
       const clientId = String(last.client_id ?? '').trim()
       const locationId = String(last.client_location_id ?? '').trim()
+      const currentClient = String(getValues('client_id') ?? '').trim()
+      const currentLoc = String(getValues('client_location_id') ?? '').trim()
 
-      if (clientId && !watchedClientId) {
+      if (clientId && !currentClient) {
         setValue('client_id', clientId, { shouldDirty: false, shouldValidate: true })
       }
-      if (clientId) {
-        await loadLocationsForClient(clientId)
+      const effectiveClient = String(getValues('client_id') ?? '').trim() || clientId
+      if (effectiveClient) {
+        await loadLocationsForClient(effectiveClient)
       }
-      if (locationId && !watchedClientLocationId) {
+      if (cancelled) return
+
+      if (locationId && !String(getValues('client_location_id') ?? '').trim()) {
         setValue('client_location_id', locationId, { shouldDirty: false, shouldValidate: true })
       }
-      if (locationId) {
-        await loadDoorsForLocation(locationId)
+      const effectiveLoc = String(getValues('client_location_id') ?? '').trim() || locationId
+      if (effectiveLoc) {
+        await loadDoorsForLocation(effectiveLoc)
       }
     }
 
@@ -868,19 +947,14 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     return () => {
       cancelled = true
     }
-  }, [isOffline, loadDoorsForLocation, loadLocationsForClient, setValue, watchedClientId, watchedClientLocationId])
+  }, [isOffline, getValues, loadDoorsForLocation, loadLocationsForClient, setValue])
 
-  // Ensure dependent lists are loaded in order (offline-safe)
+  // If form has a client but locations belong to another client (or were never loaded), reload — do not use locations.length alone (breaks client switches).
   useEffect(() => {
     if (!watchedClientId) return
-    if (locations.length > 0) return
+    if (locationsForClientIdRef.current === watchedClientId) return
     void loadLocationsForClient(watchedClientId)
-  }, [loadLocationsForClient, locations.length, watchedClientId])
-
-  useEffect(() => {
-    if (!watchedClientLocationId) return
-    void loadDoorsForLocation(watchedClientLocationId)
-  }, [loadDoorsForLocation, watchedClientLocationId])
+  }, [loadLocationsForClient, watchedClientId])
 
   useEffect(() => {
     if (!reportIdFromRoute || !initialReport || !isAdminMode || adminFormPopulated) return
@@ -1410,55 +1484,74 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
           <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
             <label className="text-sm font-medium text-slate-700">
               Client
-              <select
-                {...register('client_id')}
-                value={watchedClientId || ''}
-                className="mt-1 h-12 w-full rounded-xl border border-slate-300 px-3 text-base"
-                onChange={async event => {
-                  const selectedId = event.target.value
-                  setValue('client_id', selectedId, { shouldDirty: true, shouldValidate: true })
-                  setValue('client_location_id', '', { shouldDirty: true, shouldValidate: true })
-                  setValue('address', '', { shouldDirty: true, shouldValidate: true })
-                  void offlineSetLastSelection({ client_id: selectedId, client_location_id: '' })
-                  await loadLocationsForClient(selectedId)
-                }}
-              >
-                <option value="">Select client</option>
-                {clientOptions.map(client => (
-                  <option key={client.id} value={client.id}>{client.name}</option>
-                ))}
-              </select>
+              <Controller
+                name="client_id"
+                control={control}
+                render={({ field }) => (
+                  <select
+                    ref={field.ref}
+                    name={field.name}
+                    value={field.value ?? ''}
+                    onBlur={field.onBlur}
+                    className="mt-1 h-12 w-full rounded-xl border border-slate-300 px-3 text-base"
+                    onChange={async event => {
+                      const selectedId = event.target.value
+                      field.onChange(selectedId)
+                      setValue('client_location_id', '', { shouldDirty: true, shouldValidate: true })
+                      setValue('address', '', { shouldDirty: true, shouldValidate: true })
+                      void offlineSetLastSelection({ client_id: selectedId, client_location_id: '' })
+                      await loadLocationsForClient(selectedId)
+                    }}
+                  >
+                    <option value="">Select client</option>
+                    {clientOptions.map(client => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              />
               {errors.client_id && <span className="text-xs text-red-600">{errors.client_id.message}</span>}
             </label>
 
             <label className="text-sm font-medium text-slate-700">
               Location
-              <select
-                {...register('client_location_id')}
-                value={watchedClientLocationId || ''}
-                className="mt-1 h-12 w-full rounded-xl border border-slate-300 px-3 text-base"
-                onChange={event => {
-                  const selectedLocationId = event.target.value
-                  setValue('client_location_id', selectedLocationId, { shouldDirty: true, shouldValidate: true })
-                  const foundLocation = locations.find(item => item.id === selectedLocationId)
-                  setValue('address', foundLocation?.address ?? '', { shouldDirty: true, shouldValidate: true })
-                  // In offline mode, users may pick a location from cached data without selecting a client first.
-                  // Keep client_id in sync so the "Client" dropdown shows the correct selection.
-                  const locationClientId = String(foundLocation?.client_id ?? '').trim()
-                  if (locationClientId && locationClientId !== watchedClientId) {
-                    setValue('client_id', locationClientId, { shouldDirty: true, shouldValidate: true })
-                  }
-                  void offlineSetLastSelection({
-                    client_id: locationClientId || watchedClientId,
-                    client_location_id: selectedLocationId,
-                  })
-                }}
-              >
-                <option value="">Select location</option>
-                {locationOptions.map(location => (
-                  <option key={location.id} value={location.id}>{location.name}</option>
-                ))}
-              </select>
+              <Controller
+                name="client_location_id"
+                control={control}
+                render={({ field }) => (
+                  <select
+                    ref={field.ref}
+                    name={field.name}
+                    value={field.value ?? ''}
+                    onBlur={field.onBlur}
+                    className="mt-1 h-12 w-full rounded-xl border border-slate-300 px-3 text-base"
+                    onChange={event => {
+                      const selectedLocationId = event.target.value
+                      field.onChange(selectedLocationId)
+                      const foundLocation = locationOptions.find(item => item.id === selectedLocationId)
+                      setValue('address', foundLocation?.address ?? '', { shouldDirty: true, shouldValidate: true })
+                      const locationClientId = String(foundLocation?.client_id ?? '').trim()
+                      const currentClientId = String(getValues('client_id') ?? '').trim()
+                      if (locationClientId && locationClientId !== currentClientId) {
+                        setValue('client_id', locationClientId, { shouldDirty: true, shouldValidate: true })
+                      }
+                      void offlineSetLastSelection({
+                        client_id: locationClientId || currentClientId,
+                        client_location_id: selectedLocationId,
+                      })
+                    }}
+                  >
+                    <option value="">Select location</option>
+                    {locationOptions.map(location => (
+                      <option key={location.id} value={location.id}>
+                        {location.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              />
               {isOffline && watchedClientId && locations.length === 0 && (
                 <span className="mt-1 block text-xs text-amber-700">
                   No offline data available. Please connect to internet once.
