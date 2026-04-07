@@ -10,7 +10,23 @@ import { SignaturePad } from '@/components/maintenance/SignaturePad'
 import { AISummaryButton } from '@/components/maintenance/AISummaryButton'
 import { FaultSummaryPanel } from '@/components/maintenance/FaultSummaryPanel'
 import { MAINTENANCE_CHECKLIST_ITEMS } from '@/lib/types/maintenance.types'
-import { useOfflineMaintenanceDraft } from '@/hooks/useOfflineMaintenanceDraft'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import {
+  offlineAddInspection,
+  offlineCacheClients,
+  offlineCacheLocations,
+  offlineCacheDoors,
+  offlineCountPending,
+  offlineGet,
+  offlineGetCachedClients,
+  offlineGetCachedLocations,
+  offlineGetCachedDoors,
+  offlineGetLastSelection,
+  offlineSetLastSelection,
+  offlineListPending,
+  offlineMarkAttempt,
+  offlineSetStatus,
+} from '@/lib/offline-db'
 import { useMaintenanceFaultDetection } from '@/hooks/useMaintenanceFaultDetection'
 import type {
   ClientLocationOption,
@@ -250,6 +266,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   const searchParams = useSearchParams()
   const initialDoorId = searchParams.get('door_id') ?? searchParams.get('doorId')
   const isFreshMode = searchParams.get('fresh') === '1'
+  const offlineEditId = searchParams.get('offline_id') ?? searchParams.get('offlineId')
   const [clients, setClients] = useState<ClientOption[]>([])
   const [locations, setLocations] = useState<ClientLocationOption[]>([])
   const [savedClientName, setSavedClientName] = useState('')
@@ -274,16 +291,74 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     setStatusType(type)
   }
 
-  const {
-    isOffline,
-    hasPendingDraft,
-    saveOfflineDraft,
-    clearOfflineDraft,
-  } = useOfflineMaintenanceDraft({
-    onSynced: () => {
-      showStatus('Pending draft synced.', 'success')
-    },
-  })
+  const { isOnline, isOffline } = useOnlineStatus()
+  const [pendingSyncCount, setPendingSyncCount] = useState(0)
+  const [isSyncingPending, setIsSyncingPending] = useState(false)
+  const refreshPendingCount = useCallback(async () => {
+    try {
+      const count = await offlineCountPending()
+      setPendingSyncCount(count)
+    } catch {
+      setPendingSyncCount(0)
+    }
+  }, [])
+
+  const syncPendingReports = useCallback(async () => {
+    if (!navigator.onLine || isSyncingPending) return
+    setIsSyncingPending(true)
+    try {
+      const pending = await offlineListPending()
+      if (pending.length === 0) {
+        await refreshPendingCount()
+        return
+      }
+
+      showStatus('Syncing...', 'info')
+      for (const item of pending) {
+        if (!navigator.onLine) break
+
+        if (item.status === 'syncing') {
+          continue
+        }
+
+        await offlineSetStatus(item.id, 'syncing')
+        await offlineMarkAttempt(item.id, { error: null })
+        try {
+          const nextForm: MaintenanceFormValues = JSON.parse(JSON.stringify(item.report_data)) as MaintenanceFormValues
+
+          // Atomic sync is handled by backend now (uploads + inserts)
+          const res = await fetch('/api/maintenance', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'submitted', form: nextForm }),
+          })
+          const json = await res.json().catch(() => ({}))
+          if (!res.ok) {
+            throw new Error((json as { error?: string }).error ?? 'Sync failed')
+          }
+          await offlineSetStatus(item.id, 'synced')
+        } catch {
+          await offlineSetStatus(item.id, 'pending')
+          await offlineMarkAttempt(item.id, { error: 'Sync failed' })
+        }
+      }
+
+      await refreshPendingCount()
+      showStatus('Sync complete', 'success')
+    } finally {
+      setIsSyncingPending(false)
+    }
+  }, [isSyncingPending, refreshPendingCount])
+
+  useEffect(() => {
+    void refreshPendingCount()
+  }, [refreshPendingCount])
+
+  useEffect(() => {
+    if (isOnline) {
+      void syncPendingReports()
+    }
+  }, [isOnline, syncPendingReports])
 
   const {
     register,
@@ -312,6 +387,19 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   const watchedNotes = useWatch({ control, name: 'notes', defaultValue: '' })
   const watchedDoors = useWatch({ control, name: 'doors', defaultValue: [] }) as MaintenanceDoorForm[]
 
+  // Debug logs (temporary)
+  useEffect(() => {
+    if (!isOffline) return
+    console.log('Selected client:', watchedClientId)
+    console.log('Clients:', clients)
+  }, [clients, isOffline, watchedClientId])
+
+  useEffect(() => {
+    if (!isOffline) return
+    console.log('Selected location:', watchedClientLocationId)
+    console.log('Locations:', locations)
+  }, [isOffline, locations, watchedClientLocationId])
+
   const clientOptions = useMemo(() => {
     if (!watchedClientId) return clients
     if (clients.some(client => client.id === watchedClientId)) return clients
@@ -330,12 +418,30 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       return [] as ClientLocationOption[]
     }
 
-    const response = await fetch(`/api/maintenance/locations?clientId=${encodeURIComponent(clientId)}`)
-    const data = (await response.json()) as { locations?: ClientLocationOption[] }
-    const locationOptions = data.locations ?? []
-    setLocations(locationOptions)
-    return locationOptions
-  }, [])
+    if (!navigator.onLine) {
+      const cached = await offlineGetCachedLocations(clientId)
+      console.log('Offline locations:', cached)
+      if (cached && cached.length > 0) {
+        setLocations(cached)
+        return cached
+      }
+      setLocations([])
+      showStatus('No offline data available. Please connect to internet once.', 'info')
+      return [] as ClientLocationOption[]
+    }
+
+    try {
+      const response = await fetch(`/api/maintenance/locations?clientId=${encodeURIComponent(clientId)}`)
+      const data = (await response.json()) as { locations?: ClientLocationOption[] }
+      const locationOptions = data.locations ?? []
+      setLocations(locationOptions)
+      void offlineCacheLocations(clientId, locationOptions)
+      return locationOptions
+    } catch {
+      showStatus('Offline: failed to load locations. Continue offline and sync later.', 'info')
+      return locations
+    }
+  }, [locations])
 
   const prepareFormForSave = useCallback(async () => {
     const form = getValues()
@@ -440,38 +546,62 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       setAvailableDoors([])
       replace([createDoor(0)])
       setValue('total_doors', 1, { shouldDirty: true, shouldValidate: true })
-      return
+      return []
     }
 
-    const response = await fetch(`/api/maintenance/doors?locationId=${encodeURIComponent(locationId)}`)
-    const payload = (await response.json()) as {
-      doors?: Array<{ id: string; door_label: string; door_type: string }>
-    }
-    const doorsForLocation = payload.doors ?? []
-    setAvailableDoors(doorsForLocation)
-
-    const loadedDoors = doorsForLocation.map((door, index) => ({
-      door_id: door.id,
-      local_id: crypto.randomUUID(),
-      door_number: door.door_label || `Door ${index + 1}`,
-      door_type: door.door_type || '',
-      door_cycles: 0,
-      view_window_visibility: 0,
-      notes: '',
-      checklist: createEmptyChecklist(),
-      photos: [],
-      isCollapsed: index > 0,
-    }))
-
-    if (loadedDoors.length === 0) {
-      replace([createDoor(0)])
-      setValue('total_doors', 1, { shouldDirty: true, shouldValidate: true })
-      return
+    if (!navigator.onLine) {
+      const cached = await offlineGetCachedDoors(locationId)
+      console.log('Offline doors:', cached)
+      if (cached?.doors && cached.doors.length > 0) {
+        setAvailableDoors(cached.doors)
+        return cached.doors
+      }
+      showStatus('No offline doors available. Please connect once.', 'info')
+      setAvailableDoors([])
+      return []
     }
 
-    replace(loadedDoors)
-    setValue('total_doors', loadedDoors.length, { shouldDirty: true, shouldValidate: true })
-  }, [replace, setValue])
+    try {
+      const response = await fetch(`/api/maintenance/doors?locationId=${encodeURIComponent(locationId)}`)
+      const payload = (await response.json()) as {
+        doors?: Array<{ id: string; door_label: string; door_type: string }>
+      }
+      const doorsForLocation = payload.doors ?? []
+      setAvailableDoors(doorsForLocation)
+      void offlineCacheDoors(locationId, doorsForLocation)
+
+      const loadedDoors = doorsForLocation.map((door, index) => ({
+        door_id: door.id,
+        local_id: crypto.randomUUID(),
+        door_number: door.door_label || `Door ${index + 1}`,
+        door_type: door.door_type || '',
+        door_cycles: 0,
+        view_window_visibility: 0,
+        notes: '',
+        checklist: createEmptyChecklist(),
+        photos: [],
+        isCollapsed: index > 0,
+      }))
+
+      if (loadedDoors.length === 0) {
+        replace([createDoor(0)])
+        setValue('total_doors', 1, { shouldDirty: true, shouldValidate: true })
+        return doorsForLocation
+      }
+
+      replace(loadedDoors)
+      setValue('total_doors', loadedDoors.length, { shouldDirty: true, shouldValidate: true })
+      return doorsForLocation
+    } catch {
+      const cached = await offlineGetCachedDoors(locationId)
+      if (cached?.doors && cached.doors.length > 0) {
+        setAvailableDoors(cached.doors)
+        return cached.doors
+      }
+      setAvailableDoors([])
+      return []
+    }
+  }, [offlineCacheDoors, offlineGetCachedDoors, replace, setValue])
 
   useEffect(() => {
     const locationId = watchedClientLocationId
@@ -486,31 +616,9 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         }
         return
       }
-
-      const { data, error } = await supabase
-        .from('doors')
-        .select('id, door_label, door_type')
-        .eq('client_location_id', locationId)
-        .order('door_label', { ascending: true })
-
-      if (!isActive) {
-        return
-      }
-
-      if (error) {
-        console.error('[Maintenance] Failed loading doors for location:', locationId, error)
-        setAvailableDoors([])
-        return
-      }
-
-      const doors = (data ?? []).map(row => ({
-        id: String(row.id ?? ''),
-        door_label: String(row.door_label ?? '').trim(),
-        door_type: String(row.door_type ?? '').trim(),
-      }))
-
-      console.log('[Maintenance] Doors loaded from useEffect:', { locationId, count: doors.length, doors })
-      setAvailableDoors(doors)
+      const doors = await loadDoorsForLocation(locationId)
+      if (!isActive) return
+      console.log('[Maintenance] Doors loaded from loadDoorsForLocation:', { locationId, count: doors.length })
     }
 
     void loadAvailableDoors()
@@ -518,7 +626,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     return () => {
       isActive = false
     }
-  }, [watchedClientLocationId])
+  }, [watchedClientLocationId, loadDoorsForLocation])
 
   useEffect(() => {
     const restoreFromLocalBackup = () => {
@@ -548,26 +656,115 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     }
 
     const loadClients = async () => {
-      const response = await fetch('/api/maintenance/clients')
-      const data = (await response.json()) as { clients?: ClientOption[] }
-      setClients(data.clients ?? [])
+      if (!navigator.onLine) {
+        const cached = await offlineGetCachedClients()
+        if (cached && cached.length > 0) {
+          setClients(cached)
+        }
+        return
+      }
+      try {
+        const response = await fetch('/api/maintenance/clients')
+        const data = (await response.json()) as { clients?: ClientOption[] }
+        const list = data.clients ?? []
+        setClients(list)
+        void offlineCacheClients(list)
+
+        // Warm-cache locations so offline client selection works reliably.
+        // Runs best-effort in background; safe to skip if offline mid-way.
+        void (async () => {
+          for (const c of list) {
+            if (!navigator.onLine) break
+            try {
+              const res = await fetch(`/api/maintenance/locations?clientId=${encodeURIComponent(c.id)}`)
+              const payload = (await res.json().catch(() => ({}))) as { locations?: ClientLocationOption[] }
+              if (res.ok && Array.isArray(payload.locations)) {
+                await offlineCacheLocations(c.id, payload.locations)
+
+                // Warm-cache doors for each location so offline door selection works.
+                for (const loc of payload.locations) {
+                  if (!navigator.onLine) break
+                  try {
+                    const doorsRes = await fetch(`/api/maintenance/doors?locationId=${encodeURIComponent(loc.id)}`)
+                    const doorsPayload = (await doorsRes.json().catch(() => ({}))) as {
+                      doors?: Array<{ id: string; door_label: string; door_type: string }>
+                    }
+                    if (doorsRes.ok && Array.isArray(doorsPayload.doors)) {
+                      await offlineCacheDoors(loc.id, doorsPayload.doors)
+                    }
+                  } catch {
+                    // ignore
+                  }
+                }
+              }
+            } catch {
+              // ignore
+            }
+          }
+        })()
+      } catch {
+        // ignore offline fetch errors
+      }
     }
 
     const loadDraft = async () => {
+      if (offlineEditId) {
+        const record = await offlineGet(offlineEditId)
+        if (record?.report_data) {
+          const draft = record.report_data as Partial<MaintenanceFormValues>
+          Object.entries(draft).forEach(([key, value]) => {
+            if (key !== 'doors') {
+              setValue(key as keyof MaintenanceFormValues, value as never)
+            }
+          })
+          if (Array.isArray(draft.doors) && draft.doors.length > 0) {
+            const normalizedDoors = draft.doors.map((door, index) => normalizeLoadedDoor(door, index))
+            replace(normalizedDoors)
+          }
+
+          const selectedClientId = String(draft.client_id ?? '').trim()
+          const selectedLocationId = String(draft.client_location_id ?? '').trim()
+          if (selectedClientId) {
+            await loadLocationsForClient(selectedClientId)
+          }
+          if (selectedLocationId) {
+            await loadDoorsForLocation(selectedLocationId)
+          }
+
+          showStatus('Loaded offline report. Edit and sync when ready.', 'info')
+          return
+        }
+      }
+
       if (reportIdFromRoute && initialReport && isAdminMode) {
         return
       }
 
       if (isFreshMode && !reportIdFromRoute) {
-        localStorage.removeItem('maintenance:lastReportId')
-        localStorage.removeItem(STORAGE_KEY)
-        reset(getDefaultFormValues())
-        return
+        // If the device is offline, keep local backup so dropdowns/selections still restore on reload.
+        // This prevents a "blank" offline form after refresh (especially in PWA mode).
+        if (navigator.onLine) {
+          localStorage.removeItem('maintenance:lastReportId')
+          localStorage.removeItem(STORAGE_KEY)
+          reset(getDefaultFormValues())
+          return
+        }
       }
 
       const reportId = reportIdFromRoute ?? localStorage.getItem('maintenance:lastReportId')
       if (!reportId) {
-        restoreFromLocalBackup()
+        const restored = restoreFromLocalBackup()
+        if (restored) {
+          const current = getValues()
+          const selectedClientId = String(current.client_id ?? '').trim()
+          const selectedLocationId = String(current.client_location_id ?? '').trim()
+          if (selectedClientId) {
+            await loadLocationsForClient(selectedClientId)
+          }
+          if (selectedLocationId) {
+            await loadDoorsForLocation(selectedLocationId)
+          }
+        }
         return
       }
 
@@ -609,6 +806,16 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       const doors = maintenanceDoors.map((door, index) => normalizeLoadedDoor(door, index))
       replace(doors.length > 0 ? doors : [createDoor(0)])
 
+      // Ensure dependent option lists are populated (client → locations → doors)
+      const selectedClientId = String((data.report as Record<string, unknown>).client_id ?? '').trim()
+      const selectedLocationId = String((data.report as Record<string, unknown>).client_location_id ?? '').trim()
+      if (selectedClientId) {
+        await loadLocationsForClient(selectedClientId)
+      }
+      if (selectedLocationId) {
+        await loadDoorsForLocation(selectedLocationId)
+      }
+
       const compiledNotes = maintenanceDoors
         .map((d: unknown, i: number) => {
           const door = d as { door_number?: string; notes?: string }
@@ -629,7 +836,51 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
 
     loadClients()
     loadDraft()
-  }, [hydrateClientFromLocation, replace, reset, setValue, reportIdFromRoute, initialReport, isAdminMode, isFreshMode])
+  }, [hydrateClientFromLocation, replace, reset, setValue, reportIdFromRoute, initialReport, isAdminMode, isFreshMode, offlineEditId, getValues, loadDoorsForLocation, loadLocationsForClient])
+
+  // On offline reload (including /maintenance/new?fresh=1), restore last selection so dropdowns show cached data.
+  useEffect(() => {
+    if (!isOffline) return
+    let cancelled = false
+
+    const restoreSelection = async () => {
+      const last = await offlineGetLastSelection()
+      if (!last || cancelled) return
+
+      const clientId = String(last.client_id ?? '').trim()
+      const locationId = String(last.client_location_id ?? '').trim()
+
+      if (clientId && !watchedClientId) {
+        setValue('client_id', clientId, { shouldDirty: false, shouldValidate: true })
+      }
+      if (clientId) {
+        await loadLocationsForClient(clientId)
+      }
+      if (locationId && !watchedClientLocationId) {
+        setValue('client_location_id', locationId, { shouldDirty: false, shouldValidate: true })
+      }
+      if (locationId) {
+        await loadDoorsForLocation(locationId)
+      }
+    }
+
+    void restoreSelection()
+    return () => {
+      cancelled = true
+    }
+  }, [isOffline, loadDoorsForLocation, loadLocationsForClient, setValue, watchedClientId, watchedClientLocationId])
+
+  // Ensure dependent lists are loaded in order (offline-safe)
+  useEffect(() => {
+    if (!watchedClientId) return
+    if (locations.length > 0) return
+    void loadLocationsForClient(watchedClientId)
+  }, [loadLocationsForClient, locations.length, watchedClientId])
+
+  useEffect(() => {
+    if (!watchedClientLocationId) return
+    void loadDoorsForLocation(watchedClientLocationId)
+  }, [loadDoorsForLocation, watchedClientLocationId])
 
   useEffect(() => {
     if (!reportIdFromRoute || !initialReport || !isAdminMode || adminFormPopulated) return
@@ -731,21 +982,15 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     } catch {
       lastDraftSaveFailureAt.current = Date.now()
 
-      saveOfflineDraft({
-        report_id: form.report_id,
-        status: targetStatus,
-        form,
-      })
-
       localStorage.setItem(STORAGE_KEY, JSON.stringify(form))
 
       if (!silent) {
-        showStatus('Offline: draft queued locally and will sync when online.', 'info')
+        showStatus('Offline Mode – Draft saved locally on this device.', 'info')
       }
 
       return false
     }
-  }, [getValues, isLocked, prepareFormForSave, saveOfflineDraft, setValue])
+  }, [getValues, isLocked, prepareFormForSave, setValue])
 
   useEffect(() => {
     if (isLocked) return
@@ -947,6 +1192,13 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     showStatus('', 'info')
 
     try {
+      if (!navigator.onLine) {
+        await offlineAddInspection(form)
+        await refreshPendingCount()
+        showStatus('Saved offline successfully', 'success')
+        return
+      }
+
       let signatureUrl = form.signature_storage_url
       if (form.signature_data_url && !signatureUrl) {
         signatureUrl = await uploadSignature(form.signature_data_url)
@@ -973,11 +1225,17 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       setValue('report_id', result.report_id)
       localStorage.removeItem('maintenance:lastReportId')
       localStorage.removeItem(STORAGE_KEY)
-      clearOfflineDraft()
       setIsLocked(true)
       showStatus('Report submitted successfully. Editing is now locked.', 'success')
       router.push('/maintenance')
     } catch (error) {
+      // If we failed due to connectivity, queue offline
+      if (!navigator.onLine) {
+        await offlineAddInspection(form)
+        await refreshPendingCount()
+        showStatus('Saved offline successfully', 'success')
+        return
+      }
       showStatus(error instanceof Error ? error.message : 'Submit failed', 'error')
     } finally {
       setIsSubmitting(false)
@@ -988,6 +1246,10 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
 
   const generateDoorSummary = async (doorIndex: number) => {
     if (isLocked || aiDoorLoadingIndex !== null) return
+    if (!navigator.onLine) {
+      showStatus('This feature is not available offline', 'info')
+      return
+    }
 
     const door = getValues(`doors.${doorIndex}`)
     const doorNotes = String(door?.notes ?? '').trim()
@@ -1021,8 +1283,8 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
 
       setValue(`doors.${doorIndex}.notes`, aiSummary, { shouldDirty: true, shouldValidate: true })
       showStatus(`Notes improved for Door ${doorIndex + 1}. Please review before submission.`, 'success')
-    } catch (error) {
-      showStatus(error instanceof Error ? error.message : 'Failed to generate AI summary.', 'error')
+    } catch {
+      showStatus('Unable to improve notes. Please check internet connection.', 'info')
     } finally {
       setAiDoorLoadingIndex(null)
     }
@@ -1045,9 +1307,29 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         <h1 className="text-xl font-black text-slate-900">Maintenance Inspection Form</h1>
         <p className="mt-1 text-sm text-slate-600">Mobile onsite inspection workflow with autosave</p>
 
-        {isOffline && (
-          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700">
-            Offline Mode Active
+        {isOffline ? (
+          <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+            🔴 Offline Mode – Data will be saved locally
+          </div>
+        ) : (
+          <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
+            🟢 Back Online – Please sync data
+          </div>
+        )}
+
+        {pendingSyncCount > 0 && (
+          <div className="mt-3 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <div className="font-semibold">You have {pendingSyncCount} reports pending sync</div>
+            <button
+              type="button"
+              onClick={async () => {
+                await syncPendingReports()
+              }}
+              disabled={!isOnline || isSyncingPending}
+              className="h-11 w-full rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {isSyncingPending ? 'Syncing...' : 'Sync Pending Reports'}
+            </button>
           </div>
         )}
 
@@ -1137,6 +1419,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                   setValue('client_id', selectedId, { shouldDirty: true, shouldValidate: true })
                   setValue('client_location_id', '', { shouldDirty: true, shouldValidate: true })
                   setValue('address', '', { shouldDirty: true, shouldValidate: true })
+                  void offlineSetLastSelection({ client_id: selectedId, client_location_id: '' })
                   await loadLocationsForClient(selectedId)
                 }}
               >
@@ -1159,6 +1442,16 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                   setValue('client_location_id', selectedLocationId, { shouldDirty: true, shouldValidate: true })
                   const foundLocation = locations.find(item => item.id === selectedLocationId)
                   setValue('address', foundLocation?.address ?? '', { shouldDirty: true, shouldValidate: true })
+                  // In offline mode, users may pick a location from cached data without selecting a client first.
+                  // Keep client_id in sync so the "Client" dropdown shows the correct selection.
+                  const locationClientId = String(foundLocation?.client_id ?? '').trim()
+                  if (locationClientId && locationClientId !== watchedClientId) {
+                    setValue('client_id', locationClientId, { shouldDirty: true, shouldValidate: true })
+                  }
+                  void offlineSetLastSelection({
+                    client_id: locationClientId || watchedClientId,
+                    client_location_id: selectedLocationId,
+                  })
                 }}
               >
                 <option value="">Select location</option>
@@ -1166,6 +1459,11 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                   <option key={location.id} value={location.id}>{location.name}</option>
                 ))}
               </select>
+              {isOffline && watchedClientId && locations.length === 0 && (
+                <span className="mt-1 block text-xs text-amber-700">
+                  No offline data available. Please connect to internet once.
+                </span>
+              )}
               {errors.client_location_id && <span className="text-xs text-red-600">{errors.client_location_id.message}</span>}
             </label>
 
@@ -1232,6 +1530,11 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
               Collapse All Doors
             </button>
           </div>
+          {isOffline && watchedClientLocationId && availableDoors.length === 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+              No offline doors available. Please connect once.
+            </div>
+          )}
           {fields.map((field, index) => (
             <DoorInspectionCard
               key={field.id}
@@ -1246,6 +1549,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
               disabled={isLocked && !isAdminMode}
               onGenerateSummary={() => void generateDoorSummary(index)}
               isGeneratingSummary={aiDoorLoadingIndex === index}
+              isOffline={isOffline}
             />
           ))}
         </section>
@@ -1457,9 +1761,9 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
             </p>
           )}
 
-          {hasPendingDraft && (
-            <p className="mt-2 text-xs font-semibold text-amber-600">
-              Offline mode active. Pending draft will sync automatically when connection returns.
+          {pendingSyncCount > 0 && (
+            <p className="mt-2 text-xs font-semibold text-amber-700">
+              You have {pendingSyncCount} pending report{pendingSyncCount === 1 ? '' : 's'} to sync.
             </p>
           )}
         </section>

@@ -10,6 +10,7 @@ import { MAINTENANCE_CHECKLIST_ITEMS } from '@/lib/types/maintenance.types'
 import type { MaintenanceDoorForm, MaintenanceChecklistStatus } from '@/lib/types/maintenance.types'
 import type { MaintenanceDoorPhoto } from '@/lib/types/maintenance.types'
 import type { MaintenanceFormValues } from '@/lib/types/maintenance.types'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 
 function calculateDoorCompletion(door: MaintenanceDoorForm): string {
   const total = MAINTENANCE_CHECKLIST_ITEMS.length
@@ -29,6 +30,7 @@ type DoorInspectionCardProps = {
   onGenerateSummary: () => void
   isGeneratingSummary?: boolean
   disabled?: boolean
+  isOffline?: boolean
 }
 
 type DoorInspectionHistoryItem = {
@@ -48,7 +50,9 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
   onGenerateSummary,
   isGeneratingSummary = false,
   disabled = false,
+  isOffline = false,
 }: DoorInspectionCardProps) {
+  const { isOnline } = useOnlineStatus()
   const door = useWatch({ control, name: `doors.${index}` }) as MaintenanceDoorForm | undefined
   const completionLabel = door ? calculateDoorCompletion(door) : '0/0 checklist items complete'
 
@@ -275,12 +279,19 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
 
           <button
             type="button"
-            onClick={onGenerateSummary}
-            disabled={disabled || isGeneratingSummary}
+            onClick={() => {
+              if (!isOnline) return
+              onGenerateSummary()
+            }}
+            disabled={!isOnline || disabled || isGeneratingSummary}
+            title={!isOnline ? 'Requires internet connection' : undefined}
             className="mt-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold"
           >
             {isGeneratingSummary ? 'Improving...' : 'Improve / Rephrase Notes'}
           </button>
+          {!isOnline && (
+            <p className="mt-1 text-xs text-slate-500">AI note improvement is not available offline</p>
+          )}
 
           <div className="space-y-2">
             <p className="text-sm font-medium text-slate-700">Door Photos</p>
@@ -290,6 +301,7 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
               photos={door.photos}
               onChange={photos => update(index, { ...door, photos })}
               disabled={disabled}
+              isOffline={isOffline}
             />
           </div>
         </div>

@@ -38,6 +38,10 @@ export const MAINTENANCE_CHECKLIST_ITEMS: MaintenanceChecklistItem[] = [
 export type MaintenanceDoorPhoto = {
   url: string
   path: string
+  /** Present when photo was captured offline and not yet uploaded. */
+  offline_data_url?: string
+  offline_content_type?: string
+  offline_filename?: string
 }
 
 export type MaintenanceDoorForm = {
@@ -55,6 +59,8 @@ export type MaintenanceDoorForm = {
 
 export type MaintenanceFormValues = {
   report_id?: string
+  /** Client-generated UUID to make offline sync idempotent. */
+  offline_id?: string
   technician_name: string
   submission_date: string
   source_app: string

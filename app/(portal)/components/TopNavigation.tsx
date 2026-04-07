@@ -3,6 +3,7 @@
 import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useState } from 'react'
+import { useOfflinePendingCount } from '@/hooks/useOfflinePendingCount'
 
 interface TopNavigationProps {
   user: any
@@ -26,6 +27,7 @@ export function TopNavigation({ user }: TopNavigationProps) {
   const pathname = usePathname()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [isUserHovered, setIsUserHovered] = useState(false)
+  const { pendingCount } = useOfflinePendingCount()
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
@@ -72,6 +74,12 @@ export function TopNavigation({ user }: TopNavigationProps) {
 
       {/* Right Section */}
       <div className="flex items-center gap-6 ml-6 shrink-0">
+        {pendingCount > 0 && (
+          <div className="hidden sm:inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
+            🔴 {pendingCount} Pending Sync
+          </div>
+        )}
+
         {/* Search */}
         <div className="relative w-48 xl:w-64">
           <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">

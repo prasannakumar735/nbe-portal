@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { maintenanceFormSchema } from '@/lib/validation/maintenance'
 import type { MaintenanceChecklistStatus } from '@/lib/types/maintenance.types'
+import { createClient } from '@supabase/supabase-js'
 
 export const runtime = 'nodejs'
 
@@ -114,6 +115,7 @@ function normalisePayload(body: unknown): NormalizedEnvelope {
   const rawForm = isRecord(source.form) ? source.form : source
 
   const report_id = String(source.report_id ?? rawForm.report_id ?? '').trim() || undefined
+  const offline_id = String(rawForm.offline_id ?? source.offline_id ?? '').trim() || undefined
 
   const rawStatus = String(source.status ?? '').trim().toLowerCase()
   const status = (VALID_STATUS.includes(rawStatus as MaintenanceStatus)
@@ -125,6 +127,7 @@ function normalisePayload(body: unknown): NormalizedEnvelope {
     status,
     formCandidate: {
       report_id,
+      offline_id,
       technician_name: String(rawForm.technician_name ?? '').trim(),
       submission_date: String(rawForm.submission_date ?? new Date().toISOString().slice(0, 10)),
       source_app: String(rawForm.source_app ?? 'Portal').trim() || 'Portal',
@@ -141,6 +144,29 @@ function normalisePayload(body: unknown): NormalizedEnvelope {
       doors: normaliseDoors(rawForm.doors),
     },
   }
+}
+
+function createWriteClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !serviceRoleKey) {
+    throw new Error('Missing Supabase service role configuration for maintenance writes.')
+  }
+  return createClient(url, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } })
+}
+
+function isDataUrl(value: string): boolean {
+  return value.startsWith('data:')
+}
+
+function dataUrlToBuffer(dataUrl: string): { buffer: Buffer; contentType: string } {
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/)
+  if (!match) {
+    throw new Error('Invalid data URL')
+  }
+  const contentType = match[1] || 'application/octet-stream'
+  const base64 = match[2] || ''
+  return { buffer: Buffer.from(base64, 'base64'), contentType }
 }
 
 function formatZodIssues(error: z.ZodError) {
@@ -176,6 +202,125 @@ export async function POST(request: NextRequest) {
       report_id: normalized.report_id ?? parsed.data.report_id,
       status: normalized.status,
       form: parsed.data,
+    }
+
+    const hasOfflineId = Boolean(payload.form.offline_id)
+    const hasInlineSignature = Boolean(payload.form.signature_data_url && isDataUrl(payload.form.signature_data_url))
+    const hasInlinePhotos = (payload.form.doors ?? []).some(door =>
+      (door.photos ?? []).some(photo => Boolean((photo as { offline_data_url?: string }).offline_data_url) || isDataUrl(photo.url))
+    )
+
+    if (payload.status === 'submitted' && hasOfflineId && (hasInlineSignature || hasInlinePhotos)) {
+      const supabase = createWriteClient()
+      const offlineId = String(payload.form.offline_id ?? '').trim()
+
+      const { data: existing } = await supabase
+        .from('maintenance_reports')
+        .select('id')
+        .eq('offline_id', offlineId)
+        .maybeSingle()
+
+      if (existing?.id) {
+        return NextResponse.json({
+          success: true,
+          report_id: existing.id,
+          status: 'submitted',
+          endpoint: '/api/maintenance/submit',
+          data: { report_id: existing.id, status: 'submitted', offline_id: offlineId },
+        })
+      }
+
+      const uploadedPaths: string[] = []
+      const reportIdSlug = offlineId
+
+      let signature_storage_url = payload.form.signature_storage_url || ''
+      if (payload.form.signature_data_url && isDataUrl(payload.form.signature_data_url) && !signature_storage_url) {
+        const { buffer, contentType } = dataUrlToBuffer(payload.form.signature_data_url)
+        const sigPath = `signatures/${reportIdSlug}/${crypto.randomUUID()}.png`
+        const up = await supabase.storage.from('maintenance-images').upload(sigPath, buffer, {
+          contentType: contentType || 'image/png',
+          upsert: true,
+        })
+        if (up.error) throw new Error(up.error.message)
+        uploadedPaths.push(sigPath)
+        signature_storage_url = supabase.storage.from('maintenance-images').getPublicUrl(sigPath).data.publicUrl
+      }
+
+      const nextDoors = payload.form.doors.map((door) => ({ ...door, photos: [] as Array<{ url: string; path: string }> }))
+
+      for (let i = 0; i < payload.form.doors.length; i += 1) {
+        const door = payload.form.doors[i]!
+        const out = nextDoors[i]!
+
+        const existingOnline = (door.photos ?? []).filter(p =>
+          !isDataUrl(p.url) && !(p as { offline_data_url?: string }).offline_data_url
+        ) as Array<{ url: string; path: string }>
+        existingOnline.forEach(p => out.photos.push(p))
+
+        for (const photo of (door.photos ?? [])) {
+          const offlineDataUrl = String((photo as { offline_data_url?: string }).offline_data_url ?? '').trim()
+          const candidate = offlineDataUrl || (isDataUrl(photo.url) ? photo.url : '')
+          if (!candidate) continue
+
+          const { buffer, contentType } = dataUrlToBuffer(candidate)
+          const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg'
+          const path = `${reportIdSlug}/${door.local_id}/${Date.now()}-${crypto.randomUUID()}.${ext}`
+          const up = await supabase.storage.from('maintenance-images').upload(path, buffer, {
+            contentType,
+            upsert: false,
+          })
+          if (up.error) throw new Error(up.error.message)
+          uploadedPaths.push(path)
+          const publicUrl = supabase.storage.from('maintenance-images').getPublicUrl(path).data.publicUrl
+          out.photos.push({ url: publicUrl, path })
+        }
+      }
+
+      const submitBody = {
+        form: {
+          ...payload.form,
+          signature_storage_url,
+          doors: nextDoors,
+        },
+      }
+
+      try {
+        const upstreamResponse = await fetch(new URL('/api/maintenance/submit', request.url), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(submitBody),
+        })
+
+        const upstreamJson = (await upstreamResponse.json()) as Record<string, unknown>
+
+        if (!upstreamResponse.ok) {
+          if (uploadedPaths.length > 0) {
+            await supabase.storage.from('maintenance-images').remove(uploadedPaths).catch(() => {})
+          }
+          return NextResponse.json(
+            {
+              error: String(upstreamJson.error ?? `Maintenance request failed (${upstreamResponse.status})`),
+              details: upstreamJson,
+              endpoint: '/api/maintenance/submit',
+            },
+            { status: upstreamResponse.status },
+          )
+        }
+
+        const reportId = String(upstreamJson.report_id ?? payload.form.report_id ?? '')
+        return NextResponse.json({
+          success: true,
+          report_id: reportId || null,
+          status: upstreamJson.status ?? payload.status,
+          endpoint: '/api/maintenance/submit',
+          data: upstreamJson,
+        })
+      } catch (e) {
+        if (uploadedPaths.length > 0) {
+          await supabase.storage.from('maintenance-images').remove(uploadedPaths).catch(() => {})
+        }
+        throw e
+      }
     }
 
     const endpoint = payload.status === 'draft' ? '/api/maintenance/draft' : '/api/maintenance/submit'

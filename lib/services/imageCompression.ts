@@ -17,8 +17,9 @@ export function validateImageFile(file: File, maxSizeMb = DEFAULT_MAX_SIZE_MB): 
 
 export async function compressInspectionImage(file: File): Promise<File> {
   const compressed: Blob = await imageCompression(file, {
-    maxWidthOrHeight: 1600,
-    initialQuality: 0.7,
+    // iPhone-safe defaults for offline storage + upload
+    maxWidthOrHeight: 1024,
+    initialQuality: 0.6,
     useWebWorker: true,
   })
 

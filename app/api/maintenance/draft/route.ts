@@ -297,6 +297,7 @@ export async function POST(request: NextRequest) {
       total_doors: Number(payload.form.total_doors) ?? 1,
       notes: payload.form.notes ?? null,
       signature_url: payload.form.signature_storage_url || null,
+      offline_id: (payload.form as { offline_id?: string | null }).offline_id ?? null,
       status: persistedStatus,
     }
     if (!payload.report_id) {

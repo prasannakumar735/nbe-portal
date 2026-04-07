@@ -1,5 +1,6 @@
 import './globals.css'
 import { AuthProvider } from './providers/AuthProvider'
+import { ServiceWorkerRegister } from './components/ServiceWorkerRegister'
 
 export default function RootLayout({
   children,
@@ -15,7 +16,10 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <ServiceWorkerRegister />
+          {children}
+        </AuthProvider>
       </body>
     </html>
   )

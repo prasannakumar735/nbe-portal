@@ -6,8 +6,12 @@ export const checklistStatusSchema = z.enum(['good', 'caution', 'fault', 'na'])
 const checklistSchema = z.record(z.string(), checklistStatusSchema.nullable())
 
 const photoSchema = z.object({
-  url: z.string().url('Invalid photo URL'),
+  // Online photos use http(s) URLs; offline photos use data URLs.
+  url: z.string().min(1, 'Invalid photo URL'),
   path: z.string().min(1),
+  offline_data_url: z.string().optional(),
+  offline_content_type: z.string().optional(),
+  offline_filename: z.string().optional(),
 })
 
 const doorSchema = z.object({
@@ -29,6 +33,7 @@ const doorSchema = z.object({
 
 export const maintenanceFormSchema = z.object({
   report_id: z.string().uuid().optional(),
+  offline_id: z.string().uuid().optional(),
   technician_name: z.string().min(1, 'Technician name is required'),
   submission_date: z.string().min(1),
   source_app: z.string().default('Portal'),

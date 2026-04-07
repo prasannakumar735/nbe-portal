@@ -12,6 +12,7 @@ type PhotoUploaderProps = {
   doorId: string
   photos: MaintenanceDoorPhoto[]
   disabled?: boolean
+  isOffline?: boolean
   onChange: (photos: MaintenanceDoorPhoto[]) => void
 }
 
@@ -34,7 +35,7 @@ type ToastItem = {
 
 const MAX_FILE_SIZE_MB = 10
 
-export function PhotoUploader({ reportId, doorId, photos, disabled = false, onChange }: PhotoUploaderProps) {
+export function PhotoUploader({ reportId, doorId, photos, disabled = false, isOffline = false, onChange }: PhotoUploaderProps) {
   const supabase = useMemo(() => createSupabaseClient(), [])
   const cameraInputRef = useRef<HTMLInputElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -109,6 +110,35 @@ export function PhotoUploader({ reportId, doorId, photos, disabled = false, onCh
 
       const compressedFile = await compressInspectionImage(file)
 
+      const offlineMode = isOffline || !navigator.onLine
+
+      if (offlineMode) {
+        updateUpload(id, { progress: 70, status: 'uploading' })
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onerror = () => reject(new Error('Failed to read image'))
+          reader.onload = () => resolve(String(reader.result ?? ''))
+          reader.readAsDataURL(compressedFile)
+        })
+
+        const offlinePhoto: MaintenanceDoorPhoto = {
+          url: dataUrl,
+          path: `offline/${id}`,
+          offline_data_url: dataUrl,
+          offline_content_type: compressedFile.type || file.type || 'image/jpeg',
+          offline_filename: compressedFile.name || file.name || 'photo.jpg',
+        }
+
+        onChange([...photos, offlinePhoto])
+        updateUpload(id, { progress: 100, status: 'done' })
+        showToast('success', `${file.name} saved offline.`)
+        window.setTimeout(() => {
+          URL.revokeObjectURL(previewUrl)
+          removeUpload(id)
+        }, 900)
+        return
+      }
+
       updateUpload(id, { progress: 45, status: 'uploading' })
 
       const uploaded = await uploadInspectionImage({
@@ -172,6 +202,9 @@ export function PhotoUploader({ reportId, doorId, photos, disabled = false, onCh
     onChange(next)
 
     if (photo.path) {
+      if (photo.path.startsWith('offline/')) {
+        return
+      }
       await supabase.storage.from('maintenance-images').remove([photo.path])
     }
   }
