@@ -2,8 +2,6 @@ import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/render
 import { registerRobotoForReactPdf } from '@/lib/pdf/reactPdfRoboto'
 import type { ServiceQuoteFormValues } from './types'
 
-registerRobotoForReactPdf()
-
 type QuotePDFProps = {
   data: {
     values: ServiceQuoteFormValues
@@ -162,6 +160,7 @@ const defaultNote =
   'Should you require any further information or clarification about this quotation, please do not hesitate to contact us.'
 
 export function QuotePDF({ data }: QuotePDFProps) {
+  registerRobotoForReactPdf()
   const { values, subtotal, gst, grandTotal } = data
 
   return (
@@ -177,16 +176,24 @@ export function QuotePDF({ data }: QuotePDFProps) {
             <Text>accountsreceivable@nbeaustralia.com.au</Text>
           </View>
           <View style={styles.titleBlock}>
-            <Text style={styles.quoteTitle}>QUOTE</Text>
+            <Text style={styles.quoteTitle}>Service Quote</Text>
             <Text style={styles.quoteMeta}>Quote No: {values.quoteNumber}</Text>
             <Text style={styles.quoteMeta}>Service Date: {values.serviceDate}</Text>
           </View>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Customer Details</Text>
+          <Text style={styles.sectionTitle}>Company name</Text>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Customer Name</Text>
+            <Text style={styles.detailLabel}>Phone</Text>
+            <Text>{values.phone || '-'}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Site Address</Text>
+            <Text>{values.siteAddress || '-'}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Company name</Text>
             <Text>{values.customerCompany || '-'}</Text>
           </View>
           <View style={styles.detailRow}>
@@ -194,16 +201,8 @@ export function QuotePDF({ data }: QuotePDFProps) {
             <Text>{values.contactPerson || '-'}</Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Phone</Text>
-            <Text>{values.phone || '-'}</Text>
-          </View>
-          <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Email</Text>
             <Text>{values.customerEmail || '-'}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Site Address</Text>
-            <Text>{values.siteAddress || '-'}</Text>
           </View>
         </View>
 

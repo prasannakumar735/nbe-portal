@@ -14,6 +14,8 @@ function linesToBullets(text: string): string[] {
 type DoorNotesProps = {
   label?: string
   registration: UseFormRegisterReturn
+  /** Current value for the bullet preview (e.g. `watch('doors.0.notes')`). */
+  watchValue?: string
   placeholder?: string
 }
 
@@ -21,10 +23,10 @@ type DoorNotesProps = {
 export function DoorNotesField({
   label = 'Door notes',
   registration,
+  watchValue = '',
   placeholder = 'One issue per line, or separate sentences with periods.',
 }: DoorNotesProps) {
-  const value = registration.value ?? ''
-  const bullets = useMemo(() => linesToBullets(String(value)), [value])
+  const bullets = useMemo(() => linesToBullets(String(watchValue)), [watchValue])
 
   return (
     <div className="space-y-3">

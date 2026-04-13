@@ -11,7 +11,7 @@ interface TopNavigationProps {
 
 const NAV_ITEMS = [
   { label: 'Dashboard', icon: 'dashboard', href: '/dashboard' },
-  { label: 'Service Quotes', icon: 'request_quote', href: '/dashboard/quotes/service' },
+  { label: 'Service Quote', icon: 'request_quote', href: '/dashboard/quotes/service' },
   { label: 'Timecards', icon: 'schedule', href: '/dashboard/timecards' },
   { label: 'Maintenance Service', icon: 'build', href: '/maintenance' },
   { label: 'QR Codes', icon: 'qr_code_2', href: '/qr-codes' },

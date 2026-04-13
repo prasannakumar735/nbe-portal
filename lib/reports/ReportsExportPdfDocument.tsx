@@ -1,8 +1,5 @@
 import type { ReactElement } from 'react'
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
-import { registerRobotoForReactPdf } from '@/lib/pdf/reactPdfRoboto'
-
-registerRobotoForReactPdf()
 import type {
   GpsReportRow,
   MaintenanceReportRow,

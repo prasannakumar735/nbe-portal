@@ -13,14 +13,13 @@ export function createPdfBinaryResponse(
   },
 ): NextResponse {
   const pdfBuffer = Buffer.isBuffer(pdfBytes) ? pdfBytes : Buffer.from(pdfBytes)
-  // Web `Response` body typing expects `Uint8Array`/`ArrayBuffer` in strict TS; Buffer is compatible at runtime.
-  const body = new Uint8Array(pdfBuffer.buffer, pdfBuffer.byteOffset, pdfBuffer.byteLength)
-  return new NextResponse(body, {
+  const blob = new Blob([new Uint8Array(pdfBuffer)], { type: 'application/pdf' })
+  return new NextResponse(blob, {
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': options.contentDisposition,
-      'Content-Length': String(pdfBuffer.length),
+      'Content-Length': String(blob.size),
       'X-Content-Type-Options': 'nosniff',
       ...(options.cacheControl ? { 'Cache-Control': options.cacheControl } : {}),
       ...options.extraHeaders,

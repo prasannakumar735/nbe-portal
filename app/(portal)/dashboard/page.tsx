@@ -16,11 +16,12 @@ import type { WeeklyBarDatum } from '@/components/dashboard/charts/WeeklyBarChar
 import type { ProjectPieDatum } from '@/components/dashboard/charts/ProjectPieChart'
 import type { TrendLineDatum } from '@/components/dashboard/charts/TrendLineChart'
 import type { BillableStackedDatum } from '@/components/dashboard/charts/BillableStackedBar'
+import { pickSearchParam, type AppSearchParams } from '@/lib/app/searchParams'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-type SearchParams = {
+type DashboardQuery = {
   period?: string
   project?: string
   start?: string
@@ -150,18 +151,30 @@ function buildBillableStacked(entries: TimeEntryRow[]): BillableStackedDatum[] {
     }))
 }
 
-export default async function DashboardPage({ searchParams }: { searchParams: SearchParams }) {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<AppSearchParams>
+}) {
   // Server-side auth check
   const user = await getServerUser()
   if (!user) {
     redirect('/login')
   }
 
+  const raw = await searchParams
+  const qp: DashboardQuery = {
+    period: pickSearchParam(raw.period),
+    project: pickSearchParam(raw.project),
+    start: pickSearchParam(raw.start),
+    end: pickSearchParam(raw.end),
+  }
+
   const supabase = await createServerClient()
-  const period = resolvePeriod(searchParams.period)
-  const projectId = searchParams.project || 'all'
-  const range = getDateRange(period, searchParams.start, searchParams.end)
-  const isCustomIncomplete = period === 'custom' && (!searchParams.start || !searchParams.end)
+  const period = resolvePeriod(qp.period)
+  const projectId = qp.project || 'all'
+  const range = getDateRange(period, qp.start, qp.end)
+  const isCustomIncomplete = period === 'custom' && (!qp.start || !qp.end)
 
   let errorMessage: string | null = null
   let role: DashboardRole | null = null

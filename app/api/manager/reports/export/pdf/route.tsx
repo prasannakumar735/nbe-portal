@@ -2,6 +2,7 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { NextRequest, NextResponse } from 'next/server'
 import { renderToBuffer } from '@react-pdf/renderer'
+import { registerRobotoForReactPdf } from '@/lib/pdf/reactPdfRoboto'
 import { createServerClient } from '@/lib/supabase/server'
 import { requireManagerReportsApi } from '@/lib/reports/api-auth'
 import { getErrorMessage } from '@/lib/reports/errorMessage'
@@ -105,6 +106,8 @@ export async function GET(request: NextRequest) {
         quotesBundle.serviceLines.length + quotesBundle.pvcLines.length + quotesBundle.trends.length
     }
     console.log('[PDF export] tab:', tab, 'PDF rows:', pdfRowCount)
+
+    registerRobotoForReactPdf(request.nextUrl.origin)
 
     const buffer = await renderToBuffer(
       <ReportsExportPdfDocument

@@ -1,7 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { useFieldArray, useForm } from 'react-hook-form'
+import { useEffect, useMemo, useState } from 'react'
+import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { QuoteHeader } from './QuoteHeader'
 import { CustomerDetails } from './CustomerDetails'
 import { ServiceTemplateSelector } from './ServiceTemplateSelector'
@@ -32,10 +32,10 @@ export function ServiceQuoteForm() {
     defaultValues: {
       quoteNumber: createQuoteNumber(),
       serviceDate: new Date().toISOString().split('T')[0],
-      companyName: 'NBE Australia',
-      abn: '',
-      companyAddress: '',
-      companyEmail: '',
+      companyName: 'NBE Australia Pty Ltd',
+      abn: '17 007 048 008',
+      companyAddress: '22a Humeside Drive, Campbellfield Victoria 3061 Australia',
+      companyEmail: 'Service@nbeaustralia.com.au',
       customerCompany: '',
       contactPerson: '',
       phone: '',
@@ -56,6 +56,17 @@ export function ServiceQuoteForm() {
       signatureDate: new Date().toISOString().split('T')[0],
     },
   })
+
+  const watchedPhone = useWatch({ control, name: 'phone' })
+  const watchedSiteAddress = useWatch({ control, name: 'siteAddress' })
+
+  /** Client company line is derived from phone + site address; staff edit phone and site. */
+  useEffect(() => {
+    const p = String(watchedPhone ?? '').trim()
+    const s = String(watchedSiteAddress ?? '').trim()
+    const combined = [p, s].filter(Boolean).join(' — ')
+    setValue('customerCompany', combined, { shouldDirty: true, shouldValidate: true })
+  }, [watchedPhone, watchedSiteAddress, setValue])
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -142,7 +153,7 @@ export function ServiceQuoteForm() {
         <div className="flex items-center justify-between border-b border-slate-200 pb-4">
           <NBELogo />
           <div className="text-right">
-            <h2 className="text-xl font-bold text-slate-900">SERVICE QUOTE</h2>
+            <h2 className="text-xl font-bold text-slate-900">Service Quote</h2>
             <p className="text-sm text-slate-600">NBE Australia</p>
           </div>
         </div>

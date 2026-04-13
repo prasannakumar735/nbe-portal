@@ -5,6 +5,7 @@ import { getUsers } from '@/lib/users/actions'
 import { getServerUser } from '@/lib/auth/server'
 import { getClientUsersForManagement } from '@/lib/clients/queries'
 import { PeopleTabs, type PeopleTabId } from '@/components/people/PeopleTabs'
+import { pickSearchParam, type AppSearchParams } from '@/lib/app/searchParams'
 
 function tabFromSearch(raw: string | undefined, canManageClients: boolean): PeopleTabId {
   if (raw === 'contacts') return 'contacts'
@@ -26,7 +27,7 @@ function PeopleTabsFallback() {
 export default async function DashboardPeoplePage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>
+  searchParams: Promise<AppSearchParams>
 }) {
   const supabase = await createServerClient()
   const {
@@ -45,7 +46,8 @@ export default async function DashboardPeoplePage({
 
   const canManageClients = role === 'admin' || role === 'manager'
 
-  const { tab } = await searchParams
+  const raw = await searchParams
+  const tab = pickSearchParam(raw.tab)
   const initialTab = tabFromSearch(tab, canManageClients)
 
   const sessionUser = await getServerUser()

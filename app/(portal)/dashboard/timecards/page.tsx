@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { createServerClient } from '@/lib/supabase/server'
 import { TimecardsTabs, type TimecardTabId } from '@/components/timecards/TimecardsTabs'
+import { pickSearchParam, type AppSearchParams } from '@/lib/app/searchParams'
 
 export const metadata = {
   title: 'Timecards | NBE Portal',
@@ -27,7 +28,7 @@ function TimecardsFallback() {
 export default async function DashboardTimecardsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>
+  searchParams: Promise<AppSearchParams>
 }) {
   const supabase = await createServerClient()
   const {
@@ -42,7 +43,8 @@ export default async function DashboardTimecardsPage({
   const role = profile?.role ?? 'employee'
   const canViewTeam = role === 'admin' || role === 'manager'
 
-  const { tab } = await searchParams
+  const raw = await searchParams
+  const tab = pickSearchParam(raw.tab)
   const initialTab = tabFromSearch(tab, canViewTeam)
 
   if (tab === 'team' && !canViewTeam) {
