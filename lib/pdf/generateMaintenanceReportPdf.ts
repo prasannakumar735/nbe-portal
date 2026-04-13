@@ -55,6 +55,9 @@ import {
   TABLE_SECTION_TAIL,
 } from '@/lib/pdf/layouts/maintenancePageMetrics'
 import { formatMaintenancePdfTime as formatTime } from '@/lib/pdf/utils/formatMaintenancePdfTime'
+import { aggregateSignOffDisplayMetrics, buildSignOffFindingGroups } from '@/lib/maintenance/reportMetrics'
+import { generateMergedReportSignaturePdf } from '@/lib/pdf/mergedReportSignaturePagePdf'
+import { loadNbeLogoBytes } from '@/lib/pdf/loadNbeLogo'
 
 export type MaintenancePdfOptions = {
   form: MaintenanceFormValues
@@ -1025,77 +1028,6 @@ function drawImageGrid(
   return { page: pageRef, y: y - 16 }
 }
 
-/** Inspection sign-off — technician, signature, dates */
-function drawSignature(
-  page: PDFPage,
-  form: MaintenanceFormValues,
-  reportDate: string,
-  signatureImage: PDFImageType | null,
-  font: PDFFontType,
-  bold: PDFFontType,
-  technicianEmail?: string,
-  technicianContact?: string,
-  nextMaintenanceDate?: string,
-): void {
-  let y = PAGE_HEIGHT - MARGIN - 28
-  const x = MARGIN
-  page.drawText('Inspection sign-off', {
-    x,
-    y,
-    size: 15,
-    font: bold,
-    color: SECTION_COLOR,
-  })
-  y -= 22
-  page.drawLine({
-    start: { x, y },
-    end: { x: PAGE_WIDTH - MARGIN, y },
-    thickness: 0.5,
-    color: BORDER_LIGHT,
-  })
-  y -= 24
-
-  page.drawText('Technician', { x, y, size: 11, font: bold, color: rgb(0.35, 0.37, 0.42) })
-  y -= 16
-  page.drawText(form.technician_name || '-', { x, y, size: 12, font: bold, color: rgb(0.08, 0.1, 0.12) })
-  y -= 22
-
-  page.drawText('Signature', { x, y, size: 10, font: bold, color: rgb(0.35, 0.37, 0.42) })
-  y -= 14
-  if (signatureImage) {
-    const maxH = 64
-    const maxW = 220
-    const scale = Math.min(maxW / signatureImage.width, maxH / signatureImage.height, 1)
-    const sh = signatureImage.height * scale
-    page.drawImage(signatureImage, {
-      x,
-      y: y - sh,
-      width: signatureImage.width * scale,
-      height: sh,
-    })
-    y -= sh + 18
-  } else {
-    page.drawLine({
-      start: { x, y: y - 2 },
-      end: { x: x + 240, y: y - 2 },
-      thickness: 0.6,
-      color: rgb(0.65, 0.67, 0.72),
-    })
-    page.drawText('Sign here', { x, y: y - 14, size: 8, font, color: rgb(0.55, 0.57, 0.62) })
-    y -= 36
-  }
-
-  const row = (label: string, value: string, labelW = 150) => {
-    page.drawText(label, { x, y, size: 10, font: bold, color: rgb(0.35, 0.37, 0.42) })
-    page.drawText(value, { x: x + labelW, y, size: 10, font, color: rgb(0.1, 0.11, 0.13) })
-    y -= 15
-  }
-  row('Report date', reportDate || '-')
-  row('Email', technicianEmail || '-')
-  row('Contact', technicianContact || '-')
-  row('Next maintenance due', nextMaintenanceDate || '-')
-}
-
 export async function generateMaintenanceReportPdf(options: MaintenancePdfOptions): Promise<Uint8Array> {
   const {
     form,
@@ -1107,8 +1039,6 @@ export async function generateMaintenanceReportPdf(options: MaintenancePdfOption
     signatureBytes,
     doorPhotoBytes,
     doorDiagramBytes,
-    technicianEmail,
-    technicianContact,
     mergedTotalDoorsCustomerInfo,
     coverQrPngBytes,
   } = options
@@ -1125,19 +1055,6 @@ export async function generateMaintenanceReportPdf(options: MaintenancePdfOption
     } catch {
       try {
         logoImage = await pdf.embedJpg(logoBytes)
-      } catch {
-        // leave null
-      }
-    }
-  }
-
-  let signatureImage: PDFImageType | null = null
-  if (signatureBytes && signatureBytes.length > 0) {
-    try {
-      signatureImage = await pdf.embedPng(signatureBytes)
-    } catch {
-      try {
-        signatureImage = await pdf.embedJpg(signatureBytes)
       } catch {
         // leave null
       }
@@ -1285,20 +1202,27 @@ export async function generateMaintenanceReportPdf(options: MaintenancePdfOption
     y -= 20
   }
 
-  // ----- Last page: Signature -----
-  page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT])
-  drawHeader(page, reportNumber, reportDate, logoImage, font, bold)
+  // ----- Last page: same "Approval & Sign-off" layout as merged reports -----
+  const signOffLogoBytes =
+    logoBytes && logoBytes.length > 0 ? logoBytes : ((await loadNbeLogoBytes()) ?? null)
 
-  let nextMaintenanceDate = ''
-  if (form.inspection_date) {
-    const d = new Date(form.inspection_date)
-    if (!Number.isNaN(d.getTime())) {
-      d.setMonth(d.getMonth() + 6)
-      nextMaintenanceDate = d.toISOString().slice(0, 10)
-    }
+  const mergedSignOffBytes = await generateMergedReportSignaturePdf({
+    logoBytes: signOffLogoBytes,
+    technicianName: form.technician_name || '-',
+    technicianSignatureBytes: signatureBytes ?? null,
+    reportDateLabel: reportDate,
+    signOff: {
+      metrics: aggregateSignOffDisplayMetrics(form),
+      findingGroups: buildSignOffFindingGroups(form),
+    },
+  })
+
+  const sigDoc = await PDFDocument.load(mergedSignOffBytes)
+  const sigPageCount = sigDoc.getPageCount()
+  for (let i = 0; i < sigPageCount; i++) {
+    const [copied] = await pdf.copyPages(sigDoc, [i])
+    pdf.addPage(copied)
   }
-
-  drawSignature(page, form, reportDate, signatureImage, font, bold, technicianEmail, technicianContact, nextMaintenanceDate)
 
   return savePdfBytes(pdf)
 }

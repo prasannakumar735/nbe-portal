@@ -10,7 +10,11 @@ export default function ClientPortalLayout({ children }: { children: ReactNode }
     <div className="min-h-screen bg-slate-100">
       <header className="border-b border-slate-200 bg-white px-4 py-3 shadow-sm">
         <div className="mx-auto flex max-w-4xl items-center justify-between">
-          <span className="text-sm font-semibold text-slate-900">NBE Australia</span>
+          <img
+            src="/Logo_black.png"
+            alt="NBE Australia"
+            className="h-9 w-auto object-contain"
+          />
           <span className="text-xs text-slate-500">Client report access</span>
         </div>
       </header>
