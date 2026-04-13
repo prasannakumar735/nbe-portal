@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@/lib/supabase/server'
 import { canApproveMaintenanceReport } from '@/lib/auth/roles'
 import { regenerateMaintenanceReportPdfWithClientQr } from '@/lib/maintenance/regenerateReportPdfWithQr'
+import { maintenanceReportClientViewUrl } from '@/lib/app/publicAppBaseUrl'
 
 export const runtime = 'nodejs'
 
@@ -100,6 +101,8 @@ export async function PATCH(
       pdfRegen = { error: e instanceof Error ? e.message : 'PDF regeneration failed' }
     }
 
+    const tokenOut = String((report as { share_token?: string }).share_token ?? '').trim()
+
     return NextResponse.json({
       report: {
         id: report.id,
@@ -107,6 +110,7 @@ export async function PATCH(
         share_token: (report as { share_token?: string }).share_token,
         approved: (report as { approved?: boolean }).approved,
       },
+      client_view_url: maintenanceReportClientViewUrl(tokenOut),
       pdf_regeneration: pdfRegen,
     })
   } catch (err) {

@@ -295,6 +295,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   const [isSavingDraft, setIsSavingDraft] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isApproving, setIsApproving] = useState(false)
+  const [clientViewUrl, setClientViewUrl] = useState<string | null>(null)
   const [isGeneratingAiSummary, setIsGeneratingAiSummary] = useState(false)
   const [statusMessage, setStatusMessage] = useState<string>('')
   const [statusType, setStatusType] = useState<'info' | 'error' | 'success'>('info')
@@ -911,9 +912,12 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       if (cancelled) return
       const data = await response.json()
       if (!data.report) {
+        setClientViewUrl(null)
         restoreFromLocalBackup()
         return
       }
+
+      setClientViewUrl(typeof data.client_view_url === 'string' ? data.client_view_url : null)
 
       setSavedClientName(String(data.report.client_name ?? '').trim())
       setSavedLocationName(String(data.report.client_location_name ?? '').trim())
@@ -1833,6 +1837,9 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                       })
                       const data = await res.json().catch(() => ({}))
                       if (!res.ok) throw new Error(data.error ?? 'Approve failed')
+                      if (typeof data.client_view_url === 'string' && data.client_view_url) {
+                        setClientViewUrl(data.client_view_url)
+                      }
                       showStatus('Report approved.', 'success')
                       onApproved?.()
                     } catch (e) {
@@ -1846,6 +1853,19 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                 >
                   {isApproving ? 'Approving...' : 'Approve Report'}
                 </button>
+                {clientViewUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(clientViewUrl).then(() => {
+                        toast.success('Client link copied')
+                      })
+                    }}
+                    className="h-12 rounded-xl border border-emerald-200 bg-emerald-50 px-5 text-base font-bold text-emerald-800 hover:bg-emerald-100"
+                  >
+                    Copy client link
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={async () => {

@@ -19,6 +19,7 @@ type ReportRow = {
   inspection_date: string
   status: string
   pdf_url: string | null
+  client_view_url: string | null
 }
 
 type MergedReportRow = {
@@ -904,6 +905,19 @@ export default function MaintenanceDashboardPage() {
                         >
                           Download
                         </button>
+                        {report.client_view_url ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void navigator.clipboard.writeText(report.client_view_url!).then(() => {
+                                toast.success('Client link copied')
+                              })
+                            }}
+                            className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
+                          >
+                            Copy client link
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() => handleDownloadAllPhotos(report.id)}

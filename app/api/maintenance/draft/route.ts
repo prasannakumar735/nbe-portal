@@ -5,6 +5,7 @@ import { canApproveMaintenanceReport } from '@/lib/auth/roles'
 import { parseMaintenanceDraftPayload } from '@/lib/validation/maintenance'
 import { MAINTENANCE_CHECKLIST_ITEMS } from '@/lib/types/maintenance.types'
 import { loadMaintenanceReportDraftPayload } from '@/lib/maintenance/loadMaintenanceReportDraftPayload'
+import { maintenanceReportClientViewUrl } from '@/lib/app/publicAppBaseUrl'
 
 export const runtime = 'nodejs'
 
@@ -385,13 +386,30 @@ export async function GET(request: NextRequest) {
   try {
     const reportId = request.nextUrl.searchParams.get('reportId')
     if (!reportId) {
-      return NextResponse.json({ report: null })
+      return NextResponse.json({ report: null, client_view_url: null })
     }
 
     const supabase = createWriteClient()
     const report = await loadMaintenanceReportDraftPayload(supabase, reportId)
-    return NextResponse.json({ report })
+
+    let client_view_url: string | null = null
+    const { data: meta } = await supabase
+      .from('maintenance_reports')
+      .select('status, approved, share_token')
+      .eq('id', reportId)
+      .maybeSingle()
+
+    if (meta) {
+      const st = String((meta as { status?: string | null }).status ?? '').trim()
+      const appr = Boolean((meta as { approved?: boolean | null }).approved)
+      const tok = String((meta as { share_token?: string | null }).share_token ?? '').trim()
+      if (st === 'approved' && appr && tok) {
+        client_view_url = maintenanceReportClientViewUrl(tok)
+      }
+    }
+
+    return NextResponse.json({ report, client_view_url })
   } catch {
-    return NextResponse.json({ report: null })
+    return NextResponse.json({ report: null, client_view_url: null })
   }
 }

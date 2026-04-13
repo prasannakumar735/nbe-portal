@@ -1,0 +1,18 @@
+---
+description: Maintenance reports — client share link, QR PDF, viewer URL vs storage URL
+globs:
+  - app/(portal)/maintenance/**/*.tsx
+  - app/api/maintenance/**/*.ts
+  - lib/maintenance/**/*.ts
+  - lib/maintenance-reports/**/*.ts
+  - lib/app/publicAppBaseUrl.ts
+  - lib/db/migrations/*maintenance*
+---
+
+# NBE Portal — maintenance client access
+
+- Approved **single** reports use `share_token` and client viewer at `/report/view/[token]` (same page resolves merged or single).
+- **Copy client link** must copy the **viewer URL** from `maintenanceReportClientViewUrl` / `client_view_url` (`NEXT_PUBLIC_APP_URL` + `/report/view/{share_token}`), not `pdf_url` (Supabase PDF file URL).
+- Merged rows store the viewer URL in `merged_reports.pdf_url`; single rows expose `client_view_url` on `GET /api/maintenance/reports` and on draft/approve responses.
+- Portal **Download** uses `GET /api/maintenance/pdf/[reportId]`; embed `coverQrPngBytes` when `status === 'approved'`, `approved === true`, and `share_token` is set.
+- Apply DB migration `047_maintenance_reports_client_share` before relying on `share_token` / `approved` columns.

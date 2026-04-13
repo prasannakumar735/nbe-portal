@@ -1,16 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import QRCode from 'qrcode'
+import { maintenanceReportClientViewUrl } from '@/lib/app/publicAppBaseUrl'
 import { generateMaintenanceReportPdf } from '@/lib/pdf/generateMaintenanceReportPdf'
 import { buildMaintenancePdfOptions } from '@/lib/pdf/buildMaintenancePdfOptions'
 import { loadMaintenanceReportDraftPayload } from '@/lib/maintenance/loadMaintenanceReportDraftPayload'
 import { draftPayloadToFormValues } from '@/lib/maintenance/draftPayloadToFormValues'
-
-function publicAppBaseUrl(): string {
-  const env = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '').trim()
-  if (env) return env
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL.replace(/^https?:\/\//, '')}`
-  return 'http://localhost:3000'
-}
 
 /**
  * After approval: embed client-view QR on cover and re-upload PDF to maintenance-images.
@@ -22,10 +16,18 @@ export async function regenerateMaintenanceReportPdfWithClientQr(params: {
 }): Promise<{ pdf_url: string } | { error: string }> {
   const { supabase, reportId, shareToken } = params
 
-  const viewerUrl = `${publicAppBaseUrl()}/report/view/${encodeURIComponent(shareToken)}`
+  const viewerUrl = maintenanceReportClientViewUrl(shareToken) ?? ''
+  if (!viewerUrl) {
+    return { error: 'Invalid share token for PDF QR' }
+  }
   let qrPng: Buffer
   try {
-    qrPng = await QRCode.toBuffer(viewerUrl, { type: 'png', width: 240, margin: 1 })
+    qrPng = await QRCode.toBuffer(viewerUrl, {
+      type: 'png',
+      width: 240,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+    })
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'QR generation failed' }
   }

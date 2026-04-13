@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import QRCode from 'qrcode'
 import { createServerClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
+import { maintenanceReportClientViewUrl } from '@/lib/app/publicAppBaseUrl'
 import { generateMaintenanceReportPdf } from '@/lib/pdf/generateMaintenanceReportPdf'
 import { assertValidPdfSignature } from '@/lib/pdf/savePdf'
 import { buildMaintenancePdfOptions } from '@/lib/pdf/buildMaintenancePdfOptions'
@@ -69,6 +71,34 @@ export async function GET(
 
     const supabase = createServiceClient()
     const pdfOptions = await buildMaintenancePdfOptions({ form, reportId, supabase })
+
+    const { data: shareRow } = await supabase
+      .from('maintenance_reports')
+      .select('status, approved, share_token')
+      .eq('id', reportId)
+      .maybeSingle()
+
+    const shareToken = String((shareRow as { share_token?: string | null } | null)?.share_token ?? '').trim()
+    const rowStatus = String((shareRow as { status?: string | null } | null)?.status ?? '').trim()
+    const rowApproved = Boolean((shareRow as { approved?: boolean | null } | null)?.approved)
+    const isApprovedForClient = rowStatus === 'approved' && rowApproved && Boolean(shareToken)
+
+    if (isApprovedForClient) {
+      const viewerUrl = maintenanceReportClientViewUrl(shareToken)
+      if (viewerUrl) {
+        try {
+          const buf = await QRCode.toBuffer(viewerUrl, {
+            type: 'png',
+            width: 240,
+            margin: 1,
+            errorCorrectionLevel: 'M',
+          })
+          pdfOptions.coverQrPngBytes = new Uint8Array(buf)
+        } catch {
+          // PDF still valid without QR if generation fails
+        }
+      }
+    }
 
     const pdfBytes = await generateMaintenanceReportPdf(pdfOptions)
     assertValidPdfSignature(pdfBytes, 'GET maintenance pdf')

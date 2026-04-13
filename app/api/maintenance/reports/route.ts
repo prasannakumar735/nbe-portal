@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@/lib/supabase/server'
+import { maintenanceReportClientViewUrl } from '@/lib/app/publicAppBaseUrl'
 
 export const runtime = 'nodejs'
 
@@ -23,7 +24,9 @@ export async function GET() {
 
     const { data: reports, error } = await supabase
       .from('maintenance_reports')
-      .select('id, technician_name, inspection_date, status, created_at, client_location_id, pdf_url')
+      .select(
+        'id, technician_name, inspection_date, status, created_at, client_location_id, pdf_url, approved, share_token',
+      )
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -107,6 +110,14 @@ export async function GET() {
         : '—'
       const sequence = total - index
       const report_number = `REP-${String(sequence).padStart(4, '0')}`
+      const statusStr = String(r.status ?? '').trim()
+      const approved = Boolean((r as { approved?: boolean | null }).approved)
+      const shareToken = String((r as { share_token?: string | null }).share_token ?? '').trim()
+      const client_view_url =
+        statusStr === 'approved' && approved && shareToken
+          ? maintenanceReportClientViewUrl(shareToken)
+          : null
+
       return {
         id: r.id,
         report_number,
@@ -116,6 +127,7 @@ export async function GET() {
         inspection_date: r.inspection_date ?? '—',
         status: r.status ?? 'draft',
         pdf_url: r.pdf_url ?? null,
+        client_view_url,
       }
     })
 
