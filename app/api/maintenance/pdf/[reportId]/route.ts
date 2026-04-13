@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import { generateMaintenanceReportPdf } from '@/lib/pdf/generateMaintenanceReportPdf'
+import { assertValidPdfSignature } from '@/lib/pdf/savePdf'
 import { buildMaintenancePdfOptions } from '@/lib/pdf/buildMaintenancePdfOptions'
+import { createPdfBinaryResponse } from '@/lib/http/pdfBinaryResponse'
 import type { MaintenanceFormValues } from '@/lib/types/maintenance.types'
 
 export const runtime = 'nodejs'
@@ -30,9 +32,9 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? _request.nextUrl.origin
+    /** Same-origin draft fetch — do not use NEXT_PUBLIC_APP_URL (wrong host breaks cookies / returns HTML). */
     const draftRes = await fetch(
-      `${baseUrl}/api/maintenance/draft?reportId=${encodeURIComponent(reportId)}`,
+      new URL(`/api/maintenance/draft?reportId=${encodeURIComponent(reportId)}`, _request.nextUrl).toString(),
       {
         headers: {
           cookie: _request.headers.get('cookie') ?? '',
@@ -69,16 +71,12 @@ export async function GET(
     const pdfOptions = await buildMaintenancePdfOptions({ form, reportId, supabase })
 
     const pdfBytes = await generateMaintenanceReportPdf(pdfOptions)
+    assertValidPdfSignature(pdfBytes, 'GET maintenance pdf')
 
     const filename = `maintenance-report-${pdfOptions.reportNumber}.pdf`
 
-    return new NextResponse(Buffer.from(pdfBytes), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-        'Content-Length': String(pdfBytes.length),
-      },
+    return createPdfBinaryResponse(pdfBytes, {
+      contentDisposition: `attachment; filename="${filename}"`,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to generate PDF'

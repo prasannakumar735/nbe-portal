@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { toast } from 'sonner'
 import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { createSupabaseClient } from '@/lib/supabase/client'
+import { DoorDiagram } from '@/components/report/DoorDiagram'
 import { DoorInspectionCard } from '@/components/maintenance/DoorInspectionCard'
 import { SignaturePad } from '@/components/maintenance/SignaturePad'
 import { AISummaryButton } from '@/components/maintenance/AISummaryButton'
@@ -36,6 +38,7 @@ import type {
   MaintenanceFormValues,
 } from '@/lib/types/maintenance.types'
 import { maintenanceFormSchema } from '@/lib/validation/maintenance'
+import { fetchPdfBlob } from '@/lib/browser/fetchPdfBlob'
 
 const STORAGE_KEY = 'nbe-maintenance-draft'
 
@@ -257,10 +260,27 @@ export type MaintenanceFormPageProps = {
   initialReport?: Record<string, unknown> | null
   isAdminMode?: boolean
   onApproved?: () => void
+  /**
+   * When true with `initialReport`, skips `/api/maintenance/draft` fetch inside the form and
+   * hydrates once from the parent (offline-first merged payload).
+   */
+  hydrateOnlyFromInitialReport?: boolean
+  /** Debounced full-form mirror into IndexedDB (e.g. `useOfflineReport().persistForm`). */
+  offlineMirror?: { onPersist: (form: MaintenanceFormValues) => void }
+  /** Shown next to status when using offline mirror (e.g. save pipeline label). */
+  offlineSaveStatusLabel?: string
 }
 
 export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) {
-  const { reportIdFromRoute, initialReport, isAdminMode = false, onApproved } = props
+  const {
+    reportIdFromRoute,
+    initialReport,
+    isAdminMode = false,
+    onApproved,
+    hydrateOnlyFromInitialReport = false,
+    offlineMirror,
+    offlineSaveStatusLabel,
+  } = props
   const supabase = useMemo(() => createSupabaseClient(), [])
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -366,6 +386,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     getValues,
     setValue,
     reset,
+    watch,
     handleSubmit,
     formState: { errors },
   } = useForm<MaintenanceFormValues>({
@@ -387,6 +408,14 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   const watchedNotes = useWatch({ control, name: 'notes', defaultValue: '' })
   const watchedDoors = useWatch({ control, name: 'doors', defaultValue: [] }) as MaintenanceDoorForm[]
 
+  useEffect(() => {
+    if (!offlineMirror) return
+    const sub = watch(value => {
+      offlineMirror.onPersist(value as MaintenanceFormValues)
+    })
+    return () => sub.unsubscribe()
+  }, [watch, offlineMirror])
+
   /** Which client the current `locations` list belongs to (avoids skipping reload after client change). */
   const locationsForClientIdRef = useRef<string | null>(null)
   /** Which location the current `availableDoors` list belongs to (avoids reloading + replacing doors repeatedly). */
@@ -395,11 +424,6 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   const clientsInitializedRef = useRef(false)
   /** Apply IndexedDB last-selection restore at most once per offline stint (avoids effect dependency churn). */
   const offlineRestoredRef = useRef(false)
-
-  useEffect(() => {
-    console.log('client:', watchedClientId || '')
-    console.log('location:', watchedClientLocationId || '')
-  }, [watchedClientId, watchedClientLocationId])
 
   const clientOptions = useMemo(() => {
     if (!watchedClientId) return clients
@@ -729,8 +753,9 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         isFreshMode ? '1' : '0',
         isAdminMode ? '1' : '0',
         initialReport ? 'ir' : 'no',
+        hydrateOnlyFromInitialReport ? 'hof' : 'no',
       ].join('|'),
-    [reportIdFromRoute, offlineEditId, isFreshMode, isAdminMode, initialReport],
+    [reportIdFromRoute, offlineEditId, isFreshMode, isAdminMode, initialReport, hydrateOnlyFromInitialReport],
   )
 
   useEffect(() => {
@@ -799,7 +824,57 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         }
       }
 
-      if (reportIdFromRoute && initialReport && isAdminMode) {
+      if (hydrateOnlyFromInitialReport && reportIdFromRoute && initialReport) {
+        const report = initialReport as Record<string, unknown>
+        setSavedClientName(String(report.client_name ?? '').trim())
+        setSavedLocationName(String(report.client_location_name ?? '').trim())
+        const reportStatus = String(report.status ?? '').toLowerCase()
+        const isReadOnlyStatus =
+          reportStatus === 'submitted' || reportStatus === 'reviewing' || reportStatus === 'approved'
+        if (isReadOnlyStatus && !isAdminMode) {
+          setIsLocked(true)
+          setStatusMessage(`This report is ${reportStatus} and locked for editing.`)
+        }
+        Object.entries(report).forEach(([key, value]) => {
+          if (key !== 'doors') {
+            setValue(key as keyof MaintenanceFormValues, value as never)
+          }
+        })
+        await hydrateClientFromLocation(report)
+        if (cancelled) return
+        const maintenanceDoors: unknown[] = Array.isArray(report.doors) ? report.doors : []
+        const doors = maintenanceDoors.map((door: unknown, index: number) => normalizeLoadedDoor(door, index))
+        replace(doors.length > 0 ? doors : [createDoor(0)])
+        const compiledNotes = maintenanceDoors
+          .map((d: unknown, i: number) => {
+            const door = d as { door_number?: string; notes?: string }
+            const label = String(door?.door_number ?? `Door ${i + 1}`).trim()
+            const notes = String(door?.notes ?? '').trim()
+            return notes ? `${label}: ${notes}` : label
+          })
+          .filter(Boolean)
+          .join('\n')
+        setValue('notes', (report.notes as string) ?? compiledNotes ?? '', { shouldDirty: false })
+        setValue('report_id', reportIdFromRoute)
+        if (isAdminMode) {
+          setAdminFormPopulated(true)
+          showStatus('Report loaded. You can edit all fields and save.')
+        } else {
+          showStatus('Draft auto-resumed (offline cache).')
+        }
+        const selectedClientId = String((report as { client_id?: string }).client_id ?? '').trim()
+        const selectedLocationId = String((report as { client_location_id?: string }).client_location_id ?? '').trim()
+        if (selectedClientId) {
+          await loadLocationsForClient(selectedClientId)
+        }
+        if (cancelled) return
+        if (selectedLocationId) {
+          await loadDoorsForLocation(selectedLocationId)
+        }
+        return
+      }
+
+      if (reportIdFromRoute && initialReport && isAdminMode && !hydrateOnlyFromInitialReport) {
         return
       }
 
@@ -1026,6 +1101,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         body: JSON.stringify({
           report_id: form.report_id,
           status: adminEdit ? 'reviewing' : targetStatus,
+          mode: adminEdit ? undefined : targetStatus === 'draft' ? 'draft' : 'submit',
           form,
           admin_edit: adminEdit,
         }),
@@ -1037,6 +1113,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         const serverMessage = details?.message || (result as { error?: string }).error || 'Failed to save draft'
         if (!silent) {
           showStatus(serverMessage, 'error')
+          toast.error(serverMessage)
         }
         return false
       }
@@ -1049,7 +1126,24 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(form))
 
       if (!silent) {
-        showStatus(targetStatus === 'draft' ? 'Draft saved.' : 'Report submitted.', 'success')
+        if (targetStatus === 'draft') {
+          const doors = form.doors ?? []
+          const total = Number(form.total_doors || 1)
+          const done = doors.filter(door => isDoorComplete(door)).length
+          const incomplete = done < total
+          const draftMsg = incomplete
+            ? 'Draft saved. Some checklist items or door details are still incomplete.'
+            : 'Draft saved.'
+          showStatus(draftMsg, incomplete ? 'info' : 'success')
+          if (incomplete) {
+            toast.message(draftMsg)
+          } else {
+            toast.success('Draft saved')
+          }
+        } else {
+          showStatus('Report submitted.', 'success')
+          toast.success('Report submitted')
+        }
       }
 
       return true
@@ -1060,6 +1154,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
 
       if (!silent) {
         showStatus('Offline Mode – Draft saved locally on this device.', 'info')
+        toast.info('Offline — draft saved on this device')
       }
 
       return false
@@ -1258,7 +1353,9 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
 
   const submitReport = async (form: MaintenanceFormValues) => {
     if (!progress.allDone) {
-      showStatus('Complete checklist and required fields for all doors before submission.', 'error')
+      const msg = 'Complete checklist and required fields for all doors before submission.'
+      showStatus(msg, 'error')
+      toast.error(msg)
       return
     }
 
@@ -1270,6 +1367,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         await offlineAddInspection(form)
         await refreshPendingCount()
         showStatus('Saved offline successfully', 'success')
+        toast.success('Saved offline successfully')
         return
       }
 
@@ -1301,6 +1399,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       localStorage.removeItem(STORAGE_KEY)
       setIsLocked(true)
       showStatus('Report submitted successfully. Editing is now locked.', 'success')
+      toast.success('Report submitted successfully')
       router.push('/maintenance')
     } catch (error) {
       // If we failed due to connectivity, queue offline
@@ -1308,9 +1407,12 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         await offlineAddInspection(form)
         await refreshPendingCount()
         showStatus('Saved offline successfully', 'success')
+        toast.success('Saved offline successfully')
         return
       }
-      showStatus(error instanceof Error ? error.message : 'Submit failed', 'error')
+      const failMsg = error instanceof Error ? error.message : 'Submit failed'
+      showStatus(failMsg, 'error')
+      toast.error(failMsg)
     } finally {
       setIsSubmitting(false)
     }
@@ -1376,10 +1478,10 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   }
 
   return (
-    <div className="mx-auto w-full max-w-screen-md space-y-4 px-4 py-4 md:py-6">
-      <header className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h1 className="text-xl font-black text-slate-900">Maintenance Inspection Form</h1>
-        <p className="mt-1 text-sm text-slate-600">Mobile onsite inspection workflow with autosave</p>
+    <div className="mx-auto w-full max-w-screen-md space-y-4">
+      <header className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h1 className="text-lg font-bold text-slate-900">Maintenance Inspection Form</h1>
+        <p className="mt-0.5 text-xs text-slate-600">Mobile onsite inspection workflow with autosave</p>
 
         {isOffline ? (
           <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
@@ -1416,6 +1518,10 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
             <div className="h-3 rounded-full bg-blue-600" style={{ width: `${progress.percentage}%` }} />
           </div>
         </div>
+
+        {offlineSaveStatusLabel ? (
+          <p className="mt-2 text-xs font-medium text-slate-600">{offlineSaveStatusLabel}</p>
+        ) : null}
 
         {statusMessage && (
           <div className={`mt-3 rounded-xl border px-3 py-2 text-sm ${
@@ -1478,6 +1584,8 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
             </label>
           </div>
         </section>
+
+        <h2 className="mb-3 text-lg font-semibold text-blue-900">Site &amp; inspection overview</h2>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">2. Client & Location</h2>
@@ -1611,6 +1719,8 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
             </label>
           </div>
         </section>
+
+        <DoorDiagram />
 
         <section className="space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1746,13 +1856,11 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                         showStatus('Unable to save latest changes before generating PDF. Please try Save changes first.', 'error')
                         return
                       }
-                      const res = await fetch(`/api/maintenance/pdf/${reportIdFromRoute}`)
-                      if (!res.ok) throw new Error('Download failed')
-                      const blob = await res.blob()
+                      const { blob, filename } = await fetchPdfBlob(`/api/maintenance/pdf/${reportIdFromRoute}`)
                       const url = URL.createObjectURL(blob)
                       const a = document.createElement('a')
                       a.href = url
-                      a.download = `maintenance-report-${reportIdFromRoute.slice(0, 8)}.pdf`
+                      a.download = filename ?? `maintenance-report-${reportIdFromRoute.slice(0, 8)}.pdf`
                       a.click()
                       URL.revokeObjectURL(url)
                       showStatus('PDF downloaded.', 'success')
@@ -1774,13 +1882,11 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                         showStatus('Unable to save latest changes before downloading report. Please try Save changes first.', 'error')
                         return
                       }
-                      const res = await fetch(`/api/maintenance/pdf/${reportIdFromRoute}`)
-                      if (!res.ok) throw new Error('Download failed')
-                      const blob = await res.blob()
+                      const { blob, filename } = await fetchPdfBlob(`/api/maintenance/pdf/${reportIdFromRoute}`)
                       const url = URL.createObjectURL(blob)
                       const a = document.createElement('a')
                       a.href = url
-                      a.download = `maintenance-report-${reportIdFromRoute.slice(0, 8)}.pdf`
+                      a.download = filename ?? `maintenance-report-${reportIdFromRoute.slice(0, 8)}.pdf`
                       a.click()
                       URL.revokeObjectURL(url)
                       showStatus('Report downloaded.', 'success')
@@ -1790,7 +1896,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                   }}
                   className="h-12 rounded-xl border border-slate-300 bg-white px-5 text-base font-bold text-slate-800 hover:bg-slate-50"
                 >
-                  Download Report
+                  Download
                 </button>
                 <button
                   type="button"

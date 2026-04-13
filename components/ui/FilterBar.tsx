@@ -49,11 +49,11 @@ export function FilterBar({ projects, defaultPeriod, defaultProject }: FilterBar
   }
 
   return (
-    <div className="flex flex-col sm:flex-row gap-3">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
       <select
         value={period}
         onChange={(event) => updateParams({ period: event.target.value })}
-        className="bg-white border border-gray-200 rounded-xl px-4 py-2 text-sm font-medium text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+        className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
       >
         {PERIOD_OPTIONS.map(option => (
           <option key={option.id} value={option.id}>{option.label}</option>
@@ -63,7 +63,7 @@ export function FilterBar({ projects, defaultPeriod, defaultProject }: FilterBar
       <select
         value={project}
         onChange={(event) => updateParams({ project: event.target.value })}
-        className="bg-white border border-gray-200 rounded-xl px-4 py-2 text-sm font-medium text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+        className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
       >
         {projectOptions.map(option => (
           <option key={option.id} value={option.id}>{option.name}</option>
@@ -71,18 +71,18 @@ export function FilterBar({ projects, defaultPeriod, defaultProject }: FilterBar
       </select>
 
       {period === 'custom' && (
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2">
           <input
             type="date"
             value={startDate}
             onChange={(event) => updateParams({ start: event.target.value })}
-            className="bg-white border border-gray-200 rounded-xl px-4 py-2 text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+            className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
           />
           <input
             type="date"
             value={endDate}
             onChange={(event) => updateParams({ end: event.target.value })}
-            className="bg-white border border-gray-200 rounded-xl px-4 py-2 text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+            className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
           />
         </div>
       )}

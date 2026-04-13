@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import type { QuoteData } from '@/lib/types/quote.types'
+import { embedRobotoForPdfLib } from '@/lib/pdf/robotoPdf'
 
 function currency(value: number): string {
   return new Intl.NumberFormat('en-AU', {
@@ -24,8 +25,9 @@ function formatDate(value: Date): string {
 export async function generateQuotePdf(quoteData: QuoteData): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create()
   const page = pdfDoc.addPage([595.28, 841.89])
-  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
-  const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica)
+  const roboto = await embedRobotoForPdfLib(pdfDoc)
+  const boldFont = roboto?.bold ?? (await pdfDoc.embedFont(StandardFonts.HelveticaBold))
+  const regularFont = roboto?.regular ?? (await pdfDoc.embedFont(StandardFonts.Helvetica))
 
   let y = 800
   const left = 40

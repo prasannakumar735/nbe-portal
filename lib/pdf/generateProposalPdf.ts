@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import type { ProposalDoor, QuoteData } from '@/lib/types/quote.types'
+import { embedRobotoForPdfLib } from '@/lib/pdf/robotoPdf'
 
 function currency(value: number): string {
   return new Intl.NumberFormat('en-AU', {
@@ -58,8 +59,9 @@ function deriveDoors(quoteData: QuoteData): ProposalDoor[] {
 export async function generateProposalPdf(quoteData: QuoteData): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create()
   const page = pdfDoc.addPage([595.28, 841.89])
-  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
-  const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica)
+  const roboto = await embedRobotoForPdfLib(pdfDoc)
+  const boldFont = roboto?.bold ?? (await pdfDoc.embedFont(StandardFonts.HelveticaBold))
+  const regularFont = roboto?.regular ?? (await pdfDoc.embedFont(StandardFonts.Helvetica))
 
   const left = 40
   const right = 555

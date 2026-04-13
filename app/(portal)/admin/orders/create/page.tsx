@@ -142,13 +142,13 @@ export default function AdminOrderCreatePage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-8">
-      <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900">Create Order</h1>
-        <p className="mt-1 text-sm text-slate-600">Create customer order with BOM-based inventory validation and deduction.</p>
+    <div className="w-full space-y-4">
+      <header className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h1 className="text-xl font-bold text-slate-900">Create Order</h1>
+        <p className="mt-0.5 text-xs text-slate-600">Create customer order with BOM-based inventory validation and deduction.</p>
       </header>
 
-      <form onSubmit={handleSubmit} className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <form onSubmit={handleSubmit} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <label className="text-sm font-medium text-slate-700">
             Product
@@ -212,7 +212,7 @@ export default function AdminOrderCreatePage() {
         {successMessage && <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</div>}
       </form>
 
-      <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Component Requirement Preview</h2>
         {preview.length === 0 ? (
           <p className="mt-2 text-sm text-slate-600">No preview data yet.</p>

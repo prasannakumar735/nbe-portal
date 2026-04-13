@@ -31,7 +31,8 @@ const doorSchema = z.object({
   isCollapsed: z.boolean().optional(),
 })
 
-export const maintenanceFormSchema = z.object({
+/** Structural validation only — incomplete checklist and door/total mismatch allowed (draft save). */
+export const maintenanceFormDraftSchema = z.object({
   report_id: z.string().uuid().optional(),
   offline_id: z.string().uuid().optional(),
   technician_name: z.string().min(1, 'Technician name is required'),
@@ -53,7 +54,8 @@ export const maintenanceFormSchema = z.object({
   signature_storage_url: z.string().optional().default(''),
   doors: z.array(doorSchema),
 })
-.superRefine((values, ctx) => {
+
+const submitFormRefinements = (values: z.infer<typeof maintenanceFormDraftSchema>, ctx: z.RefinementCtx) => {
   if (values.doors.length !== values.total_doors) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -85,14 +87,48 @@ export const maintenanceFormSchema = z.object({
       path: ['inspection_end'],
     })
   }
-})
+}
 
-export const maintenanceDraftSchema = z.object({
-  report_id: z.string().uuid().optional(),
-  status: z.enum(['draft', 'submitted', 'reviewing']).default('draft'),
-  form: maintenanceFormSchema,
-  admin_edit: z.boolean().optional().default(false),
-})
+/** Final submission / admin review — full checklist and cross-field rules. */
+export const maintenanceFormSubmitSchema = maintenanceFormDraftSchema.superRefine(submitFormRefinements)
 
-export type MaintenanceFormSchema = z.infer<typeof maintenanceFormSchema>
-export type MaintenanceDraftSchema = z.infer<typeof maintenanceDraftSchema>
+/** Same as `maintenanceFormSubmitSchema` — used by RHF and submit flows. */
+export const maintenanceFormSchema = maintenanceFormSubmitSchema
+
+const maintenanceDraftEnvelopeSchema = z
+  .object({
+    report_id: z.string().uuid().optional(),
+    status: z.enum(['draft', 'submitted', 'reviewing']).default('draft'),
+    /** Explicit save mode: overrides `status` when set (`draft` | `submit`). */
+    mode: z.enum(['draft', 'submit']).optional(),
+    form: z.unknown(),
+    admin_edit: z.boolean().optional().default(false),
+  })
+  .transform(data => {
+    let status = data.status
+    if (data.mode === 'draft') {
+      status = 'draft'
+    } else if (data.mode === 'submit') {
+      status = 'submitted'
+    }
+    const { mode: _mode, ...rest } = data
+    return { ...rest, status }
+  })
+
+export type MaintenanceDraftPayload = Omit<z.infer<typeof maintenanceDraftEnvelopeSchema>, 'form'> & {
+  form: z.infer<typeof maintenanceFormSubmitSchema>
+}
+
+/** Draft API body: relaxed form validation when saving as draft; strict when submitting or reviewing. */
+export function parseMaintenanceDraftPayload(body: unknown): MaintenanceDraftPayload {
+  const envelope = maintenanceDraftEnvelopeSchema.parse(body)
+  const useStrictValidation =
+    envelope.status === 'submitted' || envelope.status === 'reviewing'
+
+  const form = (useStrictValidation ? maintenanceFormSubmitSchema : maintenanceFormDraftSchema).parse(envelope.form)
+
+  return { ...envelope, form }
+}
+
+export type MaintenanceFormSchema = z.infer<typeof maintenanceFormSubmitSchema>
+export type MaintenanceDraftSchema = MaintenanceDraftPayload

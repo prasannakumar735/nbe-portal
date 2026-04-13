@@ -1,5 +1,5 @@
-import ContactsAdminClient from '@/app/admin/contacts/ContactsAdminClient'
+import { redirect } from 'next/navigation'
 
-export default function PortalAdminContactsPage() {
-  return <ContactsAdminClient />
+export default function AdminContactsRedirectPage() {
+  redirect('/dashboard/people?tab=contacts')
 }

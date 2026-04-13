@@ -311,8 +311,8 @@ export async function buildMaintenancePdfOptions(params: {
     }
   }
 
-  clientName = clientName || '—'
-  locationName = locationName || '—'
+  clientName = clientName || '-'
+  locationName = locationName || '-'
 
   let reportNumber = `REP-${reportId.slice(0, 8).toUpperCase()}`
   const { data: seqRow } = await supabase

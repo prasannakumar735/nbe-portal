@@ -1,7 +1,7 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
-import { AlertCircle, Camera, ImagePlus, Loader2, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { AlertCircle, Camera, ChevronLeft, ChevronRight, Download, ImagePlus, Loader2, Trash2, X } from 'lucide-react'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import { uploadMaintenancePhotos } from '@/lib/services/maintenancePhotoUpload'
 import type { MaintenanceDoorPhoto } from '@/lib/types/maintenance.types'
@@ -21,10 +21,63 @@ export function PhotoUpload({ reportId, doorId, photos, disabled = false, onChan
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState('')
   const [isDragging, setIsDragging] = useState(false)
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null)
 
   const openPicker = () => {
     if (disabled || isUploading) return
     inputRef.current?.click()
+  }
+
+  useEffect(() => {
+    if (previewIndex === null) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPreviewIndex(null)
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        setPreviewIndex(i => (i !== null && i > 0 ? i - 1 : i))
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        setPreviewIndex(i => (i !== null && i < photos.length - 1 ? i + 1 : i))
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [previewIndex, photos.length])
+
+  useEffect(() => {
+    if (previewIndex === null) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [previewIndex])
+
+  useEffect(() => {
+    if (previewIndex === null) return
+    if (photos.length === 0) {
+      setPreviewIndex(null)
+      return
+    }
+    if (previewIndex >= photos.length) setPreviewIndex(photos.length - 1)
+  }, [photos.length, previewIndex])
+
+  const downloadPhoto = async (photo: MaintenanceDoorPhoto) => {
+    try {
+      const response = await fetch(photo.url)
+      if (!response.ok) throw new Error('Failed to download photo.')
+      const blob = await response.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      const extension = blob.type.includes('png') ? 'png' : blob.type.includes('webp') ? 'webp' : 'jpg'
+      link.href = objectUrl
+      link.download = `maintenance-photo-${Date.now()}.${extension}`
+      link.click()
+      URL.revokeObjectURL(objectUrl)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Download failed')
+    }
   }
 
   const handleUpload = async (files: File[]) => {
@@ -53,8 +106,6 @@ export function PhotoUpload({ reportId, doorId, photos, disabled = false, onChan
 
   const handleFileInput = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? [])
-    // Reset the input value BEFORE uploading so the same file can be re-selected
-    // if the user removes it and wants to re-upload it.
     event.target.value = ''
     await handleUpload(files)
   }
@@ -150,15 +201,34 @@ export function PhotoUpload({ reportId, doorId, photos, disabled = false, onChan
 
       {photos.length > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {photos.map(photo => (
-            <div key={photo.path} className="relative">
-              <img src={photo.url} alt="Door upload preview" className="h-24 w-full rounded-lg object-cover" />
+          {photos.map((photo, index) => (
+            <div key={photo.path} className="relative overflow-hidden rounded-lg">
               <button
                 type="button"
-                onClick={() => {
+                onClick={() => setPreviewIndex(index)}
+                className="block w-full cursor-pointer text-left transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                aria-label={`View photo ${index + 1} full screen`}
+              >
+                <img src={photo.url} alt={`Door photo ${index + 1}`} className="h-24 w-full rounded-lg object-cover" />
+              </button>
+              <button
+                type="button"
+                onClick={e => {
+                  e.stopPropagation()
+                  void downloadPhoto(photo)
+                }}
+                className="absolute right-11 top-1 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-slate-900 shadow hover:bg-white"
+                aria-label="Download photo"
+              >
+                <Download className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={e => {
+                  e.stopPropagation()
                   void removePhoto(photo)
                 }}
-                className="absolute right-1 top-1 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-slate-900 shadow"
+                className="absolute right-1 top-1 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-slate-900 shadow hover:bg-white"
                 aria-label="Remove photo"
               >
                 <Trash2 className="h-4 w-4" />
@@ -167,6 +237,86 @@ export function PhotoUpload({ reportId, doorId, photos, disabled = false, onChan
           ))}
         </div>
       )}
+
+      {previewIndex !== null && photos[previewIndex] ? (
+        <div
+          className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/80 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Photo preview"
+          onClick={() => setPreviewIndex(null)}
+        >
+          <button
+            type="button"
+            onClick={e => {
+              e.stopPropagation()
+              setPreviewIndex(null)
+            }}
+            className="absolute right-4 top-4 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+            aria-label="Close preview"
+          >
+            <X className="h-6 w-6" />
+          </button>
+
+          {photos.length > 1 ? (
+            <>
+              <button
+                type="button"
+                onClick={e => {
+                  e.stopPropagation()
+                  setPreviewIndex(i => (i !== null && i > 0 ? i - 1 : i))
+                }}
+                disabled={previewIndex <= 0}
+                className="absolute left-2 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-30 md:left-4"
+                aria-label="Previous photo"
+              >
+                <ChevronLeft className="h-8 w-8" />
+              </button>
+              <button
+                type="button"
+                onClick={e => {
+                  e.stopPropagation()
+                  setPreviewIndex(i =>
+                    i !== null && i < photos.length - 1 ? i + 1 : i,
+                  )
+                }}
+                disabled={previewIndex >= photos.length - 1}
+                className="absolute right-2 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-30 md:right-4"
+                aria-label="Next photo"
+              >
+                <ChevronRight className="h-8 w-8" />
+              </button>
+            </>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={e => {
+              e.stopPropagation()
+              void downloadPhoto(photos[previewIndex]!)
+            }}
+            className="absolute bottom-4 right-4 z-10 inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-lg hover:bg-slate-100"
+          >
+            <Download className="h-4 w-4" />
+            Download
+          </button>
+
+          <p className="absolute bottom-4 left-4 z-10 rounded bg-black/40 px-2 py-1 text-xs text-white/90">
+            {previewIndex + 1} / {photos.length}
+          </p>
+
+          <div
+            className="flex max-h-[90vh] max-w-[90vw] items-center justify-center"
+            onClick={e => e.stopPropagation()}
+          >
+            <img
+              src={photos[previewIndex]!.url}
+              alt={`Photo ${previewIndex + 1} full size`}
+              className="max-h-[90vh] max-w-full rounded-lg object-contain shadow-2xl"
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

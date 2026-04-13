@@ -104,22 +104,22 @@ export default function InventoryDashboardPage() {
   }, [components, alerts, movements])
 
   if (isLoading) {
-    return <div className="mx-auto max-w-7xl px-6 py-8 text-slate-600">Loading inventory...</div>
+    return <div className="text-sm text-slate-600">Loading inventory...</div>
   }
 
   if (error) {
     return (
-      <div className="mx-auto max-w-7xl px-6 py-8">
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-700">{error}</div>
+      <div>
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       </div>
     )
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5 px-6 py-8">
-      <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900">Inventory Management</h1>
-        <p className="mt-1 text-sm text-slate-600">BOM-based stock control for rapid roller door orders.</p>
+    <div className="space-y-4">
+      <header className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h1 className="text-xl font-bold text-slate-900">Inventory Management</h1>
+        <p className="mt-0.5 text-xs text-slate-600">BOM-based stock control for rapid roller door orders.</p>
         <div className="mt-3 flex flex-wrap gap-3 text-sm">
           <Link href="/admin/inventory/components" className="text-indigo-700 underline">Components</Link>
           <Link href="/admin/inventory/products" className="text-indigo-700 underline">Products</Link>
@@ -148,7 +148,7 @@ export default function InventoryDashboardPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Components Table</h2>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -176,7 +176,7 @@ export default function InventoryDashboardPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Low Stock Alerts</h2>
         {alerts.length === 0 ? (
           <p className="mt-2 text-sm text-slate-600">No low stock alerts.</p>
@@ -191,7 +191,7 @@ export default function InventoryDashboardPage() {
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Stock Movement History</h2>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-sm">

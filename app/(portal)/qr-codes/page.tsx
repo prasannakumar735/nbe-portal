@@ -191,12 +191,12 @@ export default function QrCodesPage() {
   }
 
   if (isLoading) {
-    return <div className="mx-auto max-w-4xl px-4 py-8 text-sm text-slate-600">Loading...</div>
+    return <div className="py-6 text-sm text-slate-600">Loading...</div>
   }
 
   if (!isAllowed) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-8">
+      <div className="py-6">
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
           Only managers can generate door QR codes.
         </div>
@@ -205,8 +205,8 @@ export default function QrCodesPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-4 px-4 py-6">
-      <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="w-full space-y-4">
+      <header className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col items-center gap-3 text-center">
           <img src="/Logo_black.png" alt="NBE Australia" className="h-20 w-auto object-contain" />
           <h1 className="text-xl font-black tracking-wide text-slate-900">QR Code Generator</h1>
@@ -214,7 +214,7 @@ export default function QrCodesPage() {
         </div>
       </header>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <label className="text-sm font-medium text-slate-700">
             Client
@@ -265,8 +265,8 @@ export default function QrCodesPage() {
       </section>
 
       {doorId && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mx-auto flex max-w-sm flex-col items-center gap-4 rounded-[22px] border border-slate-300 bg-white p-5 text-center">
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mx-auto flex max-w-sm flex-col items-center gap-3 rounded-xl border border-slate-300 bg-white p-4 text-center">
             <img
               src="/logo_QR_code.png"
               alt="NBE Australia"

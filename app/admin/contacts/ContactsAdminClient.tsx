@@ -61,7 +61,12 @@ const emptyDraft: ContactDraft = {
   qr_type: 'dynamic',
 }
 
-export default function ContactsAdminClient() {
+type ContactsAdminClientProps = {
+  /** Omit outer page chrome when embedded in another screen (e.g. People → Contacts tab). */
+  embedded?: boolean
+}
+
+export default function ContactsAdminClient({ embedded = false }: ContactsAdminClientProps) {
   const [contacts, setContacts] = useState<ContactRow[]>([])
   const [draft, setDraft] = useState<ContactDraft>(emptyDraft)
   const [loading, setLoading] = useState(true)
@@ -121,13 +126,17 @@ export default function ContactsAdminClient() {
     try {
       const endpoint = editingId ? `/api/admin/contacts/${editingId}` : '/api/admin/contacts'
       const method = editingId ? 'PATCH' : 'POST'
+      // Slug is server-managed (derived from names on create). Omit on edit so existing URLs/QR stay stable.
+      const submitBody = editingId
+        ? (({ slug: _s, ...rest }) => rest)(draft)
+        : { ...draft, slug: '' }
       const response = await fetch(endpoint, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(draft),
+        body: JSON.stringify(submitBody),
       })
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(payload.error || 'Save failed')
+      const result = (await response.json().catch(() => ({}))) as { error?: string }
+      if (!response.ok) throw new Error(result.error || 'Save failed')
       setEditingId(null)
       setDraft(emptyDraft)
       await loadContacts()
@@ -156,53 +165,63 @@ export default function ContactsAdminClient() {
     await loadContacts()
   }
 
-  return (
-    <main className="mx-auto max-w-7xl px-6 py-8">
-      <h1 className="text-2xl font-bold text-slate-900">Contact QR Management</h1>
-      <p className="mt-1 text-sm text-slate-600">Manage public contact cards and QR behavior.</p>
-      {error && <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+  const body = (
+    <>
+      {!embedded ? (
+        <>
+          <h1 className="text-2xl font-bold text-slate-900">Contact QR Management</h1>
+          <p className="mt-1 text-sm text-slate-600">Manage public contact cards and QR behavior.</p>
+        </>
+      ) : null}
+      {error && (
+        <div
+          className={`rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 ${embedded ? '' : 'mt-4'}`}
+        >
+          {error}
+        </div>
+      )}
 
-      <form onSubmit={submitForm} className="mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-base font-semibold text-slate-900">{editingId ? 'Edit Contact' : 'Add Contact'}</h2>
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-          {(['slug', 'first_name', 'last_name', 'company', 'title', 'phone', 'email', 'website', 'street', 'city', 'state', 'postcode', 'country'] as const).map((field) => (
-            <label key={field} className="text-sm text-slate-700">
-              <span className="mb-1 block capitalize">{field.replace('_', ' ')}</span>
+      <form onSubmit={submitForm} className={`rounded-xl border border-slate-200 bg-white p-3 shadow-sm ${embedded ? '' : 'mt-6'}`}>
+        <h2 className="text-sm font-semibold text-slate-900">{editingId ? 'Edit Contact' : 'Add Contact'}</h2>
+        <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+          {(['first_name', 'last_name', 'company', 'title', 'phone', 'email', 'website', 'street', 'city', 'state', 'postcode', 'country'] as const).map((field) => (
+            <label key={field} className="text-xs text-slate-700">
+              <span className="mb-0.5 block capitalize">{field.replace('_', ' ')}</span>
               <input
                 value={draft[field] ?? ''}
                 onChange={(e) => setDraft((current) => ({ ...current, [field]: e.target.value }))}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none ring-blue-500 focus:ring-2"
+                className="h-9 w-full rounded-md border border-slate-300 px-3 text-sm outline-none ring-blue-500 focus:ring-2"
               />
             </label>
           ))}
-          <label className="text-sm text-slate-700">
-            <span className="mb-1 block">Status</span>
+          <label className="text-xs text-slate-700">
+            <span className="mb-0.5 block">Status</span>
             <select
               value={draft.status}
               onChange={(e) => setDraft((current) => ({ ...current, status: e.target.value as ContactDraft['status'] }))}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none ring-blue-500 focus:ring-2"
+              className="h-9 w-full rounded-md border border-slate-300 px-3 text-sm outline-none ring-blue-500 focus:ring-2"
             >
               <option value="active">active</option>
               <option value="inactive">inactive</option>
             </select>
           </label>
-          <label className="text-sm text-slate-700">
-            <span className="mb-1 block">QR Type</span>
+          <label className="text-xs text-slate-700">
+            <span className="mb-0.5 block">QR Type</span>
             <select
               value={draft.qr_type}
               onChange={(e) => setDraft((current) => ({ ...current, qr_type: e.target.value as ContactDraft['qr_type'] }))}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none ring-blue-500 focus:ring-2"
+              className="h-9 w-full rounded-md border border-slate-300 px-3 text-sm outline-none ring-blue-500 focus:ring-2"
             >
               <option value="dynamic">dynamic</option>
               <option value="vcard">vcard</option>
             </select>
           </label>
         </div>
-        <div className="mt-4 flex gap-3">
+        <div className="mt-3 flex gap-2">
           <button
             type="submit"
             disabled={saving}
-            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-60"
+            className="inline-flex h-9 items-center rounded-md bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-60"
           >
             {saving ? 'Saving...' : editingId ? 'Update Contact' : 'Create Contact'}
           </button>
@@ -210,7 +229,7 @@ export default function ContactsAdminClient() {
             <button
               type="button"
               onClick={() => setEditingId(null)}
-              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              className="inline-flex h-9 items-center rounded-md border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
               Cancel Edit
             </button>
@@ -218,13 +237,12 @@ export default function ContactsAdminClient() {
         </div>
       </form>
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white shadow-sm">
+      <section className="mt-4 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50">
                 <th className="px-3 py-2">Name</th>
-                <th className="px-3 py-2">Slug</th>
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2">QR Type</th>
                 <th className="px-3 py-2">QR</th>
@@ -234,13 +252,12 @@ export default function ContactsAdminClient() {
             <tbody>
               {!loading && contacts.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-4 text-slate-500">No contacts found.</td>
+                  <td colSpan={5} className="px-3 py-4 text-slate-500">No contacts found.</td>
                 </tr>
               )}
               {contacts.map((contact) => (
                 <tr key={contact.id} className="border-b border-slate-100 align-top">
                   <td className="px-3 py-2 font-medium text-slate-900">{contact.first_name} {contact.last_name}</td>
-                  <td className="px-3 py-2 text-slate-700">{contact.slug}</td>
                   <td className="px-3 py-2">
                     <button
                       onClick={() => void quickToggle(contact, 'status')}
@@ -258,7 +275,11 @@ export default function ContactsAdminClient() {
                     </button>
                   </td>
                   <td className="px-3 py-2">
-                    <img src={contact.qr_data_url} alt={`${contact.slug} QR`} className="h-20 w-20 rounded border border-slate-200" />
+                    <img
+                      src={contact.qr_data_url}
+                      alt={`QR code for ${contact.first_name} ${contact.last_name}`}
+                      className="h-20 w-20 rounded border border-slate-200"
+                    />
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex flex-col gap-2">
@@ -289,6 +310,12 @@ export default function ContactsAdminClient() {
           </table>
         </div>
       </section>
-    </main>
+    </>
   )
+
+  if (embedded) {
+    return <div className="space-y-6">{body}</div>
+  }
+
+  return <main className="mx-auto max-w-7xl px-6 py-8">{body}</main>
 }

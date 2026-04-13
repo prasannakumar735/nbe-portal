@@ -94,3 +94,10 @@ export type MaintenanceDraftPayload = {
   status: 'draft' | 'submitted'
   form: MaintenanceFormValues
 }
+
+/** POST /api/maintenance/merge-reports */
+export type MergeMaintenanceReportsBody = {
+  reportIds: string[]
+  /** Stored on merged_reports; not rendered as a separate summary PDF page */
+  totalDoorsInspected: number
+}

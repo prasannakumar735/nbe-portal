@@ -74,7 +74,7 @@ type AuthProviderProps = {
 async function fetchProfile(supabase: ReturnType<typeof createSupabaseClient>, userId: string): Promise<AuthProfile | null> {
   const { data } = await supabase
     .from('profiles')
-    .select('role, first_name, last_name')
+    .select('role, full_name, first_name, last_name, client_id, phone, is_active')
     .eq('id', userId)
     .single()
   return data as AuthProfile | null
@@ -95,8 +95,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
     let cancelled = false
     const supabase = createSupabaseClient()
-    fetchProfile(supabase, user.id).then((p) => {
-      if (!cancelled) setProfile(p)
+    fetchProfile(supabase, user.id).then(async (p) => {
+      if (cancelled) return
+      if (p && p.is_active === false) {
+        await supabase.auth.signOut()
+        setProfile(null)
+        return
+      }
+      setProfile(p)
     })
     return () => { cancelled = true }
   }, [user?.id])

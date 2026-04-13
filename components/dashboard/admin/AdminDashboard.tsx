@@ -24,8 +24,8 @@ export function AdminDashboard({ data, charts, entriesCount, employeeLeaderboard
   }
 
   return (
-    <section className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+    <section className="space-y-6">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Total Weekly Hours"
           value={`${data.totalHours.toFixed(1)}h`}
@@ -49,7 +49,7 @@ export function AdminDashboard({ data, charts, entriesCount, employeeLeaderboard
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2 hover:shadow-md">
           <SectionHeader title="Weekly Activity" subtitle="Company-wide hours by day" />
           <div className="mt-4">
@@ -64,7 +64,7 @@ export function AdminDashboard({ data, charts, entriesCount, employeeLeaderboard
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="hover:shadow-md">
           <SectionHeader title="Trend Over Time" subtitle="Weekly hours comparison" />
           <div className="mt-4">
@@ -79,7 +79,7 @@ export function AdminDashboard({ data, charts, entriesCount, employeeLeaderboard
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2 hover:shadow-md">
           <SectionHeader title="Employee Performance" subtitle="Top contributors by hours" />
           <div className="mt-4 space-y-3">
@@ -110,7 +110,7 @@ export function AdminDashboard({ data, charts, entriesCount, employeeLeaderboard
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <ReimbursementTable />
         <MaintenanceDistribution />
         <Card className="hover:shadow-md">

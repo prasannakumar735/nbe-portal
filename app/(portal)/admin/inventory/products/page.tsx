@@ -35,9 +35,9 @@ export default function InventoryProductsPage() {
   }, [])
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-8">
-      <h1 className="text-2xl font-bold text-slate-900">Inventory Products</h1>
-      <p className="mt-1 text-sm text-slate-600">Products with active BOM entries.</p>
+    <div className="w-full">
+      <h1 className="text-xl font-bold text-slate-900">Inventory Products</h1>
+      <p className="mt-0.5 text-xs text-slate-600">Products with active BOM entries.</p>
       {error && <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-red-700">{error}</div>}
       <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-left text-sm">

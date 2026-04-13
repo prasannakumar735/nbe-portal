@@ -1,11 +1,14 @@
+import { randomUUID } from 'crypto'
+import QRCode from 'qrcode'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import { canApproveMaintenanceReport } from '@/lib/auth/roles'
-import { generateMaintenanceReportPdf } from '@/lib/pdf/generateMaintenanceReportPdf'
-import { buildMaintenancePdfOptions } from '@/lib/pdf/buildMaintenancePdfOptions'
-import type { MaintenanceFormValues } from '@/lib/types/maintenance.types'
-import { PDFDocument } from 'pdf-lib'
+import { mergeMaintenanceReportPdfs } from '@/lib/pdf/mergeMaintenanceReportPdfs'
+import { assertValidPdfSignature } from '@/lib/pdf/savePdf'
+import { createPdfBinaryResponse } from '@/lib/http/pdfBinaryResponse'
+import { loadMaintenanceReportDraftPayload } from '@/lib/maintenance/loadMaintenanceReportDraftPayload'
+import { MERGED_MAINTENANCE_REPORTS_BUCKET } from '@/lib/merged-reports/storage'
 
 export const runtime = 'nodejs'
 
@@ -42,33 +45,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden. Managers only.' }, { status: 403 })
     }
 
-    const body = (await request.json().catch(() => null)) as null | { reportIds?: unknown }
-    const reportIds = Array.isArray(body?.reportIds)
-      ? body!.reportIds.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+    const requestBody = (await request.json().catch(() => null)) as null | {
+      reportIds?: unknown
+      totalDoorsInspected?: unknown
+    }
+    const reportIds = Array.isArray(requestBody?.reportIds)
+      ? requestBody!.reportIds.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
       : []
+
+    const rawDoors = requestBody?.totalDoorsInspected
+    const parsedDoors =
+      typeof rawDoors === 'number'
+        ? rawDoors
+        : typeof rawDoors === 'string' && rawDoors.trim() !== ''
+          ? Number(rawDoors)
+          : NaN
+    if (!Number.isFinite(parsedDoors) || parsedDoors <= 0 || !Number.isInteger(parsedDoors)) {
+      return NextResponse.json(
+        { error: 'Total Doors Inspected is required and must be a whole number greater than 0' },
+        { status: 400 },
+      )
+    }
+    const totalDoorsInspected = parsedDoors
 
     const uniqueReportIds = Array.from(new Set(reportIds))
     if (uniqueReportIds.length < 2) {
       return NextResponse.json({ error: 'Select at least 2 reports to merge' }, { status: 400 })
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin
-    const cookie = request.headers.get('cookie') ?? ''
+    const supabase = createServiceClient()
 
-    const draftResponses = await Promise.all(
-      uniqueReportIds.map(async (reportId) => {
-        const res = await fetch(
-          `${baseUrl}/api/maintenance/draft?reportId=${encodeURIComponent(reportId)}`,
-          { headers: { cookie } }
-        )
-        const data = await res.json().catch(() => ({}))
-        return { reportId, ok: res.ok, data }
-      })
-    )
-
-    const drafts = draftResponses
-      .map(r => ({ reportId: r.reportId, report: (r.data as { report?: unknown }).report }))
-      .filter(r => r.report && typeof r.report === 'object') as Array<{ reportId: string; report: Record<string, unknown> }>
+    const drafts = (
+      await Promise.all(
+        uniqueReportIds.map(async reportId => {
+          const report = await loadMaintenanceReportDraftPayload(supabase, reportId)
+          return report ? { reportId, report } : null
+        }),
+      )
+    ).filter((x): x is { reportId: string; report: Record<string, unknown> } => x !== null)
 
     if (drafts.length < 2) {
       return NextResponse.json({ error: 'Not enough valid reports to merge' }, { status: 400 })
@@ -86,66 +100,63 @@ export async function POST(request: NextRequest) {
     const clientName = String(drafts[0].report.client_name ?? '').trim() || 'Client'
     const clientId = String(drafts[0].report.client_id ?? '').trim()
 
-    const supabase = createServiceClient()
+    const preparedOn = new Date().toISOString().slice(0, 10)
 
-    const mergedPdf = await PDFDocument.create()
-    let finalSignaturePdfBytes: Uint8Array | null = null
+    const accessToken = randomUUID()
+    const appBase = (process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin).replace(/\/$/, '')
+    const viewerUrl = `${appBase}/report/view/${accessToken}`
 
-    for (const { reportId, report } of drafts) {
-      const doors = Array.isArray(report.doors) ? (report.doors as MaintenanceFormValues['doors']) : []
-      const form: MaintenanceFormValues = {
-        report_id: report.report_id as string | undefined,
-        technician_name: String(report.technician_name ?? ''),
-        submission_date: String(report.submission_date ?? ''),
-        source_app: String(report.source_app ?? 'Portal'),
-        client_id: String(report.client_id ?? ''),
-        client_location_id: String(report.client_location_id ?? ''),
-        address: String(report.address ?? ''),
-        inspection_date: String(report.inspection_date ?? ''),
-        inspection_start: String(report.inspection_start ?? ''),
-        inspection_end: String(report.inspection_end ?? ''),
-        total_doors: Number(report.total_doors ?? (doors.length || 1)),
-        notes: String(report.notes ?? ''),
-        signature_data_url: '',
-        signature_storage_url: String(report.signature_storage_url ?? ''),
-        doors,
+    let coverQrPngBytes: Uint8Array | null = null
+    try {
+      const buf = await QRCode.toBuffer(viewerUrl, {
+        type: 'png',
+        width: 240,
+        margin: 1,
+        errorCorrectionLevel: 'M',
+      })
+      coverQrPngBytes = new Uint8Array(buf)
+    } catch {
+      coverQrPngBytes = null
+    }
+
+    const accessExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+    const storagePath = `${accessToken}.pdf`
+
+    let pdfBytes: Uint8Array
+    try {
+      pdfBytes = await mergeMaintenanceReportPdfs({
+        supabase,
+        drafts,
+        signatureDateLabel: preparedOn,
+        coverQrPngBytes,
+      })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to merge PDFs'
+      if (msg === 'No mergeable reports found') {
+        return NextResponse.json({ error: msg }, { status: 400 })
       }
-
-      const pdfOptions = await buildMaintenancePdfOptions({ form, reportId, supabase })
-      const pdfBytes = await generateMaintenanceReportPdf(pdfOptions)
-
-      const src = await PDFDocument.load(pdfBytes)
-      const srcPages = src.getPages()
-      if (srcPages.length === 0) continue
-
-      if (!finalSignaturePdfBytes) {
-        finalSignaturePdfBytes = pdfBytes
-      }
-
-      const pagesToCopy = srcPages.slice(0, -1)
-      if (pagesToCopy.length === 0) continue
-
-      const copied = await mergedPdf.copyPages(src, pagesToCopy.map((_, idx) => idx))
-      for (const p of copied) mergedPdf.addPage(p)
+      throw e
     }
-
-    if (!finalSignaturePdfBytes) {
-      return NextResponse.json({ error: 'No mergeable reports found' }, { status: 400 })
-    }
-
-    const signatureSrc = await PDFDocument.load(finalSignaturePdfBytes)
-    const signaturePages = signatureSrc.getPages()
-    if (signaturePages.length > 0) {
-      const [sigPage] = await mergedPdf.copyPages(signatureSrc, [signaturePages.length - 1])
-      mergedPdf.addPage(sigPage)
-    }
-
-    const pdfBytes = await mergedPdf.save()
+    assertValidPdfSignature(pdfBytes, 'POST merge-reports')
     const date = new Date().toISOString().slice(0, 10)
     const filename = `Merged_Report_${sanitizeFilenamePart(clientName)}_${date}.pdf`
 
-    // Persist merged report record (optional feature). If table doesn't exist, ignore.
     if (clientId) {
+      let storageOk = false
+      try {
+        const uploadBytes = new Uint8Array(pdfBytes.byteLength)
+        uploadBytes.set(pdfBytes)
+        const { error: upErr } = await supabase.storage
+          .from(MERGED_MAINTENANCE_REPORTS_BUCKET)
+          .upload(storagePath, uploadBytes, {
+            contentType: 'application/pdf',
+            upsert: true,
+          })
+        storageOk = !upErr
+      } catch {
+        storageOk = false
+      }
+
       try {
         await supabase.from('merged_reports').insert({
           client_id: clientId,
@@ -153,19 +164,46 @@ export async function POST(request: NextRequest) {
           report_ids: uniqueReportIds,
           created_by: user.id,
           file_url: null,
+          total_doors_inspected: totalDoorsInspected,
+          access_token: accessToken,
+          share_token: accessToken,
+          pdf_url: viewerUrl,
+          pdf_storage_path: storageOk ? storagePath : null,
+          access_expires_at: accessExpiresAt,
         })
       } catch {
-        // non-blocking
+        try {
+          await supabase.from('merged_reports').insert({
+            client_id: clientId,
+            client_name: clientName,
+            report_ids: uniqueReportIds,
+            created_by: user.id,
+            file_url: null,
+            total_doors_inspected: totalDoorsInspected,
+            access_token: accessToken,
+            pdf_url: viewerUrl,
+            pdf_storage_path: storageOk ? storagePath : null,
+            access_expires_at: accessExpiresAt,
+          })
+        } catch {
+          try {
+            await supabase.from('merged_reports').insert({
+              client_id: clientId,
+              client_name: clientName,
+              report_ids: uniqueReportIds,
+              created_by: user.id,
+              file_url: null,
+              total_doors_inspected: totalDoorsInspected,
+            })
+          } catch {
+            // non-blocking
+          }
+        }
       }
     }
 
-    return new NextResponse(Buffer.from(pdfBytes), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-        'Content-Length': String(pdfBytes.length),
-      },
+    return createPdfBinaryResponse(pdfBytes, {
+      contentDisposition: `attachment; filename="${filename}"`,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to merge reports'

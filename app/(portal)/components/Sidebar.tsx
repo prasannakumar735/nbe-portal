@@ -14,7 +14,7 @@ interface SidebarProps {
 const NAV_ITEMS = [
   { label: 'Dashboard', icon: 'dashboard', href: '/dashboard' },
   { label: 'Service Quotes', icon: 'request_quote', href: '/dashboard/quotes/service' },
-  { label: 'Timecard', icon: 'schedule', href: '/timecard' },
+  { label: 'Timecards', icon: 'schedule', href: '/dashboard/timecards' },
   { label: 'Maintenance Service', icon: 'build', href: '/maintenance' },
   { label: 'QR Codes', icon: 'qr_code_2', href: '/qr-codes' },
   { label: 'Reimbursement', icon: 'payments', href: '/reimbursement' },
@@ -34,8 +34,8 @@ export function Sidebar({ isCollapsed, onToggleCollapse, isMobileOpen, onCloseMo
   const navItems = (isAdmin || isManager)
     ? [
         ...NAV_ITEMS,
+        { label: 'People', icon: 'groups', href: '/dashboard/people' },
         { label: 'Inventory', icon: 'inventory_2', href: '/admin/inventory' },
-        { label: 'Contacts', icon: 'contacts', href: '/admin/contacts' },
       ]
     : NAV_ITEMS
 
@@ -49,7 +49,18 @@ export function Sidebar({ isCollapsed, onToggleCollapse, isMobileOpen, onCloseMo
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
-  const isNavItemActive = (href: string) => pathname === href
+  const isNavItemActive = (href: string) => {
+    if (href === '/dashboard/people') {
+      return pathname === '/dashboard/people'
+    }
+    if (href === '/dashboard/timecards') {
+      return pathname === '/dashboard/timecards'
+    }
+    if (href === '/reports') {
+      return pathname === '/reports' || pathname.startsWith('/manager/reports')
+    }
+    return pathname === href
+  }
 
   const handleNavigation = (href: string) => {
     router.push(href)

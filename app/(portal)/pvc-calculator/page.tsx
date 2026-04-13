@@ -216,12 +216,12 @@ export default function PVCCalculatorPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 px-6 py-8">
+    <div className="w-full space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <NBELogo />
         <div className="text-right">
-          <h1 className="text-2xl font-bold text-slate-900">PVC Strip Curtain Calculator</h1>
-          <p className="mt-1 text-sm text-slate-500">Estimate strip curtain quantities and generate a quote from Supabase pricing.</p>
+          <h1 className="text-xl font-bold text-slate-900">PVC Strip Curtain Calculator</h1>
+          <p className="mt-0.5 text-xs text-slate-500">Estimate strip curtain quantities and generate a quote from Supabase pricing.</p>
         </div>
       </div>
 

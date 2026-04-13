@@ -15,8 +15,8 @@ export function StatCard({ label, value, trend, helper }: StatCardProps) {
         <p className="text-xs uppercase tracking-wide text-gray-400">{label}</p>
         {trend && <TrendBadge direction={trend.direction} value={trend.value} />}
       </div>
-      <p className="text-3xl font-bold text-gray-900 mt-3">{value}</p>
-      {helper && <p className="text-sm text-gray-500 mt-1">{helper}</p>}
+      <p className="mt-1.5 text-xl font-bold text-gray-900">{value}</p>
+      {helper && <p className="mt-1 text-xs text-gray-500">{helper}</p>}
     </Card>
   )
 }

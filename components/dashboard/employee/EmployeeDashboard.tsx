@@ -19,8 +19,8 @@ export function EmployeeDashboard({ data, charts, entriesCount }: EmployeeDashbo
       <div className="space-y-6">
         <DashboardEmptyState title="No time entries yet" description="Start a work session to unlock your analytics." />
         <Link
-          href="/timecard"
-          className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-blue-700 transition-colors"
+          href="/dashboard/timecards"
+          className="inline-flex h-9 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700"
         >
           Quick start work
         </Link>
@@ -29,15 +29,15 @@ export function EmployeeDashboard({ data, charts, entriesCount }: EmployeeDashbo
   }
 
   return (
-    <section className="space-y-8">
+    <section className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">My Time Analytics</h2>
+          <h2 className="text-base font-semibold text-gray-900">My Time Analytics</h2>
           <p className="text-sm text-gray-500">Track your weekly productivity</p>
         </div>
         <Link
-          href="/timecard"
-          className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-blue-700 transition-colors"
+          href="/dashboard/timecards"
+          className="inline-flex h-9 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700"
         >
           Quick start work
         </Link>

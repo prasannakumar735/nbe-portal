@@ -12,7 +12,7 @@ interface TopNavigationProps {
 const NAV_ITEMS = [
   { label: 'Dashboard', icon: 'dashboard', href: '/dashboard' },
   { label: 'Service Quotes', icon: 'request_quote', href: '/dashboard/quotes/service' },
-  { label: 'Timecard', icon: 'schedule', href: '/timecard' },
+  { label: 'Timecards', icon: 'schedule', href: '/dashboard/timecards' },
   { label: 'Maintenance Service', icon: 'build', href: '/maintenance' },
   { label: 'QR Codes', icon: 'qr_code_2', href: '/qr-codes' },
   { label: 'Reimbursement', icon: 'payments', href: '/reimbursement' },
@@ -40,7 +40,12 @@ export function TopNavigation({ user }: TopNavigationProps) {
     }
   }
 
-  const isNavItemActive = (href: string) => pathname === href
+  const isNavItemActive = (href: string) => {
+    if (href === '/reports') {
+      return pathname === '/reports' || pathname.startsWith('/manager/reports')
+    }
+    return pathname === href
+  }
 
   return (
     <header className="h-20 bg-white border-b border-slate-200 flex items-center px-8 shrink-0 z-10">

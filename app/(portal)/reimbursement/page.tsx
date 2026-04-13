@@ -267,17 +267,17 @@ export default function ReimbursementPage() {
   }
 
   return (
-    <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="w-full">
 
       {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+        <div className="mb-6 flex flex-col justify-between gap-3 md:flex-row md:items-center">
           <div>
-            <h2 className="text-2xl font-bold">Reimbursement Claims</h2>
-            <p className="text-slate-500 dark:text-slate-400">Manage and track your expense requests</p>
+            <h2 className="text-xl font-bold">Reimbursement Claims</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Manage and track your expense requests</p>
           </div>
           <button
             onClick={() => setShowModal(true)}
-            className="bg-primary hover:bg-primary/90 text-white font-semibold py-2.5 px-5 rounded-lg flex items-center gap-2 transition-all shadow-sm"
+            className="flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white shadow-sm transition-all hover:bg-primary/90"
           >
             <Plus size={20} />
             New Claim

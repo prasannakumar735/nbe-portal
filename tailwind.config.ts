@@ -11,7 +11,8 @@ const config: Config = {
         'sidebar-dark': '#0f172a',
       },
       fontFamily: {
-        'display': ['Inter', 'sans-serif'],
+        sans: ['Roboto', 'sans-serif'],
+        display: ['Roboto', 'sans-serif'],
       },
       borderRadius: {
         'DEFAULT': '0.25rem',

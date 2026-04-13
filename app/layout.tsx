@@ -1,6 +1,8 @@
 import './globals.css'
 import { AuthProvider } from './providers/AuthProvider'
+import { RoleProvider } from './providers/RoleProvider'
 import { ServiceWorkerRegister } from './components/ServiceWorkerRegister'
+import { ToasterClient } from '@/components/ToasterClient'
 
 export default function RootLayout({
   children,
@@ -8,17 +10,20 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="font-sans" suppressHydrationWarning>
       <head>
         <link
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700&display=swap"
           rel="stylesheet"
         />
       </head>
-      <body>
+      <body className="font-sans">
         <AuthProvider>
-          <ServiceWorkerRegister />
-          {children}
+          <RoleProvider>
+            <ServiceWorkerRegister />
+            <ToasterClient />
+            {children}
+          </RoleProvider>
         </AuthProvider>
       </body>
     </html>

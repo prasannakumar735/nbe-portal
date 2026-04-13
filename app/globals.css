@@ -1,5 +1,60 @@
 @import "tailwindcss";
 
+/*
+ * Root font size: all Tailwind `rem` utilities derive from this.
+ * 13px (vs browser default 16px) keeps the portal visually balanced at 100% zoom
+ * without CSS zoom/transform hacks.
+ */
+html {
+  font-size: 13px;
+  overflow-x: hidden;
+}
+
+/* Roboto — self-hosted from /public/fonts/roboto (Apache 2.0, Google Fonts) */
+@font-face {
+  font-family: 'Roboto';
+  src: url('/fonts/roboto/ROBOTO-LIGHT.TTF') format('truetype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Roboto';
+  src: url('/fonts/roboto/ROBOTO-REGULAR.TTF') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Roboto';
+  src: url('/fonts/roboto/ROBOTO-MEDIUM.TTF') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Roboto';
+  src: url('/fonts/roboto/ROBOTO-BOLD.TTF') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Roboto';
+  src: url('/fonts/roboto/ROBOTO-ITALIC.TTF') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: 'Roboto', sans-serif;
+}
+
 @font-face {
   font-family: 'Material Symbols Outlined';
   src: url('https://fonts.gstatic.com/s/materialsymbolsoutlined/v104/-Hthj4j_w-1Fc7Y2K1z0Cwxq-g.woff2') format('woff2');
@@ -8,15 +63,23 @@
   font-display: swap;
 }
 
+html,
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Roboto', sans-serif;
+}
+
+body {
+  color: rgb(15 23 42);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .material-symbols-outlined {
   font-family: 'Material Symbols Outlined';
   font-weight: normal;
   font-style: normal;
-  font-size: 24px;
+  font-size: 18px;
   display: inline-block;
   line-height: 1;
   text-transform: none;

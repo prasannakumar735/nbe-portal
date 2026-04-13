@@ -124,7 +124,7 @@ export default function DoorQrStickersPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6">
+    <div className="w-full">
       <header className="mb-4 flex flex-col gap-4 border-b border-slate-200 pb-4 print:hidden">
         <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
           <div>

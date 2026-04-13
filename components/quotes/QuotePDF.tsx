@@ -1,5 +1,8 @@
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
+import { registerRobotoForReactPdf } from '@/lib/pdf/reactPdfRoboto'
 import type { ServiceQuoteFormValues } from './types'
+
+registerRobotoForReactPdf()
 
 type QuotePDFProps = {
   data: {
@@ -12,6 +15,7 @@ type QuotePDFProps = {
 
 const styles = StyleSheet.create({
   page: {
+    fontFamily: 'Roboto',
     fontSize: 10,
     paddingTop: 28,
     paddingBottom: 28,

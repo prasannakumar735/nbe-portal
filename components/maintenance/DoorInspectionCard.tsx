@@ -134,6 +134,11 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
 
   if (!door) return null
 
+  const doorNumberLabel = String(door.door_number ?? '').trim() || String(index + 1)
+  const cyclesNum = Number(door.door_cycles)
+  const cyclesDisplay = cyclesNum > 0 && !Number.isNaN(cyclesNum) ? cyclesNum : 'N/A'
+  const visibilityPct = door.view_window_visibility
+
   const formatHistoryDate = (item: DoorInspectionHistoryItem) => {
     const raw = item.created_at
     if (!raw) return 'Unknown date'
@@ -149,15 +154,19 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
         onClick={() => update(index, { ...door, isCollapsed: !door.isCollapsed })}
         className="flex w-full items-center justify-between rounded-2xl px-4 py-4 text-left"
       >
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-base font-bold text-slate-900">Door {index + 1}</h3>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-base font-semibold text-blue-900">Door {doorNumberLabel}</h3>
             {hasFault && (
               <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-red-700">
                 Fault Detected{faultCount > 0 ? ` (${faultCount})` : ''}
               </span>
             )}
           </div>
+          <p className="mt-1 text-sm">
+            Door Type: {door.door_type || '—'} &nbsp; | &nbsp; Cycles: {cyclesDisplay} &nbsp; | &nbsp; View Window Visibility: {visibilityPct}%
+          </p>
+          <hr className="my-3 border-t border-dashed border-gray-400" />
           <p className="text-xs text-slate-500">{completionLabel}</p>
         </div>
         {door.isCollapsed ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}

@@ -179,16 +179,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
         .from('profiles')
         .select('role')
         .eq('id', user.id)
-        .single()
+        .maybeSingle()
 
       if (profileError) {
         throw profileError
       }
 
-      console.log('[dashboard] user.id', user.id)
-      console.log('[dashboard] profile.role', profileData?.role)
+      const rawRole = profileData?.role ?? null
+      role =
+        rawRole === 'admin' || rawRole === 'manager' || rawRole === 'employee' || rawRole === 'technician'
+          ? (rawRole === 'technician' ? 'employee' : rawRole)
+          : null
 
-      role = (profileData?.role as DashboardRole | null) ?? null
       const isPrivileged = role === 'admin' || role === 'manager'
 
       const baseQuery = supabase
@@ -327,7 +329,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
           status: entry.status || 'completed'
         }))
     } catch (error) {
-      console.error('[dashboard] load failed:', error)
+      const msg =
+        error && typeof error === 'object' && 'message' in error
+          ? String((error as { message?: unknown }).message)
+          : error instanceof Error
+            ? error.message
+            : String(error)
+      console.error('[dashboard] load failed:', msg, error)
       errorMessage = 'Unable to load dashboard insights. Please try again.'
     }
   }
@@ -376,8 +384,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
   }
 
   return (
-    <div className="max-w-[1600px] mx-auto px-8 pb-10">
-          <div className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur border-b border-gray-100 py-6">
+    <div className="pb-2">
+          <div className="sticky top-0 z-10 border-b border-gray-100 bg-gray-50/95 py-4 backdrop-blur">
             <DashboardHeader
               title="Dashboard"
               subtitle="Time insights & performance overview"
@@ -391,7 +399,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
             />
           </div>
 
-          <div className="space-y-8 pt-6">
+          <div className="space-y-6 pt-4">
             {errorMessage ? (
               <DashboardErrorState message={errorMessage} />
             ) : isCustomIncomplete ? (

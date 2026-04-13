@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { maintenanceFormSchema } from '@/lib/validation/maintenance'
+import { maintenanceFormDraftSchema, maintenanceFormSubmitSchema } from '@/lib/validation/maintenance'
 import type { MaintenanceChecklistStatus } from '@/lib/types/maintenance.types'
 import { createClient } from '@supabase/supabase-js'
 
@@ -186,7 +186,9 @@ export async function POST(request: NextRequest) {
 
     console.log('Maintenance API payload:', normalized.formCandidate)
 
-    const parsed = maintenanceFormSchema.safeParse(normalized.formCandidate)
+    const formSchema =
+      normalized.status === 'draft' ? maintenanceFormDraftSchema : maintenanceFormSubmitSchema
+    const parsed = formSchema.safeParse(normalized.formCandidate)
 
     if (!parsed.success) {
       return NextResponse.json(

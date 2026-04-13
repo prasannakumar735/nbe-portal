@@ -43,11 +43,9 @@ const ChecklistRow = memo(function ChecklistRow({
     <Controller
       control={control}
       name={fieldName}
-      defaultValue={null}
       render={({ field }) => {
         const radioName = `checklist-${doorIndex}-${item.code}`
         const onValueChange = (value: string) => {
-          console.log('Updating checklist:', doorIndex, item.code, value)
           field.onChange(value)
         }
 
