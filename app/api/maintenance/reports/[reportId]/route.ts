@@ -1,7 +1,9 @@
+import { randomUUID } from 'crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@/lib/supabase/server'
 import { canApproveMaintenanceReport } from '@/lib/auth/roles'
+import { regenerateMaintenanceReportPdfWithClientQr } from '@/lib/maintenance/regenerateReportPdfWithQr'
 
 export const runtime = 'nodejs'
 
@@ -45,21 +47,68 @@ export async function PATCH(
 
     const supabase = createServiceClient()
 
+    const { data: existing, error: loadErr } = await supabase
+      .from('maintenance_reports')
+      .select('id, status, share_token, client_location_id')
+      .eq('id', reportId)
+      .maybeSingle()
+
+    if (loadErr || !existing) {
+      return NextResponse.json({ error: 'Report not found' }, { status: 404 })
+    }
+
+    const locId = String((existing as { client_location_id?: string | null }).client_location_id ?? '').trim()
+    if (!locId) {
+      return NextResponse.json(
+        { error: 'Report has no site / client location; assign a location before approving for client access.' },
+        { status: 400 },
+      )
+    }
+
+    const shareToken = String((existing as { share_token?: string | null }).share_token ?? '').trim() || randomUUID()
+    const approvedAt = new Date().toISOString()
+
     const { data: report, error } = await supabase
       .from('maintenance_reports')
-      .update({ status: 'approved' })
+      .update({
+        status: 'approved',
+        approved: true,
+        approved_at: approvedAt,
+        share_token: shareToken,
+      })
       .eq('id', reportId)
-      .select('id, status')
+      .select('id, status, share_token, approved')
       .single()
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        return NextResponse.json({ error: 'Report not found' }, { status: 404 })
-      }
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ report: { id: report.id, status: report.status } })
+    let pdfRegen: { pdf_url?: string; error?: string } = {}
+    try {
+      const regen = await regenerateMaintenanceReportPdfWithClientQr({
+        supabase,
+        reportId,
+        shareToken,
+      })
+      if ('error' in regen) {
+        pdfRegen = { error: regen.error }
+      } else {
+        pdfRegen = { pdf_url: regen.pdf_url }
+      }
+    } catch (e) {
+      pdfRegen = { error: e instanceof Error ? e.message : 'PDF regeneration failed' }
+    }
+
+    return NextResponse.json({
+      report: {
+        id: report.id,
+        status: report.status,
+        share_token: (report as { share_token?: string }).share_token,
+        approved: (report as { approved?: boolean }).approved,
+      },
+      pdf_regeneration: pdfRegen,
+    })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to approve report'
     return NextResponse.json({ error: message }, { status: 500 })

@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
 import { createServerClient } from '@/lib/supabase/server'
-/** PDF embed is client-only (`components/report/PdfViewer.tsx`, dynamic ssr:false) — see MergedReportViewer. */
 import { MergedReportViewer } from '@/components/merged-report/MergedReportViewer'
 import { ClientReportMessage } from '@/components/merged-report/ClientReportMessage'
 import {
@@ -8,6 +7,10 @@ import {
   fetchMergedReportByAccessToken,
 } from '@/lib/merged-reports/serverAccess'
 import { recordMergedReportView } from '@/lib/merged-reports/recordView'
+import {
+  checkMaintenanceReportClientGate,
+  fetchMaintenanceReportByShareToken,
+} from '@/lib/maintenance-reports/clientAccess'
 
 type PageProps = {
   params: Promise<{ token: string }>
@@ -21,16 +24,6 @@ export default async function ReportViewPage({ params }: PageProps) {
       <ClientReportMessage
         title="Invalid link"
         description="This report link is not valid. Please use the link from your email or contact NBE support."
-      />
-    )
-  }
-
-  const row = await fetchMergedReportByAccessToken(accessToken)
-  if (!row) {
-    return (
-      <ClientReportMessage
-        title="Report unavailable"
-        description="This link is not valid or the report is no longer available."
       />
     )
   }
@@ -61,18 +54,81 @@ export default async function ReportViewPage({ params }: PageProps) {
   }
 
   const userClientId = profile.client_id ? String(profile.client_id) : null
-  const gate = checkMergedReportClientGate(row, userClientId)
 
-  if (gate === 'expired') {
+  /** Try merged report first (existing behaviour), then single maintenance report. */
+  const mergedRow = await fetchMergedReportByAccessToken(accessToken)
+  if (mergedRow) {
+    const gate = checkMergedReportClientGate(mergedRow, userClientId)
+
+    if (gate === 'expired') {
+      return (
+        <ClientReportMessage
+          title="Link expired"
+          description="This report link has expired."
+        />
+      )
+    }
+
+    if (gate === 'wrong_client' || gate === 'no_client_profile') {
+      return (
+        <ClientReportMessage
+          title="Access denied"
+          description="You do not have access to this report. If you believe this is an error, contact NBE support."
+        />
+      )
+    }
+
+    if (!mergedRow.pdf_storage_path) {
+      return (
+        <ClientReportMessage
+          title="Report not ready"
+          description="Unable to load report. Please contact support."
+        />
+      )
+    }
+
+    await recordMergedReportView(mergedRow.id)
+
+    const pdfSrc = `/api/client/merged-report/${encodeURIComponent(accessToken)}/file`
+    const preparedName = (mergedRow.client_name && mergedRow.client_name.trim()) || 'your facility'
+
     return (
-      <ClientReportMessage
-        title="Link expired"
-        description="This report link has expired."
+      <MergedReportViewer
+        pdfSrc={pdfSrc}
+        preparedFor={preparedName}
+        title="Maintenance Inspection Report Summary"
       />
     )
   }
 
-  if (gate === 'wrong_client' || gate === 'no_client_profile') {
+  const singleRow = await fetchMaintenanceReportByShareToken(accessToken)
+  if (!singleRow) {
+    return (
+      <ClientReportMessage
+        title="Report unavailable"
+        description="This link is not valid or the report is no longer available."
+      />
+    )
+  }
+
+  const singleGate = checkMaintenanceReportClientGate(singleRow, userClientId)
+  if (singleGate === 'not_approved') {
+    return (
+      <ClientReportMessage
+        title="Report not shared"
+        description="This report is not yet approved for client viewing."
+      />
+    )
+  }
+  if (singleGate === 'no_pdf') {
+    return (
+      <ClientReportMessage
+        title="Report not ready"
+        description="Unable to load report PDF. Please contact support."
+      />
+    )
+  }
+  if (singleGate === 'wrong_client' || singleGate === 'no_client_profile') {
     return (
       <ClientReportMessage
         title="Access denied"
@@ -81,21 +137,14 @@ export default async function ReportViewPage({ params }: PageProps) {
     )
   }
 
-  if (!row.pdf_storage_path) {
-    return (
-      <ClientReportMessage
-        title="Report not ready"
-        description="Unable to load report. Please contact support."
-      />
-    )
-  }
-
-  await recordMergedReportView(row.id)
-
-  const pdfSrc = `/api/client/merged-report/${encodeURIComponent(accessToken)}/file`
-  const preparedName = (row.client_name && row.client_name.trim()) || 'your facility'
+  const pdfSrc = `/api/client/maintenance-report/${encodeURIComponent(accessToken)}/file`
+  const preparedName = (singleRow.client_name && singleRow.client_name.trim()) || 'your facility'
 
   return (
-    <MergedReportViewer pdfSrc={pdfSrc} preparedFor={preparedName} title="Maintenance Inspection Report Summary" />
+    <MergedReportViewer
+      pdfSrc={pdfSrc}
+      preparedFor={preparedName}
+      title="Maintenance Inspection Report"
+    />
   )
 }
