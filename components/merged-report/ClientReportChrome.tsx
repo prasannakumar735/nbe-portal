@@ -1,4 +1,7 @@
+'use client'
+
 import type { ReactNode } from 'react'
+import { ClientReportHeader } from '@/components/merged-report/ClientReportHeader'
 
 type ClientReportChromeProps = {
   children: ReactNode
@@ -10,15 +13,7 @@ type ClientReportChromeProps = {
 export function ClientReportChrome({ children }: ClientReportChromeProps) {
   return (
     <div className="flex min-h-screen flex-col bg-white">
-      <header className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
-        <img src="/logo.png" alt="NBE Australia" className="h-8 w-auto object-contain" />
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <span aria-hidden className="select-none">
-            🔒
-          </span>
-          <span>Secure Report</span>
-        </div>
-      </header>
+      <ClientReportHeader />
 
       <div className="flex min-h-0 flex-1 flex-col">{children}</div>
 

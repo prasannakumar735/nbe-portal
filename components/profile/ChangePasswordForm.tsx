@@ -90,9 +90,11 @@ function PasswordField({
 
 type ChangePasswordFormProps = {
   userEmail: string
+  /** After password change (or session loss), redirect here to sign in again (default staff `/login`). */
+  signInRedirect?: string
 }
 
-export function ChangePasswordForm({ userEmail }: ChangePasswordFormProps) {
+export function ChangePasswordForm({ userEmail, signInRedirect = '/login' }: ChangePasswordFormProps) {
   const router = useRouter()
   const [current, setCurrent] = useState('')
   const [nextPw, setNextPw] = useState('')
@@ -169,7 +171,7 @@ export function ChangePasswordForm({ userEmail }: ChangePasswordFormProps) {
     const email = userEmail.trim()
     if (!email) {
       toast.error('Session error. Please sign in again.')
-      router.replace('/login')
+      router.replace(signInRedirect)
       return
     }
 
@@ -210,7 +212,7 @@ export function ChangePasswordForm({ userEmail }: ChangePasswordFormProps) {
           : updateErr.message || 'Could not update password. Try again.'
         toast.error(msg)
         if (msg.includes('session')) {
-          router.replace('/login')
+          router.replace(signInRedirect)
         }
         setLoading(false)
         return
@@ -223,7 +225,7 @@ export function ChangePasswordForm({ userEmail }: ChangePasswordFormProps) {
       toast.success('Password updated successfully')
 
       await supabase.auth.signOut({ scope: 'global' })
-      router.replace('/login')
+      router.replace(signInRedirect)
     } catch {
       toast.error('Network error. Check your connection and try again.')
     } finally {
