@@ -5,6 +5,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { canApproveMaintenanceReport } from '@/lib/auth/roles'
 import { regenerateMaintenanceReportPdfWithClientQr } from '@/lib/maintenance/regenerateReportPdfWithQr'
 import { maintenanceReportClientViewUrl } from '@/lib/app/publicAppBaseUrl'
+import { notifyTechnicianOfReportApproval } from '@/lib/maintenance/reportWorkflowEmail'
 
 export const runtime = 'nodejs'
 
@@ -58,6 +59,17 @@ export async function PATCH(
       return NextResponse.json({ error: 'Report not found' }, { status: 404 })
     }
 
+    const priorStatus = String((existing as { status?: string | null }).status ?? '').trim()
+    if (priorStatus === 'approved') {
+      return NextResponse.json({ error: 'Report already approved.' }, { status: 409 })
+    }
+    if (priorStatus !== 'submitted' && priorStatus !== 'reviewing') {
+      return NextResponse.json(
+        { error: 'Only submitted reports can be approved.' },
+        { status: 400 },
+      )
+    }
+
     const locId = String((existing as { client_location_id?: string | null }).client_location_id ?? '').trim()
     if (!locId) {
       return NextResponse.json(
@@ -83,6 +95,25 @@ export async function PATCH(
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    let technicianApprovalEmail: { status: string; detail?: string } = { status: 'skipped' }
+    try {
+      const approvalNotify = await notifyTechnicianOfReportApproval(supabase, reportId, shareToken)
+      if (approvalNotify.status === 'failed') {
+        technicianApprovalEmail = { status: 'failed', detail: approvalNotify.error }
+        console.error('[approve report] Technician approval email failed', approvalNotify.error)
+      } else if (approvalNotify.status === 'skipped') {
+        technicianApprovalEmail = { status: 'skipped', detail: approvalNotify.reason }
+      } else {
+        technicianApprovalEmail = { status: 'sent' }
+      }
+    } catch (e) {
+      technicianApprovalEmail = {
+        status: 'failed',
+        detail: e instanceof Error ? e.message : String(e),
+      }
+      console.error('[approve report] Technician approval email error', e)
     }
 
     let pdfRegen: { pdf_url?: string; error?: string } = {}
@@ -111,6 +142,7 @@ export async function PATCH(
         approved: (report as { approved?: boolean }).approved,
       },
       client_view_url: maintenanceReportClientViewUrl(tokenOut),
+      technician_approval_email: technicianApprovalEmail,
       pdf_regeneration: pdfRegen,
     })
   } catch (err) {

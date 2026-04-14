@@ -6,7 +6,10 @@
 export type GraphSendMailOptions = {
   to: string
   subject: string
-  bodyText: string
+  /** Plain-text body (used when bodyHtml is not set). */
+  bodyText?: string
+  /** HTML body; takes precedence over bodyText when set. */
+  bodyHtml?: string
   /** Optional; defaults to process.env.MS_GRAPH_MAIL_USER_ID or MS_ONEDRIVE_USER_ID */
   sendAsUserId?: string
 }
@@ -55,7 +58,7 @@ async function getGraphAccessToken(): Promise<string> {
  * Uses POST /users/{userId}/sendMail.
  */
 export async function sendMailViaGraph(options: GraphSendMailOptions): Promise<void> {
-  const { to, subject, bodyText, sendAsUserId } = options
+  const { to, subject, bodyText, bodyHtml, sendAsUserId } = options
 
   const userId =
     sendAsUserId?.trim() ||
@@ -68,15 +71,20 @@ export async function sendMailViaGraph(options: GraphSendMailOptions): Promise<v
     )
   }
 
+  const html = bodyHtml?.trim()
+  const text = bodyText?.trim()
+  if (!html && !text) {
+    throw new Error('sendMailViaGraph requires bodyHtml or bodyText.')
+  }
+
   const token = await getGraphAccessToken()
 
   const payload = {
     message: {
       subject,
-      body: {
-        contentType: 'Text',
-        content: bodyText,
-      },
+      body: html
+        ? { contentType: 'HTML', content: html }
+        : { contentType: 'Text', content: text! },
       toRecipients: [
         {
           emailAddress: {

@@ -104,9 +104,7 @@ export async function POST(request: NextRequest) {
     const pdfArrayBuffer = await pdfResponse.arrayBuffer()
     const pdfBuffer = Buffer.from(pdfArrayBuffer)
 
-    const technicianEmail = String((report as Record<string, unknown>).technician_email ?? '').trim()
-    const systemEmail = process.env.SYSTEM_EMAIL || 'noreply@nbeaustralia.com.au'
-    const fromEmail = technicianEmail || systemEmail
+    const fromEmail = 'noreply@nbeaustralia.com.au'
 
     const siteName = deriveSiteName(locationName, clientName)
 
