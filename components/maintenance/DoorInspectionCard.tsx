@@ -197,11 +197,12 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
 
   const doorDetailsEnabled = reportSchemaVersion >= 2
   const master = door.door_master
+  /** Description / alt type stay read-only when present; CW & CH are edited in the main grid below. */
   const registryMasterReadonly =
     doorDetailsEnabled &&
     !door.adhoc_manual &&
     master &&
-    [master.door_description, master.door_type_alt, master.cw, master.ch].some(v => String(v ?? '').trim())
+    [master.door_description, master.door_type_alt].some(v => String(v ?? '').trim())
 
   const selectDoorValue = door.door_id?.trim()
     ? door.door_id
@@ -381,30 +382,6 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
                         className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3 text-base"
                       />
                     </label>
-                    <label className="block text-sm font-medium text-slate-800">
-                      CW
-                      <input
-                        type="text"
-                        value={String(door.door_master?.cw ?? '')}
-                        onChange={e => {
-                          const v = e.target.value
-                          setMasterField('cw', v === '' ? null : v)
-                        }}
-                        className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3 text-base"
-                      />
-                    </label>
-                    <label className="block text-sm font-medium text-slate-800">
-                      CH
-                      <input
-                        type="text"
-                        value={String(door.door_master?.ch ?? '')}
-                        onChange={e => {
-                          const v = e.target.value
-                          setMasterField('ch', v === '' ? null : v)
-                        }}
-                        className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3 text-base"
-                      />
-                    </label>
                   </div>
                 )}
               </div>
@@ -424,18 +401,6 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
                     <div>
                       <dt className="text-xs font-semibold text-slate-500">Alternate type</dt>
                       <dd>{String(master?.door_type_alt)}</dd>
-                    </div>
-                  ) : null}
-                  {String(master?.cw ?? '').trim() ? (
-                    <div>
-                      <dt className="text-xs font-semibold text-slate-500">CW</dt>
-                      <dd>{String(master?.cw)}</dd>
-                    </div>
-                  ) : null}
-                  {String(master?.ch ?? '').trim() ? (
-                    <div>
-                      <dt className="text-xs font-semibold text-slate-500">CH</dt>
-                      <dd>{String(master?.ch)}</dd>
                     </div>
                   ) : null}
                 </dl>
@@ -500,6 +465,39 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
                 />
                 <p className="mt-1 text-xs text-slate-500">Enter the door cycle count from the control panel.</p>
               </label>
+
+              {doorDetailsEnabled && (
+                <>
+                  <label className="text-sm font-medium text-slate-700">
+                    CW
+                    <input
+                      type="text"
+                      value={String(door.door_master?.cw ?? '')}
+                      onChange={e => {
+                        const v = e.target.value
+                        setMasterField('cw', v === '' ? null : v)
+                      }}
+                      disabled={disabled}
+                      placeholder="Curtain width (optional)"
+                      className="mt-1 h-12 w-full rounded-xl border border-slate-300 px-3 pb-2 text-base"
+                    />
+                  </label>
+                  <label className="text-sm font-medium text-slate-700">
+                    CH
+                    <input
+                      type="text"
+                      value={String(door.door_master?.ch ?? '')}
+                      onChange={e => {
+                        const v = e.target.value
+                        setMasterField('ch', v === '' ? null : v)
+                      }}
+                      disabled={disabled}
+                      placeholder="Curtain height (optional)"
+                      className="mt-1 h-12 w-full rounded-xl border border-slate-300 px-3 pb-2 text-base"
+                    />
+                  </label>
+                </>
+              )}
 
               <label className="text-sm font-medium text-slate-700 md:col-span-2">
                 View Window Visibility (%)
