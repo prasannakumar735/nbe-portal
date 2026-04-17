@@ -63,7 +63,7 @@ export async function loadJobDetailExport(supabase: SupabaseClient, jobId: strin
     const { data: ev } = await supabase
       .from('calendar_events')
       .select(
-        'date, start_time, travel_minutes, duration_minutes, client_id, location_id, clients ( name ), client_locations ( location_name, name, site_name, suburb, address, Company_address )',
+        'date, start_time, travel_minutes, duration_minutes, client_id, location_id, clients ( name ), client_locations ( site_name, suburb, Company_address )',
       )
       .eq('id', job.event_id)
       .maybeSingle()
@@ -94,7 +94,7 @@ export async function loadJobDetailExport(supabase: SupabaseClient, jobId: strin
     if (job.location_id) {
       const { data: loc } = await supabase
         .from('client_locations')
-        .select('location_name, name, site_name, suburb, address, Company_address')
+        .select('location_name, suburb, Company_address')
         .eq('id', job.location_id)
         .maybeSingle()
       locLabel = clientLocationLabel(loc as Record<string, unknown>) || null

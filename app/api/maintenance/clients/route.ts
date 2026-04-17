@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
+import { clientNameFromDbRow } from '@/lib/supabase/clientsDb'
 
 function mapClientRow(row: Record<string, unknown>) {
-  const name = String(row.client_name ?? row.name ?? row.company_name ?? '').trim()
+  const name = clientNameFromDbRow(row as { name?: string | null; client_name?: string | null; company_name?: string | null })
   return {
     id: String(row.id ?? ''),
-    name: name || 'Unknown Client',
+    name,
   }
 }
 

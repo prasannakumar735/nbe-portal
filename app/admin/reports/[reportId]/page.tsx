@@ -73,6 +73,7 @@ export default function AdminReportEditPage() {
       reportIdFromRoute={reportId}
       initialReport={initialReport}
       isAdminMode
+      serverReportStatus={String((initialReport as { status?: string }).status ?? 'reviewing')}
     />
   )
 }

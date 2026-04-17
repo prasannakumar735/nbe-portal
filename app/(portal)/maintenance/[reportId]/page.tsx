@@ -55,6 +55,12 @@ export default function MaintenanceReportEditPage() {
     }
   }, [offline.initialReportRecord, offline.reportStatus])
 
+  /** Stable identity — a new object each render retriggered the form `watch` → offline persist effect and caused input jank + draft GET storms. */
+  const offlineMirrorStable = useMemo(
+    () => ({ onPersist: offline.persistForm }),
+    [offline.persistForm],
+  )
+
   const accessError = useMemo(() => {
     if (offline.status !== 'ready' || !offline.reportStatus) return null
     const st = offline.reportStatus
@@ -121,9 +127,10 @@ export default function MaintenanceReportEditPage() {
         reportIdFromRoute={reportId}
         initialReport={initialReportMerged}
         isAdminMode={isManagerView}
+        serverReportStatus={offline.reportStatus}
         onApproved={() => router.push('/maintenance')}
         hydrateOnlyFromInitialReport
-        offlineMirror={{ onPersist: offline.persistForm }}
+        offlineMirror={offlineMirrorStable}
         offlineSaveStatusLabel={formatOfflineSaveStatus(offline.saveStatus)}
       />
     </div>

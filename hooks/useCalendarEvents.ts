@@ -132,7 +132,7 @@ export function useCalendarEvents(options: { userId: string; canManage: boolean 
       const calendarSelect = `
         *,
         clients ( name ),
-        client_locations ( location_name, name, site_name, suburb )
+        client_locations ( location_name, suburb )
       `
       let res = await supabase
         .from('calendar_events')

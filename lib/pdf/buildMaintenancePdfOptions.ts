@@ -269,7 +269,7 @@ export async function buildMaintenancePdfOptions(params: {
     const location = (locationData as LocationRow | null)
     if (location) {
       locationName = String(
-        location.location_name ?? location.name ?? location.suburb ?? location.site_name ?? ''
+        location.location_name ?? location.name ?? location.site_name ?? location.suburb ?? ''
       ).trim()
 
       const companyAddress = String(location.Company_address ?? '').trim()

@@ -2,16 +2,36 @@
 
 import { UserDropdown } from './UserDropdown'
 
-interface HeaderProps {
-  user: any
+export type HeaderMobileMenu = {
+  isOpen: boolean
+  onToggle: () => void
 }
 
-export function Header({ user }: HeaderProps) {
+interface HeaderProps {
+  user: any
+  /** When set (mobile layout), menu control sits in the header row — avoids fixed-position misalignment on small screens. */
+  mobileMenu?: HeaderMobileMenu | null
+}
+
+export function Header({ user, mobileMenu }: HeaderProps) {
   return (
-    <header className="relative z-50 flex h-14 shrink-0 items-center justify-between overflow-visible border-b border-slate-200 bg-white px-4">
-      <div className="flex max-w-md flex-1 items-center">
-        <div className="relative w-full">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-slate-400">
+    <header className="relative z-50 flex h-14 shrink-0 items-center justify-between gap-2 overflow-visible border-b border-slate-200 bg-white px-3 sm:px-4">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        {mobileMenu ? (
+          <button
+            type="button"
+            onClick={mobileMenu.onToggle}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
+            aria-expanded={mobileMenu.isOpen}
+            aria-label={mobileMenu.isOpen ? 'Close navigation menu' : 'Open navigation menu'}
+          >
+            <span className="material-symbols-outlined text-[22px] leading-none">
+              {mobileMenu.isOpen ? 'close' : 'menu'}
+            </span>
+          </button>
+        ) : null}
+        <div className="relative min-w-0 max-w-md flex-1">
+          <span className="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-slate-400">
             search
           </span>
           <input
@@ -22,7 +42,7 @@ export function Header({ user }: HeaderProps) {
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-4">
         <button
           aria-label="Notifications"
           className="relative p-2 text-slate-500 transition-colors hover:text-indigo-600"

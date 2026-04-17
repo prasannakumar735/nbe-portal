@@ -103,7 +103,7 @@ export async function GET() {
       const loc = resolvedLocationId ? locMap.get(resolvedLocationId) : null
       const client = loc?.client_id ? clientMap.get(loc.client_id) : null
       const locationName = loc
-        ? String(loc.location_name ?? loc.name ?? loc.suburb ?? loc.site_name ?? '').trim() || '—'
+        ? String(loc.location_name ?? loc.name ?? loc.site_name ?? loc.suburb ?? '').trim() || '—'
         : '—'
       const clientName = client
         ? String(client.client_name ?? client.name ?? client.company_name ?? '').trim() || '—'

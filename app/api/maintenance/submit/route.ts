@@ -128,22 +128,22 @@ export async function POST(request: NextRequest) {
     try {
       const { data: locationRow } = await supabase
         .from('client_locations')
-        .select('location_name, name, suburb, site_name, client_id')
+        .select('location_name, suburb, client_id')
         .eq('id', finalForm.client_location_id)
         .single()
 
       const loc = locationRow as Record<string, unknown> | null
       let clientLocationSegment = String(
-        loc?.location_name ?? loc?.name ?? loc?.suburb ?? loc?.site_name ?? 'Unknown',
+        loc?.location_name ?? loc?.suburb ?? 'Unknown',
       ).trim()
       if (loc?.client_id) {
         const { data: clientRow } = await supabase
           .from('clients')
-          .select('client_name, name, company_name')
+          .select('name, company_name')
           .eq('id', loc.client_id)
           .single()
         const c = clientRow as Record<string, unknown> | null
-        const clientName = String(c?.client_name ?? c?.name ?? c?.company_name ?? '').trim()
+        const clientName = String(c?.name ?? c?.company_name ?? '').trim()
         if (clientName) clientLocationSegment = `${clientName} ${clientLocationSegment}`.trim()
       }
       clientLocationSegment = clientLocationSegment.replace(/[\\/:*?"<>|]/g, '_') || 'Unknown'

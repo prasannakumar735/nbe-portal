@@ -46,17 +46,17 @@ export async function GET() {
     const { data: locations } = locationIds.length
       ? await supabase
           .from('client_locations')
-          .select('id, location_name, name, suburb, site_name, client_id')
+          .select('id, location_name, suburb, client_id')
           .in('id', locationIds)
-      : { data: [] as Array<{ id: string; location_name?: string; name?: string; suburb?: string; site_name?: string; client_id?: string }> }
+      : { data: [] as Array<{ id: string; location_name?: string; suburb?: string; client_id?: string }> }
 
     const clientIds = [...new Set((locations ?? []).map(l => l.client_id).filter(Boolean))] as string[]
     const { data: clients } = clientIds.length
       ? await supabase
           .from('clients')
-          .select('id, client_name, name, company_name')
+          .select('id, name, company_name')
           .in('id', clientIds)
-      : { data: [] as Array<{ id: string; client_name?: string; name?: string; company_name?: string }> }
+      : { data: [] as Array<{ id: string; name?: string; company_name?: string }> }
 
     const locMap = new Map((locations ?? []).map(l => [l.id, l]))
     const clientMap = new Map((clients ?? []).map(c => [c.id, c]))
@@ -65,10 +65,10 @@ export async function GET() {
       const loc = r.client_location_id ? locMap.get(r.client_location_id) : null
       const client = loc?.client_id ? clientMap.get(loc.client_id) : null
       const locationName = loc
-        ? String(loc.location_name ?? loc.name ?? loc.suburb ?? loc.site_name ?? '').trim()
+        ? String(loc.location_name ?? loc.suburb ?? '').trim()
         : ''
       const clientName = client
-        ? String(client.client_name ?? client.name ?? client.company_name ?? '').trim()
+        ? String(client.name ?? client.company_name ?? '').trim()
         : ''
       return {
         id: r.id,

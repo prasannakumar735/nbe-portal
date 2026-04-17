@@ -23,11 +23,11 @@ async function resolveClientNames(
   const map = new Map<string, string>()
   if (unique.length === 0) return map
 
-  const { data, error } = await service.from('clients').select('id, client_name, name').in('id', unique)
+  const { data, error } = await service.from('clients').select('id, name, company_name').in('id', unique)
   if (error || !data) return map
 
-  for (const row of data as { id: string; client_name?: string | null; name?: string | null }[]) {
-    const label = String(row.client_name ?? row.name ?? '').trim() || 'Client'
+  for (const row of data as { id: string; name?: string | null; company_name?: string | null }[]) {
+    const label = String(row.name ?? row.company_name ?? '').trim() || 'Client'
     map.set(String(row.id), label)
   }
   return map

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { useAuth } from '@/app/providers/AuthProvider'
@@ -68,6 +68,91 @@ const MERGE_STEPS = [
   { title: 'Finishing up', detail: 'Encoding file and preparing your download…' },
 ] as const
 
+function CollapsibleReportSection({
+  sectionId,
+  title,
+  subtitle,
+  badge,
+  open,
+  onToggle,
+  variant = 'default',
+  headerAside,
+  children,
+}: {
+  sectionId: string
+  title: string
+  subtitle: string
+  badge?: number
+  open: boolean
+  onToggle: () => void
+  variant?: 'default' | 'amber'
+  headerAside?: ReactNode
+  children: ReactNode
+}) {
+  const wrap =
+    variant === 'amber'
+      ? 'overflow-hidden rounded-xl border border-amber-200 bg-amber-50/40 shadow-sm'
+      : 'overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm'
+  const header =
+    variant === 'amber'
+      ? 'border-b border-amber-200 bg-amber-50 hover:bg-amber-100/80'
+      : 'border-b border-slate-200 bg-slate-50 hover:bg-slate-100/80'
+
+  const headingId = `maint-section-h-${sectionId}`
+  const panelId = `maint-section-panel-${sectionId}`
+
+  return (
+    <div className={wrap}>
+      <div className={`flex w-full items-stretch gap-1 transition-colors ${header}`}>
+        <button
+          type="button"
+          id={headingId}
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={onToggle}
+          className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left"
+        >
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-bold text-slate-900">
+              {title}
+              {badge != null && badge > 0 ? (
+                <span className="ml-2 inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700 tabular-nums">
+                  {badge}
+                </span>
+              ) : null}
+            </h2>
+            <p className="text-xs text-slate-600">{subtitle}</p>
+          </div>
+        </button>
+        {headerAside ? (
+          <div className="flex shrink-0 items-center border-l border-slate-200/80 px-2 py-2">{headerAside}</div>
+        ) : null}
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={onToggle}
+          className="flex shrink-0 items-center px-3 text-slate-600 hover:text-slate-900"
+          aria-label={open ? 'Collapse section' : 'Expand section'}
+        >
+          <span className="material-symbols-outlined" aria-hidden>
+            {open ? 'expand_less' : 'expand_more'}
+          </span>
+        </button>
+      </div>
+      {open ? (
+        <div id={panelId} role="region" aria-labelledby={headingId}>
+          {children}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function canSelectReportForMerge(report: ReportRow): boolean {
+  return report.status !== 'draft'
+}
+
 export default function MaintenanceDashboardPage() {
   const { isManager, isAdmin } = useAuth()
   const canMergeReports = isManager || isAdmin
@@ -91,6 +176,19 @@ export default function MaintenanceDashboardPage() {
   const [offlineReports, setOfflineReports] = useState<OfflineInspectionRecord[]>([])
   const [offlineLoading, setOfflineLoading] = useState(false)
   const [offlineSyncingAll, setOfflineSyncingAll] = useState(false)
+
+  const [openSubmitted, setOpenSubmitted] = useState(true)
+  const [openApproved, setOpenApproved] = useState(true)
+  const [openDrafts, setOpenDrafts] = useState(true)
+  const [openMerged, setOpenMerged] = useState(true)
+  const [openDeletedMerged, setOpenDeletedMerged] = useState(true)
+
+  const submittedReports = useMemo(
+    () => reports.filter((r) => ['submitted', 'reviewing', 'rejected'].includes(r.status)),
+    [reports],
+  )
+  const approvedReports = useMemo(() => reports.filter((r) => r.status === 'approved'), [reports])
+  const draftReports = useMemo(() => reports.filter((r) => r.status === 'draft'), [reports])
 
   useEffect(() => {
     if (!merging) {
@@ -414,6 +512,104 @@ export default function MaintenanceDashboardPage() {
     }
   }
 
+  const renderReportTable = (list: ReportRow[], emptyMessage: string) => {
+    if (list.length === 0) {
+      return <div className="px-4 py-6 text-sm text-slate-600">{emptyMessage}</div>
+    }
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 bg-white">
+              {canMergeReports && (
+                <th className="w-12 px-4 py-3 font-semibold text-slate-700">
+                  <span className="sr-only">Select</span>
+                </th>
+              )}
+              <th className="px-4 py-3 font-semibold text-slate-700">Report ID</th>
+              <th className="px-4 py-3 font-semibold text-slate-700">Client</th>
+              <th className="px-4 py-3 font-semibold text-slate-700">Location</th>
+              <th className="px-4 py-3 font-semibold text-slate-700">Technician</th>
+              <th className="px-4 py-3 font-semibold text-slate-700">Inspection Date</th>
+              <th className="px-4 py-3 font-semibold text-slate-700">Status</th>
+              <th className="px-4 py-3 font-semibold text-slate-700">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.map((report) => (
+              <tr key={report.id} className="border-b border-slate-100 hover:bg-slate-50">
+                {canMergeReports && (
+                  <td className="px-4 py-3">
+                    {canSelectReportForMerge(report) ? (
+                      <input
+                        type="checkbox"
+                        checked={selectedReports.includes(report.id)}
+                        onChange={(e) => toggleSelected(report.id, e.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                        aria-label={`Select report ${report.report_number ?? report.id.slice(0, 8)}`}
+                      />
+                    ) : (
+                      <span className="inline-block w-4" aria-hidden />
+                    )}
+                  </td>
+                )}
+                <td className="px-4 py-3 font-mono text-xs text-slate-600">
+                  {report.report_number ?? report.id.slice(0, 8)}
+                </td>
+                <td className="px-4 py-3 text-slate-800">{report.client_name}</td>
+                <td className="px-4 py-3 text-slate-800">{report.location_name}</td>
+                <td className="px-4 py-3 text-slate-800">{report.technician_name}</td>
+                <td className="px-4 py-3 text-slate-800">{report.inspection_date}</td>
+                <td className="px-4 py-3">
+                  <span className={statusStyles[report.status] ?? statusStyles.draft}>
+                    {statusLabel(report.status)}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      href={`/maintenance/${report.id}`}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      View Report
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => void handleDownloadPdf(report.id)}
+                      className="rounded-lg border border-gray-300 px-3 py-1 text-sm hover:bg-gray-100"
+                    >
+                      Download
+                    </button>
+                    {report.client_view_url ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(report.client_view_url!).then(() => {
+                            toast.success('Client link copied')
+                          })
+                        }}
+                        className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
+                      >
+                        Copy client link
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadAllPhotos(report.id)}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      Download All Photos
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -595,114 +791,182 @@ export default function MaintenanceDashboardPage() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3">
-          <div>
-            <h2 className="text-sm font-bold text-slate-900">Offline Reports</h2>
-            <p className="text-xs text-slate-600">Reports saved locally on this device (offline-safe)</p>
-          </div>
+      {!loading && reports.length === 0 && (
+        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-8 text-center">
+          <p className="text-sm text-slate-600">No maintenance reports in your account yet.</p>
+          <Link
+            href="/maintenance/new?fresh=1"
+            className="inline-flex h-10 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            New Maintenance Report
+          </Link>
+        </div>
+      )}
+
+      <CollapsibleReportSection
+        sectionId="drafts"
+        title="Drafted reports"
+        subtitle="Server drafts and offline saves on this device"
+        badge={draftReports.length + offlineReports.length}
+        open={openDrafts}
+        onToggle={() => setOpenDrafts((v) => !v)}
+        headerAside={
           <div className="flex items-center gap-2">
-            {offlineLoading && <span className="text-xs text-slate-500">Loading…</span>}
+            {offlineLoading ? <span className="text-xs text-slate-500">Loading…</span> : null}
             <button
               type="button"
-              onClick={() => void syncAllOffline()}
-              disabled={!isOnline || offlineSyncingAll || offlineReports.filter(r => r.status === 'pending').length === 0}
-              className="h-9 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+              onClick={(e) => {
+                e.stopPropagation()
+                void syncAllOffline()
+              }}
+              disabled={!isOnline || offlineSyncingAll || offlineReports.filter((r) => r.status === 'pending').length === 0}
+              className="h-8 rounded-lg bg-slate-900 px-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
             >
-              {offlineSyncingAll ? 'Syncing…' : 'Sync Pending Reports'}
+              {offlineSyncingAll ? 'Syncing…' : 'Sync offline'}
             </button>
           </div>
-        </div>
-
-        {offlineReports.length === 0 ? (
-          <div className="px-4 py-6 text-sm text-slate-600">No offline reports.</div>
+        }
+      >
+        {loading ? (
+          <div className="flex items-center justify-center py-8 text-sm text-slate-500">Loading server drafts…</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-white">
-                  <th className="px-4 py-3 font-semibold text-slate-700">Created</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">Technician</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">Client</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">Status</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {offlineReports.map((r) => {
-                  const statusLabel =
-                    r.status === 'syncing'
-                      ? 'Syncing...'
-                      : r.status === 'synced'
-                        ? 'Synced ✅'
-                        : (r.attempt_count ?? 0) > 0
-                          ? 'Failed ❌'
-                          : 'Pending'
-                  const statusStyle =
-                    r.status === 'syncing'
-                      ? 'bg-blue-100 text-blue-800'
-                      : r.status === 'synced'
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : (r.attempt_count ?? 0) > 0
-                          ? 'bg-red-100 text-red-800'
-                          : 'bg-amber-100 text-amber-800'
-                  return (
-                    <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
-                      <td className="px-4 py-3 text-slate-600">{new Date(r.created_at).toLocaleString()}</td>
-                      <td className="px-4 py-3 text-slate-800">{r.report_data.technician_name || '—'}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-slate-700">
-                        {r.report_data.client_id ? r.report_data.client_id.slice(0, 8) : '—'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${statusStyle}`}>
-                          {statusLabel}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => void syncOneOffline(r)}
-                            disabled={!isOnline || r.status === 'syncing' || r.status === 'synced'}
-                            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                          >
-                            Sync
-                          </button>
-                          <Link
-                            href={`/maintenance/new?offline_id=${encodeURIComponent(r.id)}`}
-                            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                          >
-                            Edit
-                          </Link>
-                          <button
-                            type="button"
-                            onClick={() => void (async () => { await offlineDelete(r.id); await refreshOffline() })()}
-                            disabled={r.status === 'syncing'}
-                            className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <p className="border-b border-slate-100 bg-slate-50/80 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Server drafts
+            </p>
+            {renderReportTable(draftReports, 'No draft reports saved on the server.')}
+          </>
         )}
-      </div>
+        <div className="border-t border-slate-200">
+          <p className="bg-slate-50/80 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+            Offline (this device)
+          </p>
+          {offlineReports.length === 0 ? (
+            <div className="px-4 py-6 text-sm text-slate-600">No offline reports.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-white">
+                    <th className="px-4 py-3 font-semibold text-slate-700">Created</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">Technician</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">Client</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">Status</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {offlineReports.map((r) => {
+                    const offlineStatusLabel =
+                      r.status === 'syncing'
+                        ? 'Syncing...'
+                        : r.status === 'synced'
+                          ? 'Synced ✅'
+                          : (r.attempt_count ?? 0) > 0
+                            ? 'Failed ❌'
+                            : 'Pending'
+                    const offlineStatusStyle =
+                      r.status === 'syncing'
+                        ? 'bg-blue-100 text-blue-800'
+                        : r.status === 'synced'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : (r.attempt_count ?? 0) > 0
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-amber-100 text-amber-800'
+                    return (
+                      <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
+                        <td className="px-4 py-3 text-slate-600">{new Date(r.created_at).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-slate-800">{r.report_data.technician_name || '—'}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-slate-700">
+                          {r.report_data.client_id ? r.report_data.client_id.slice(0, 8) : '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${offlineStatusStyle}`}>
+                            {offlineStatusLabel}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void syncOneOffline(r)}
+                              disabled={!isOnline || r.status === 'syncing' || r.status === 'synced'}
+                              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                            >
+                              Sync
+                            </button>
+                            <Link
+                              href={`/maintenance/new?offline_id=${encodeURIComponent(r.id)}`}
+                              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                            >
+                              Edit
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => void (async () => {
+                                await offlineDelete(r.id)
+                                await refreshOffline()
+                              })()}
+                              disabled={r.status === 'syncing'}
+                              className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </CollapsibleReportSection>
+
+      <CollapsibleReportSection
+        sectionId="submitted"
+        title="Submitted reports"
+        subtitle="Submitted, in review, or rejected — awaiting approval or follow-up"
+        badge={submittedReports.length}
+        open={openSubmitted}
+        onToggle={() => setOpenSubmitted((v) => !v)}
+      >
+        {loading ? (
+          <div className="flex items-center justify-center py-12 text-sm text-slate-500">Loading reports…</div>
+        ) : (
+          renderReportTable(
+            submittedReports,
+            'No reports in this stage. Submitted and in-review inspections appear here.',
+          )
+        )}
+      </CollapsibleReportSection>
+
+      <CollapsibleReportSection
+        sectionId="approved"
+        title="Approved reports"
+        subtitle="Signed-off inspections with a shareable client link when available"
+        badge={approvedReports.length}
+        open={openApproved}
+        onToggle={() => setOpenApproved((v) => !v)}
+      >
+        {loading ? (
+          <div className="flex items-center justify-center py-12 text-sm text-slate-500">Loading reports…</div>
+        ) : (
+          renderReportTable(approvedReports, 'No approved reports yet.')
+        )}
+      </CollapsibleReportSection>
 
       {canMergeReports && (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3">
-            <div>
-              <h2 className="text-sm font-bold text-slate-900">Merged Reports</h2>
-              <p className="text-xs text-slate-600">Previously merged PDFs</p>
-            </div>
-            {loadingMerged && <span className="text-xs text-slate-500">Loading…</span>}
-          </div>
-
+        <CollapsibleReportSection
+          sectionId="merged"
+          title="Merged reports"
+          subtitle="Previously merged PDFs"
+          badge={mergedReports.length}
+          open={openMerged}
+          onToggle={() => setOpenMerged((v) => !v)}
+          headerAside={loadingMerged ? <span className="text-xs text-slate-500">Loading…</span> : null}
+        >
           {mergedReports.length === 0 ? (
             <div className="px-4 py-6 text-sm text-slate-600">No merged reports yet.</div>
           ) : (
@@ -770,170 +1034,73 @@ export default function MaintenanceDashboardPage() {
               </table>
             </div>
           )}
-        </div>
+        </CollapsibleReportSection>
       )}
 
-      {canMergeReports && mergedDeletedReports.length > 0 && (
-        <div className="overflow-hidden rounded-xl border border-amber-200 bg-amber-50/40 shadow-sm">
-          <div className="border-b border-amber-200 bg-amber-50 px-4 py-3">
-            <h2 className="text-sm font-bold text-slate-900">Recently deleted merged reports</h2>
-            <p className="text-xs text-slate-600">
-              Soft-deleted reports stay recoverable here until permanently purged (scheduled cleanup, typically 30+ days).
-            </p>
-          </div>
-          <div className="overflow-x-auto bg-white">
-            <table className="w-full min-w-[720px] border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-white">
-                  <th className="px-4 py-3 font-semibold text-slate-700">Client</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">Deleted</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mergedDeletedReports.map((m) => (
-                  <tr key={m.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="px-4 py-3 text-slate-800">{m.client_name}</td>
-                    <td className="px-4 py-3 text-slate-600">{formatDateTime(m.deleted_at)}</td>
-                    <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        disabled={restoringMergedId === m.id}
-                        onClick={() => {
-                          void (async () => {
-                            setRestoringMergedId(m.id)
-                            try {
-                              await restoreMergedReportById(m.id)
-                            } catch (err) {
-                              toast.error(err instanceof Error ? err.message : 'Restore failed')
-                            } finally {
-                              setRestoringMergedId(null)
-                            }
-                          })()
-                        }}
-                        className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
-                      >
-                        {restoringMergedId === m.id ? (
-                          <span
-                            className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-600 border-t-transparent"
-                            aria-hidden
-                          />
-                        ) : null}
-                        Restore
-                      </button>
-                    </td>
+      {canMergeReports && (
+        <CollapsibleReportSection
+          sectionId="deleted-merged"
+          title="Recently deleted merged reports"
+          subtitle="Soft-deleted reports stay recoverable until permanently purged (typically 30+ days)"
+          badge={mergedDeletedReports.length}
+          open={openDeletedMerged}
+          onToggle={() => setOpenDeletedMerged((v) => !v)}
+          variant="amber"
+        >
+          {mergedDeletedReports.length === 0 ? (
+            <div className="border-t border-amber-100 bg-white px-4 py-6 text-sm text-slate-600">
+              No recently deleted merged reports.
+            </div>
+          ) : (
+            <div className="overflow-x-auto border-t border-amber-100 bg-white">
+              <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-white">
+                    <th className="px-4 py-3 font-semibold text-slate-700">Client</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">Deleted</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <p className="text-slate-500">Loading reports…</p>
-          </div>
-        ) : reports.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-            <p className="text-slate-600">No maintenance reports yet.</p>
-            <Link
-              href="/maintenance/new?fresh=1"
-              className="inline-flex h-10 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800"
-            >
-              New Maintenance Report
-            </Link>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
-                  {canMergeReports && (
-                    <th className="w-12 px-4 py-3 font-semibold text-slate-700">
-                      <span className="sr-only">Select</span>
-                    </th>
-                  )}
-                  <th className="px-4 py-3 font-semibold text-slate-700">Report ID</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">Client</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">Location</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">Technician</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">Inspection Date</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">Status</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reports.map((report) => (
-                  <tr key={report.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    {canMergeReports && (
+                </thead>
+                <tbody>
+                  {mergedDeletedReports.map((m) => (
+                    <tr key={m.id} className="border-b border-slate-100 hover:bg-slate-50">
+                      <td className="px-4 py-3 text-slate-800">{m.client_name}</td>
+                      <td className="px-4 py-3 text-slate-600">{formatDateTime(m.deleted_at)}</td>
                       <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          checked={selectedReports.includes(report.id)}
-                          onChange={(e) => toggleSelected(report.id, e.target.checked)}
-                          className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-                          aria-label={`Select report ${report.report_number ?? report.id.slice(0, 8)}`}
-                        />
+                        <button
+                          type="button"
+                          disabled={restoringMergedId === m.id}
+                          onClick={() => {
+                            void (async () => {
+                              setRestoringMergedId(m.id)
+                              try {
+                                await restoreMergedReportById(m.id)
+                              } catch (err) {
+                                toast.error(err instanceof Error ? err.message : 'Restore failed')
+                              } finally {
+                                setRestoringMergedId(null)
+                              }
+                            })()
+                          }}
+                          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          {restoringMergedId === m.id ? (
+                            <span
+                              className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-600 border-t-transparent"
+                              aria-hidden
+                            />
+                          ) : null}
+                          Restore
+                        </button>
                       </td>
-                    )}
-                    <td className="px-4 py-3 font-mono text-xs text-slate-600">
-                      {report.report_number ?? report.id.slice(0, 8)}
-                    </td>
-                    <td className="px-4 py-3 text-slate-800">{report.client_name}</td>
-                    <td className="px-4 py-3 text-slate-800">{report.location_name}</td>
-                    <td className="px-4 py-3 text-slate-800">{report.technician_name}</td>
-                    <td className="px-4 py-3 text-slate-800">{report.inspection_date}</td>
-                    <td className="px-4 py-3">
-                      <span className={statusStyles[report.status] ?? statusStyles.draft}>
-                        {statusLabel(report.status)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-2">
-                        <Link
-                          href={`/maintenance/${report.id}`}
-                          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                        >
-                          View Report
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={() => void handleDownloadPdf(report.id)}
-                          className="rounded-lg border border-gray-300 px-3 py-1 text-sm hover:bg-gray-100"
-                        >
-                          Download
-                        </button>
-                        {report.client_view_url ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void navigator.clipboard.writeText(report.client_view_url!).then(() => {
-                                toast.success('Client link copied')
-                              })
-                            }}
-                            className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
-                          >
-                            Copy client link
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          onClick={() => handleDownloadAllPhotos(report.id)}
-                          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                        >
-                          Download All Photos
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CollapsibleReportSection>
+      )}
     </div>
   )
 }

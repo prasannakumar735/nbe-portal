@@ -33,11 +33,18 @@ import { useMaintenanceFaultDetection } from '@/hooks/useMaintenanceFaultDetecti
 import type {
   ClientLocationOption,
   ClientOption,
+  DoorMasterSnapshot,
+  MaintenanceAvailableDoor,
   MaintenanceChecklistStatus,
   MaintenanceDoorForm,
   MaintenanceFormValues,
 } from '@/lib/types/maintenance.types'
-import { maintenanceFormSchema } from '@/lib/validation/maintenance'
+import { doorMasterSnapshotFromRegistry } from '@/lib/maintenance/doorMasterFromRegistry'
+import {
+  formatMaintenanceZodIssues,
+  maintenanceFormDraftSchema,
+  maintenanceFormSubmitSchema,
+} from '@/lib/validation/maintenance'
 import { fetchPdfBlob } from '@/lib/browser/fetchPdfBlob'
 
 const STORAGE_KEY = 'nbe-maintenance-draft'
@@ -85,6 +92,7 @@ function createDoor(index: number): MaintenanceDoorForm {
     door_cycles: 0,
     view_window_visibility: 0,
     notes: '',
+    technician_door_details: '',
     checklist: createEmptyChecklist(),
     photos: [],
     isCollapsed: index > 0,
@@ -93,6 +101,7 @@ function createDoor(index: number): MaintenanceDoorForm {
 
 function getDefaultFormValues(): MaintenanceFormValues {
   return {
+    report_schema_version: 2,
     technician_name: '',
     submission_date: todayIsoDate(),
     source_app: 'Portal',
@@ -139,14 +148,55 @@ function normalizeLoadedDoor(rawDoor: unknown, index: number): MaintenanceDoorFo
   const doorId = String(source.door_id ?? '').trim()
   const localId = String(source.local_id ?? '').trim()
 
+  let door_master: DoorMasterSnapshot | undefined
+  const nested = source.door_master
+  if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+    const m = nested as Record<string, unknown>
+    door_master = {
+      door_description: m.door_description != null ? String(m.door_description) : null,
+      door_type_alt: m.door_type_alt != null ? String(m.door_type_alt) : null,
+      cw: m.cw != null ? String(m.cw) : null,
+      ch: m.ch != null ? String(m.ch) : null,
+    }
+    if (![door_master.door_description, door_master.door_type_alt, door_master.cw, door_master.ch].some(s => String(s ?? '').trim())) {
+      door_master = undefined
+    }
+  } else if (
+    source.door_master_description != null ||
+    source.door_master_type_alt != null ||
+    source.door_master_cw != null ||
+    source.door_master_ch != null
+  ) {
+    door_master = {
+      door_description:
+        source.door_master_description != null ? String(source.door_master_description).trim() || null : null,
+      door_type_alt: source.door_master_type_alt != null ? String(source.door_master_type_alt).trim() || null : null,
+      cw: source.door_master_cw != null ? String(source.door_master_cw).trim() || null : null,
+      ch: source.door_master_ch != null ? String(source.door_master_ch).trim() || null : null,
+    }
+  }
+
+  const adhoc_manual = Boolean(source.adhoc_manual)
+  if (adhoc_manual && !door_master) {
+    door_master = {
+      door_description: null,
+      door_type_alt: null,
+      cw: null,
+      ch: null,
+    }
+  }
+
   return {
     local_id: localId || crypto.randomUUID(),
     door_id: doorId || undefined,
+    adhoc_manual,
     door_number: String(source.door_number ?? `Door ${index + 1}`).trim() || `Door ${index + 1}`,
     door_type: String(source.door_type ?? '').trim(),
     door_cycles: Number(source.door_cycles ?? 0) || 0,
     view_window_visibility: Number(source.view_window_visibility ?? 0) || 0,
     notes: String(source.notes ?? source.notes_raw ?? '').trim(),
+    technician_door_details: String(source.technician_door_details ?? '').trim(),
+    door_master,
     checklist,
     photos,
     isCollapsed: Boolean(source.isCollapsed ?? index > 0),
@@ -163,6 +213,19 @@ function isDoorComplete(door: MaintenanceDoorForm): boolean {
   const hasBasics = Boolean(door.door_number.trim() && door.door_type.trim())
   const checklistDone = MAINTENANCE_CHECKLIST_ITEMS.every(item => Boolean(door.checklist[item.code]))
   return hasBasics && checklistDone
+}
+
+/** Treat registry-loaded door_type etc. as user progress so we do not replace rows after edits. */
+function doorHasMeaningfulEdits(door: MaintenanceDoorForm): boolean {
+  if (door.adhoc_manual) return true
+  if (String(door.notes ?? '').trim()) return true
+  if (String(door.technician_door_details ?? '').trim()) return true
+  if (door.photos && door.photos.length > 0) return true
+  if (Object.values(door.checklist ?? {}).some(v => Boolean(v))) return true
+  if (String(door.door_type ?? '').trim()) return true
+  if (Number(door.door_cycles) !== 0) return true
+  if (Number(door.view_window_visibility) !== 0) return true
+  return false
 }
 
 function isDraftReady(form: MaintenanceFormValues): boolean {
@@ -258,7 +321,10 @@ function Section6NotesSync({
 export type MaintenanceFormPageProps = {
   reportIdFromRoute?: string
   initialReport?: Record<string, unknown> | null
+  /** Manager/admin UI (approve, PDF, admin draft saves). */
   isAdminMode?: boolean
+  /** Server `maintenance_reports.status` — drives draft vs post-submit actions (all roles). */
+  serverReportStatus?: string | null
   onApproved?: () => void
   /**
    * When true with `initialReport`, skips `/api/maintenance/draft` fetch inside the form and
@@ -276,6 +342,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     reportIdFromRoute,
     initialReport,
     isAdminMode = false,
+    serverReportStatus: serverReportStatusProp,
     onApproved,
     hydrateOnlyFromInitialReport = false,
     offlineMirror,
@@ -291,7 +358,10 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   const [locations, setLocations] = useState<ClientLocationOption[]>([])
   const [savedClientName, setSavedClientName] = useState('')
   const [savedLocationName, setSavedLocationName] = useState('')
-  const [availableDoors, setAvailableDoors] = useState<Array<{ id: string; door_label: string; door_type: string }>>([])
+  const [availableDoors, setAvailableDoors] = useState<MaintenanceAvailableDoor[]>([])
+  /** Mirrors `availableDoors` for stable reads inside callbacks without listing state in effect deps. */
+  const availableDoorsRef = useRef<MaintenanceAvailableDoor[]>([])
+  availableDoorsRef.current = availableDoors
   const [isSavingDraft, setIsSavingDraft] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isApproving, setIsApproving] = useState(false)
@@ -300,6 +370,8 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   const [statusMessage, setStatusMessage] = useState<string>('')
   const [statusType, setStatusType] = useState<'info' | 'error' | 'success'>('info')
   const [isLocked, setIsLocked] = useState(false)
+  /** When `serverReportStatus` is not passed, filled from draft load / submit success. */
+  const [trackedReportStatus, setTrackedReportStatus] = useState<string | null>(null)
   const [adminFormPopulated, setAdminFormPopulated] = useState(false)
   const [showFaultPanel, setShowFaultPanel] = useState(false)
   const [aiDoorLoadingIndex, setAiDoorLoadingIndex] = useState<number | null>(null)
@@ -311,30 +383,65 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     setStatusMessage(msg)
     setStatusType(type)
   }
+  const showStatusRef = useRef(showStatus)
+  showStatusRef.current = showStatus
+
+  const effectiveReportStatus = useMemo(() => {
+    const fromProp =
+      serverReportStatusProp != null && String(serverReportStatusProp).trim() !== ''
+        ? String(serverReportStatusProp).toLowerCase()
+        : null
+    const fromTracked = trackedReportStatus ? String(trackedReportStatus).toLowerCase() : null
+    const rank: Record<string, number> = { draft: 0, submitted: 1, reviewing: 2, approved: 3 }
+    if (fromProp && fromTracked) {
+      const rp = rank[fromProp] ?? -1
+      const rt = rank[fromTracked] ?? -1
+      // Local submit / approve updates tracked before parent offline status refreshes — prefer the further step.
+      if (rt > rp) return fromTracked
+      return fromProp
+    }
+    if (fromProp) return fromProp
+    return fromTracked ?? 'draft'
+  }, [serverReportStatusProp, trackedReportStatus])
+
+  const showDraftSubmitSection = effectiveReportStatus === 'draft' && !isLocked
+  const showManagerReviewSection =
+    isAdminMode &&
+    Boolean(reportIdFromRoute) &&
+    ['submitted', 'reviewing', 'approved'].includes(effectiveReportStatus)
 
   const { isOnline, isOffline } = useOnlineStatus()
   const [pendingSyncCount, setPendingSyncCount] = useState(0)
   const [isSyncingPending, setIsSyncingPending] = useState(false)
+  /** Avoid putting `isSyncingPending` in `syncPendingReports` deps (would retrigger the isOnline effect every toggle). */
+  const syncPendingInFlightRef = useRef(false)
   const refreshPendingCount = useCallback(async () => {
     try {
       const count = await offlineCountPending()
       setPendingSyncCount(count)
-    } catch {
+    } catch (err) {
+      console.error(err)
       setPendingSyncCount(0)
     }
   }, [])
 
+  const refreshPendingCountRef = useRef(refreshPendingCount)
+  useEffect(() => {
+    refreshPendingCountRef.current = refreshPendingCount
+  }, [refreshPendingCount])
+
   const syncPendingReports = useCallback(async () => {
-    if (!navigator.onLine || isSyncingPending) return
+    if (!navigator.onLine || syncPendingInFlightRef.current) return
+    syncPendingInFlightRef.current = true
     setIsSyncingPending(true)
     try {
       const pending = await offlineListPending()
       if (pending.length === 0) {
-        await refreshPendingCount()
+        await refreshPendingCountRef.current()
         return
       }
 
-      showStatus('Syncing...', 'info')
+      showStatusRef.current('Syncing...', 'info')
       for (const item of pending) {
         if (!navigator.onLine) break
 
@@ -364,22 +471,41 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         }
       }
 
-      await refreshPendingCount()
-      showStatus('Sync complete', 'success')
+      await refreshPendingCountRef.current()
+      showStatusRef.current('Sync complete', 'success')
+    } catch (err) {
+      console.error(err)
     } finally {
+      syncPendingInFlightRef.current = false
       setIsSyncingPending(false)
     }
-  }, [isSyncingPending, refreshPendingCount])
+  }, [])
+
+  /** Latest sync runner — do not list in `useEffect` deps or `isOnline` + `setState` loops when identity churns. */
+  const syncPendingReportsRef = useRef(syncPendingReports)
+  syncPendingReportsRef.current = syncPendingReports
 
   useEffect(() => {
-    void refreshPendingCount()
-  }, [refreshPendingCount])
+    void refreshPendingCountRef.current()
+  }, [])
 
+  /**
+   * Do not depend on React `isOnline` state here — `useOnlineStatus` updates can align with sync `setState`
+   * and retrigger effects. Use browser `online` event + delayed one-shot when already connected.
+   */
   useEffect(() => {
-    if (isOnline) {
-      void syncPendingReports()
+    const run = () => {
+      if (!navigator.onLine) return
+      void syncPendingReportsRef.current()
     }
-  }, [isOnline, syncPendingReports])
+    const onOnline = () => run()
+    window.addEventListener('online', onOnline)
+    const t = window.setTimeout(run, 400)
+    return () => {
+      window.removeEventListener('online', onOnline)
+      window.clearTimeout(t)
+    }
+  }, [])
 
   const {
     register,
@@ -388,10 +514,11 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     setValue,
     reset,
     watch,
-    handleSubmit,
+    setError,
+    clearErrors,
     formState: { errors },
   } = useForm<MaintenanceFormValues>({
-    resolver: zodResolver(maintenanceFormSchema) as never,
+    resolver: zodResolver(maintenanceFormDraftSchema) as never,
     mode: 'onSubmit',
     shouldUnregister: false,
     defaultValues: getDefaultFormValues(),
@@ -402,20 +529,50 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     name: 'doors',
   })
 
+  /** RHF methods change identity when field-array updates — keep stable refs for door loader `useCallback([])`. */
+  const getValuesRef = useRef(getValues)
+  getValuesRef.current = getValues
+  const replaceRef = useRef(replace)
+  replaceRef.current = replace
+  const setValueRef = useRef(setValue)
+  setValueRef.current = setValue
+
   const watchedClientLocationId = useWatch({ control, name: 'client_location_id', defaultValue: '' })
   const watchedClientId = useWatch({ control, name: 'client_id', defaultValue: '' })
   const watchedTotalDoors = useWatch({ control, name: 'total_doors', defaultValue: 1 })
   const watchedReportId = useWatch({ control, name: 'report_id', defaultValue: undefined })
   const watchedNotes = useWatch({ control, name: 'notes', defaultValue: '' })
   const watchedDoors = useWatch({ control, name: 'doors', defaultValue: [] }) as MaintenanceDoorForm[]
+  const watchedReportSchemaVersion = useWatch({ control, name: 'report_schema_version', defaultValue: 2 })
+
+  /** Stable primitive for location→doors effect (avoids object/function identity in deps). */
+  const selectedLocationId = useMemo(
+    () => String(watchedClientLocationId ?? '').trim(),
+    [watchedClientLocationId],
+  )
+
+  const watchRef = useRef(watch)
+  watchRef.current = watch
+  const offlineMirrorDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (!offlineMirror) return
-    const sub = watch(value => {
-      offlineMirror.onPersist(value as MaintenanceFormValues)
+    const mirror = offlineMirror
+    const sub = watchRef.current(() => {
+      if (offlineMirrorDebounceRef.current) clearTimeout(offlineMirrorDebounceRef.current)
+      offlineMirrorDebounceRef.current = setTimeout(() => {
+        offlineMirrorDebounceRef.current = null
+        mirror.onPersist(getValuesRef.current() as MaintenanceFormValues)
+      }, 1200)
     })
-    return () => sub.unsubscribe()
-  }, [watch, offlineMirror])
+    return () => {
+      sub.unsubscribe()
+      if (offlineMirrorDebounceRef.current) {
+        clearTimeout(offlineMirrorDebounceRef.current)
+        offlineMirrorDebounceRef.current = null
+      }
+    }
+  }, [offlineMirror])
 
   /** Which client the current `locations` list belongs to (avoids skipping reload after client change). */
   const locationsForClientIdRef = useRef<string | null>(null)
@@ -425,6 +582,9 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   const clientsInitializedRef = useRef(false)
   /** Apply IndexedDB last-selection restore at most once per offline stint (avoids effect dependency churn). */
   const offlineRestoredRef = useRef(false)
+  /** Guard so doors load at most once per `selectedLocationId` change; QR prefill flips this true to skip the auto-loader. */
+  const hasInitializedDoorsRef = useRef(false)
+  const skipLocationDoorLoadOnceRef = useRef<string | null>(null)
 
   const clientOptions = useMemo(() => {
     if (!watchedClientId) return clients
@@ -485,8 +645,11 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     }
   }, [])
 
+  const loadLocationsForClientRef = useRef(loadLocationsForClient)
+  loadLocationsForClientRef.current = loadLocationsForClient
+
   const prepareFormForSave = useCallback(async () => {
-    const form = getValues()
+    const form = getValuesRef.current()
     const clientId = String(form.client_id ?? '').trim()
     const locationId = String(form.client_location_id ?? '').trim()
 
@@ -527,8 +690,8 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       }
     }
 
-    return getValues()
-  }, [getValues, loadLocationsForClient, setValue, supabase])
+    return getValuesRef.current()
+  }, [loadLocationsForClient, setValue, supabase])
 
   const hydrateClientFromLocation = useCallback(async (rawReport: Record<string, unknown>) => {
     const reportClientId = String(rawReport.client_id ?? '').trim()
@@ -583,18 +746,29 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     return resolvedClientId
   }, [loadLocationsForClient, setValue, supabase])
 
-  const loadDoorsForLocation = useCallback(async (locationId: string) => {
+  const hydrateClientFromLocationRef = useRef(hydrateClientFromLocation)
+  hydrateClientFromLocationRef.current = hydrateClientFromLocation
+
+  const loadDoorsForLocation = useCallback(async (locationId: string, opts?: { force?: boolean }) => {
+    const replace = replaceRef.current
+    const setValue = setValueRef.current
+    const getValues = getValuesRef.current
+
     if (!locationId) {
-      setAvailableDoors([])
+      setAvailableDoors(prev => (prev.length === 0 ? prev : []))
       doorsForLocationIdRef.current = null
-      replace([createDoor(0)])
       setValue('total_doors', 1, { shouldDirty: true, shouldValidate: true })
+      replace([createDoor(0)])
       return []
     }
 
+    if (opts?.force) {
+      doorsForLocationIdRef.current = null
+    }
+
     // If we already loaded doors for this location, don't reload/replace again.
-    if (doorsForLocationIdRef.current === locationId && availableDoors.length > 0) {
-      return availableDoors
+    if (!opts?.force && doorsForLocationIdRef.current === locationId && availableDoorsRef.current.length > 0) {
+      return availableDoorsRef.current
     }
 
     if (!navigator.onLine) {
@@ -605,8 +779,8 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         doorsForLocationIdRef.current = locationId
         return cached.doors
       }
-      showStatus('No offline doors available. Please connect once.', 'info')
-      setAvailableDoors([])
+      showStatusRef.current('No offline doors available. Please connect once.', 'info')
+      setAvailableDoors(prev => (prev.length === 0 ? prev : []))
       doorsForLocationIdRef.current = locationId
       return []
     }
@@ -614,7 +788,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     try {
       const response = await fetch(`/api/maintenance/doors?locationId=${encodeURIComponent(locationId)}`)
       const payload = (await response.json()) as {
-        doors?: Array<{ id: string; door_label: string; door_type: string }>
+        doors?: MaintenanceAvailableDoor[]
       }
       const doorsForLocation = payload.doors ?? []
       setAvailableDoors(doorsForLocation)
@@ -623,36 +797,55 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
 
       const current = getValues()
       const existingDoors = current.doors ?? []
-      const hasUserEdits =
-        existingDoors.some(d => Boolean(String(d.notes ?? '').trim())) ||
-        existingDoors.some(d => Array.isArray(d.photos) && d.photos.length > 0) ||
-        existingDoors.some(d => Object.values(d.checklist ?? {}).some(v => Boolean(v)))
+      const hasUserEdits = existingDoors.some(doorHasMeaningfulEdits)
+
+      const schemaV = Number(current.report_schema_version ?? 1)
 
       // Only auto-populate door rows on first load/new location when user hasn't started editing.
-      const loadedDoors = doorsForLocation.map((door, index) => ({
-        door_id: door.id,
-        local_id: crypto.randomUUID(),
-        door_number: door.door_label || `Door ${index + 1}`,
-        door_type: door.door_type || '',
-        door_cycles: 0,
-        view_window_visibility: 0,
-        notes: '',
-        checklist: createEmptyChecklist(),
-        photos: [],
-        isCollapsed: index > 0,
-      }))
+      const loadedDoors = doorsForLocation.map((door, index) => {
+        const base: MaintenanceDoorForm = {
+          door_id: door.id,
+          local_id: crypto.randomUUID(),
+          door_number: door.door_label || `Door ${index + 1}`,
+          door_type: door.door_type || '',
+          door_cycles: 0,
+          view_window_visibility: 0,
+          notes: '',
+          checklist: createEmptyChecklist(),
+          photos: [],
+          isCollapsed: index > 0,
+        }
+        if (schemaV >= 2) {
+          return {
+            ...base,
+            technician_door_details: '',
+            door_master: doorMasterSnapshotFromRegistry(door),
+          }
+        }
+        return base
+      })
 
       if (loadedDoors.length === 0) {
         if (!hasUserEdits) {
-          replace([createDoor(0)])
           setValue('total_doors', 1, { shouldDirty: true, shouldValidate: true })
+          replace([createDoor(0)])
         }
         return doorsForLocation
       }
 
       if (!hasUserEdits) {
-        replace(loadedDoors)
-        setValue('total_doors', loadedDoors.length, { shouldDirty: true, shouldValidate: true })
+        const sameRegistry =
+          existingDoors.length === loadedDoors.length &&
+          loadedDoors.every((row, i) => existingDoors[i]?.door_id === row.door_id)
+        if (sameRegistry) {
+          const td = Number(current.total_doors ?? 1)
+          if (td !== loadedDoors.length) {
+            setValue('total_doors', loadedDoors.length, { shouldDirty: true, shouldValidate: true })
+          }
+        } else {
+          setValue('total_doors', loadedDoors.length, { shouldDirty: true, shouldValidate: true })
+          replace(loadedDoors)
+        }
       }
       return doorsForLocation
     } catch {
@@ -662,36 +855,50 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         doorsForLocationIdRef.current = locationId
         return cached.doors
       }
-      setAvailableDoors([])
+      setAvailableDoors(prev => (prev.length === 0 ? prev : []))
       doorsForLocationIdRef.current = locationId
       return []
     }
-  }, [availableDoors, getValues, offlineCacheDoors, offlineGetCachedDoors, replace, setValue])
+  }, [])
+
+  /** Refresh site registry dropdown labels only — never replaces `doors` field-array rows (that remounts cards and breaks typing). */
+  const refreshAvailableDoorsOnly = useCallback(async (locationId: string) => {
+    if (!locationId || typeof navigator === 'undefined' || !navigator.onLine) return
+    try {
+      const response = await fetch(`/api/maintenance/doors?locationId=${encodeURIComponent(locationId)}`)
+      const payload = (await response.json()) as { doors?: MaintenanceAvailableDoor[] }
+      const list = payload.doors ?? []
+      setAvailableDoors(list)
+      void offlineCacheDoors(locationId, list)
+    } catch {
+      // ignore — draft body is already saved
+    }
+  }, [])
+
+  /** Stable ref for handlers/effects — do not list `loadDoorsForLocation` in effect deps (RHF churn). */
+  const loadDoorsForLocationRef = useRef(loadDoorsForLocation)
+  loadDoorsForLocationRef.current = loadDoorsForLocation
+  const refreshAvailableDoorsOnlyRef = useRef(refreshAvailableDoorsOnly)
+  refreshAvailableDoorsOnlyRef.current = refreshAvailableDoorsOnly
+
+  // Reset the init guard whenever the selected location changes — MUST come before the loader effect.
+  useEffect(() => {
+    hasInitializedDoorsRef.current = false
+  }, [selectedLocationId])
 
   useEffect(() => {
-    const locationId = watchedClientLocationId
-    let isActive = true
+    if (hasInitializedDoorsRef.current) return
 
-    const loadAvailableDoors = async () => {
-      console.log('[Maintenance] loadAvailableDoors useEffect locationId:', locationId)
-
-      if (!locationId) {
-        if (isActive) {
-          setAvailableDoors([])
-        }
-        return
-      }
-      const doors = await loadDoorsForLocation(locationId)
-      if (!isActive) return
-      console.log('[Maintenance] Doors loaded from loadDoorsForLocation:', { locationId, count: doors.length })
+    // QR prefill path: `client_location_id` was just set and doors were filled without `replace`.
+    if (skipLocationDoorLoadOnceRef.current === selectedLocationId && selectedLocationId) {
+      skipLocationDoorLoadOnceRef.current = null
+      hasInitializedDoorsRef.current = true
+      return
     }
 
-    void loadAvailableDoors()
-
-    return () => {
-      isActive = false
-    }
-  }, [watchedClientLocationId, loadDoorsForLocation])
+    hasInitializedDoorsRef.current = true
+    void loadDoorsForLocationRef.current(selectedLocationId)
+  }, [selectedLocationId])
 
   const loadClientsIntoState = useCallback(async () => {
     if (!navigator.onLine) {
@@ -830,6 +1037,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         setSavedClientName(String(report.client_name ?? '').trim())
         setSavedLocationName(String(report.client_location_name ?? '').trim())
         const reportStatus = String(report.status ?? '').toLowerCase()
+        setTrackedReportStatus(reportStatus)
         const isReadOnlyStatus =
           reportStatus === 'submitted' || reportStatus === 'reviewing' || reportStatus === 'approved'
         if (isReadOnlyStatus && !isAdminMode) {
@@ -923,6 +1131,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       setSavedLocationName(String(data.report.client_location_name ?? '').trim())
 
       const reportStatus = String(data.report.status ?? '').toLowerCase()
+      setTrackedReportStatus(reportStatus)
       if (!reportIdFromRoute && reportStatus !== 'draft') {
         localStorage.removeItem('maintenance:lastReportId')
         restoreFromLocalBackup()
@@ -1001,6 +1210,8 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
 
       const clientId = String(last.client_id ?? '').trim()
       const locationId = String(last.client_location_id ?? '').trim()
+      const getValues = getValuesRef.current
+      const setValue = setValueRef.current
       const currentClient = String(getValues('client_id') ?? '').trim()
       const currentLoc = String(getValues('client_location_id') ?? '').trim()
 
@@ -1009,7 +1220,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       }
       const effectiveClient = String(getValues('client_id') ?? '').trim() || clientId
       if (effectiveClient) {
-        await loadLocationsForClient(effectiveClient)
+        await loadLocationsForClientRef.current(effectiveClient)
       }
       if (cancelled) return
 
@@ -1018,7 +1229,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       }
       const effectiveLoc = String(getValues('client_location_id') ?? '').trim() || locationId
       if (effectiveLoc) {
-        await loadDoorsForLocation(effectiveLoc)
+        await loadDoorsForLocationRef.current(effectiveLoc)
       }
     }
 
@@ -1026,7 +1237,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     return () => {
       cancelled = true
     }
-  }, [isOffline, getValues, loadDoorsForLocation, loadLocationsForClient, setValue])
+  }, [isOffline])
 
   // If form has a client but locations belong to another client (or were never loaded), reload — do not use locations.length alone (breaks client switches).
   useEffect(() => {
@@ -1038,17 +1249,19 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   useEffect(() => {
     if (!reportIdFromRoute || !initialReport || !isAdminMode || adminFormPopulated) return
     const report = initialReport as Record<string, unknown>
+    setTrackedReportStatus(String(report.status ?? 'draft').toLowerCase())
     setSavedClientName(String(report.client_name ?? '').trim())
     setSavedLocationName(String(report.client_location_name ?? '').trim())
+    const setValue = setValueRef.current
     Object.entries(report).forEach(([key, value]) => {
       if (key !== 'doors') {
         setValue(key as keyof MaintenanceFormValues, value as never)
       }
     })
-    void hydrateClientFromLocation(report)
+    void hydrateClientFromLocationRef.current(report)
     const maintenanceDoors: unknown[] = Array.isArray(report.doors) ? report.doors : []
     const doors = maintenanceDoors.map((door: unknown, index: number) => normalizeLoadedDoor(door, index))
-    replace(doors.length > 0 ? doors : [createDoor(0)])
+    replaceRef.current(doors.length > 0 ? doors : [createDoor(0)])
     const compiledNotes = maintenanceDoors
       .map((d: unknown, i: number) => {
         const door = d as { door_number?: string; notes?: string }
@@ -1060,16 +1273,19 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       .join('\n')
     setValue('notes', (report.notes as string) ?? compiledNotes ?? '', { shouldDirty: false })
     setValue('report_id', reportIdFromRoute)
+    const adminLocationId = String((report as { client_location_id?: unknown }).client_location_id ?? '').trim()
+    if (adminLocationId) void loadDoorsForLocationRef.current(adminLocationId)
     setAdminFormPopulated(true)
-    showStatus('Report loaded. You can edit all fields and save.')
-  }, [reportIdFromRoute, initialReport, isAdminMode, adminFormPopulated, replace, setValue, hydrateClientFromLocation, showStatus])
+    showStatusRef.current('Report loaded. You can edit all fields and save.')
+  }, [reportIdFromRoute, initialReport, isAdminMode, adminFormPopulated])
 
   useEffect(() => {
     const expected = Number(watchedTotalDoors || 0)
     if (!Number.isFinite(expected) || expected < 1) return
     if (expected === fields.length) return
-    const current = getValues()
+    const current = getValuesRef.current()
     const doors = current.doors ?? []
+    const replace = replaceRef.current
     if (expected > fields.length) {
       const nextDoors = [...doors]
       for (let index = fields.length; index < expected; index += 1) {
@@ -1079,7 +1295,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     } else {
       replace(doors.slice(0, expected))
     }
-  }, [fields.length, replace, watchedTotalDoors, getValues])
+  }, [fields.length, watchedTotalDoors])
 
   const persistDraft = useCallback(async (
     targetStatus: 'draft' | 'submitted' | 'reviewing' = 'draft',
@@ -1105,7 +1321,8 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         body: JSON.stringify({
           report_id: form.report_id,
           status: adminEdit ? 'reviewing' : targetStatus,
-          mode: adminEdit ? undefined : targetStatus === 'draft' ? 'draft' : 'submit',
+          // Do not send `mode: 'submit'` for non-draft targets — the draft API used to coerce that to `status: 'submitted'`
+          // and run strict checklist validation. Final submit uses POST /api/maintenance, not persistDraft.
           form,
           admin_edit: adminEdit,
         }),
@@ -1113,11 +1330,17 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
 
       const result = await response.json().catch(() => ({} as Record<string, unknown>))
       if (!response.ok) {
-        const details = (result as { details?: { message?: string } }).details
-        const serverMessage = details?.message || (result as { error?: string }).error || 'Failed to save draft'
+        const details = (result as { details?: { message?: string; issues?: { message: string; path?: unknown[] }[] } })
+          .details
+        // Prefer API `error` (human summary) over raw Zod `details.message`.
+        let serverMessage =
+          (result as { error?: string }).error || details?.message || 'Failed to save draft'
+        if (details?.issues && Array.isArray(details.issues) && details.issues.length > 0) {
+          serverMessage = formatMaintenanceZodIssues({ issues: details.issues as never })
+        }
         if (!silent) {
           showStatus(serverMessage, 'error')
-          toast.error(serverMessage)
+          toast.error(serverMessage.includes('\n') ? serverMessage.split('\n').slice(0, 4).join(' · ') : serverMessage)
         }
         return false
       }
@@ -1128,6 +1351,11 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       }
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(form))
+
+      const clientLoc = String(form.client_location_id ?? '').trim()
+      if (clientLoc) {
+        void refreshAvailableDoorsOnlyRef.current(clientLoc)
+      }
 
       if (!silent) {
         if (targetStatus === 'draft') {
@@ -1163,7 +1391,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
 
       return false
     }
-  }, [getValues, isLocked, prepareFormForSave, setValue])
+  }, [isLocked, prepareFormForSave, setValue])
 
   useEffect(() => {
     if (isLocked) return
@@ -1174,7 +1402,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     }
 
     const interval = setInterval(async () => {
-      const snapshot = getValues()
+      const snapshot = getValuesRef.current()
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot))
       } catch {
@@ -1205,19 +1433,19 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     }, AUTO_SAVE_MS)
 
     return () => clearInterval(interval)
-  }, [getValues, isLocked, persistDraft])
+  }, [isLocked, persistDraft])
 
   useEffect(() => {
     if (isLocked) return
     const interval = setInterval(() => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(getValues()))
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(getValuesRef.current()))
       } catch {
         // ignore
       }
     }, LOCAL_PERSIST_MS)
     return () => clearInterval(interval)
-  }, [getValues, isLocked])
+  }, [isLocked])
 
   const progress = useMemo(() => {
     const doors = watchedDoors ?? []
@@ -1236,12 +1464,13 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   // Auto-prefill from QR-scanned door when opening /maintenance/new?door_id=... or /maintenance/new?doorId=...
   useEffect(() => {
     const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
-    const doorId = params?.get('door_id') ?? params?.get('doorId') ?? initialDoorId
-    console.log('Prefill doorId:', doorId)
-
+    const doorId = params?.get('door_id') ?? params?.get('doorId') ?? initialDoorId ?? ''
     if (!doorId) return
 
     const prefillFromDoorId = async () => {
+      const getValues = getValuesRef.current
+      const setValue = setValueRef.current
+      const replace = replaceRef.current
       const current = getValues()
 
       // If a report is already loaded or doors already have IDs, don't override existing data
@@ -1251,11 +1480,9 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
 
       const { data, error } = await supabase
         .from('doors')
-        .select('id, door_label, door_type, client_location_id')
+        .select('id, door_label, door_type, client_location_id, door_description, door_type_alt, cw, ch')
         .eq('id', doorId)
         .maybeSingle()
-
-      console.log('Door result:', data)
 
       if (error || !data) {
         console.error('[Maintenance] Failed to prefill from doorId:', { doorId, error })
@@ -1267,9 +1494,14 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         door_label: string | null
         door_type: string | null
         client_location_id: string | null
+        door_description?: string | null
+        door_type_alt?: string | null
+        cw?: string | null
+        ch?: string | null
       }
 
       if (doorRecord.client_location_id) {
+        skipLocationDoorLoadOnceRef.current = doorRecord.client_location_id
         const { data: locationData } = await supabase
           .from('client_locations')
           .select('*')
@@ -1287,7 +1519,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
           }
           if (loc.client_id) {
             setValue('client_id', loc.client_id, { shouldDirty: true, shouldValidate: true })
-            await loadLocationsForClient(loc.client_id)
+            await loadLocationsForClientRef.current(loc.client_id)
           }
           const companyAddress = String(loc.Company_address ?? loc.company_address ?? '').trim()
           const resolvedAddress =
@@ -1313,6 +1545,8 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         door_cycles: 0,
         view_window_visibility: 0,
         notes: '',
+        technician_door_details: '',
+        door_master: doorMasterSnapshotFromRegistry(doorRecord),
         checklist: createEmptyChecklist(),
         photos: [],
         isCollapsed: false,
@@ -1320,10 +1554,26 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
 
       replace([prefilledDoor])
       setValue('total_doors', 1, { shouldDirty: true, shouldValidate: true })
+
+      // Populate door dropdown without calling `loadDoorsForLocation` (would `replace` away the prefilled row when edits are empty).
+      if (doorRecord.client_location_id && navigator.onLine) {
+        try {
+          const res = await fetch(
+            `/api/maintenance/doors?locationId=${encodeURIComponent(doorRecord.client_location_id)}`,
+          )
+          const payload = (await res.json()) as { doors?: MaintenanceAvailableDoor[] }
+          const doorsForLocation = payload.doors ?? []
+          setAvailableDoors(doorsForLocation)
+          doorsForLocationIdRef.current = doorRecord.client_location_id
+          void offlineCacheDoors(doorRecord.client_location_id, doorsForLocation)
+        } catch {
+          // ignore
+        }
+      }
     }
 
     void prefillFromDoorId()
-  }, [getValues, initialDoorId, loadLocationsForClient, replace, setValue, supabase])
+  }, [initialDoorId, supabase])
 
   const uploadSignature = async (signatureDataUrl: string): Promise<string> => {
     if (!signatureDataUrl) return ''
@@ -1399,6 +1649,21 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       }
 
       setValue('report_id', result.report_id)
+
+      if (isAdminMode && reportIdFromRoute) {
+        setTrackedReportStatus('submitted')
+        setIsLocked(false)
+        try {
+          localStorage.setItem('maintenance:lastReportId', result.report_id as string)
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(getValues()))
+        } catch {
+          // ignore quota
+        }
+        showStatus('Report submitted. You can still edit doors and details, then save and approve when ready.', 'success')
+        toast.success('Report submitted')
+        return
+      }
+
       localStorage.removeItem('maintenance:lastReportId')
       localStorage.removeItem(STORAGE_KEY)
       setIsLocked(true)
@@ -1422,7 +1687,24 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     }
   }
 
-  const onSubmit = handleSubmit(submitReport)
+  const handleSubmitReportClick = async () => {
+    clearErrors()
+    const form = getValues()
+    const result = maintenanceFormSubmitSchema.safeParse(form)
+    if (!result.success) {
+      for (const issue of result.error.issues) {
+        const segments = issue.path
+        if (!segments.length) continue
+        const path = segments.map(seg => String(seg)).join('.')
+        setError(path as never, { type: 'manual', message: issue.message })
+      }
+      const msg = formatMaintenanceZodIssues(result.error)
+      showStatus(msg, 'error')
+      toast.error(msg.includes('\n') ? msg.split('\n').slice(0, 5).join(' · ') : msg)
+      return
+    }
+    await submitReport(result.data as MaintenanceFormValues)
+  }
 
   const generateDoorSummary = async (doorIndex: number) => {
     if (isLocked || aiDoorLoadingIndex !== null) return
@@ -1555,7 +1837,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       </header>
 
       <div className="flex flex-col gap-4 md:grid md:grid-cols-[minmax(0,1fr)_280px]">
-      <form className="space-y-4 pb-24 md:pb-4" onSubmit={onSubmit}>
+      <form className="space-y-4 pb-24 md:pb-4" onSubmit={e => e.preventDefault()}>
         <Section6NotesSync control={control} setValue={setValue} supabase={supabase} />
         <fieldset disabled={isLocked && !isAdminMode} className="space-y-4">
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -1747,10 +2029,13 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
               key={field.id}
               control={control}
               index={index}
+              getValues={getValues}
+              setValue={setValue}
               reportId={watchedReportId}
               register={register}
               update={update}
               availableDoors={availableDoors}
+              reportSchemaVersion={Number(watchedReportSchemaVersion ?? 1)}
               hasFault={faultDetection.faultsByDoor[index]?.faultItems.length > 0}
               faultCount={faultDetection.faultsByDoor[index]?.faultItems.length ?? 0}
               disabled={isLocked && !isAdminMode}
@@ -1808,8 +2093,47 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">9. Save / Submit</h2>
           {isAdminMode ? (
+            <p className="mt-2 text-xs text-slate-500">
+              Flow: save draft → submit report → review / edit doors if needed → save changes → approve or download.
+            </p>
+          ) : null}
+
+          {showDraftSubmitSection ? (
+            <div className="mt-3 flex flex-col gap-3">
+              <div className="fixed bottom-0 left-0 right-0 z-30 flex flex-col gap-3 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur md:static md:mx-0 md:flex-row md:border-0 md:bg-transparent md:px-0 md:py-0">
+                <button
+                  type="button"
+                  onClick={handleSaveDraft}
+                  disabled={isSavingDraft || isSubmitting}
+                  className="h-14 w-full rounded-xl border border-slate-300 px-5 text-base font-bold text-slate-800 disabled:opacity-50 md:w-auto"
+                >
+                  {isSavingDraft ? 'Saving Draft...' : 'Save Draft'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSubmitReportClick()}
+                  disabled={isSubmitting || !progress.allDone}
+                  className="h-14 w-full rounded-xl bg-slate-900 px-5 text-base font-bold text-white disabled:opacity-50 md:w-auto"
+                >
+                  {isSubmitting ? 'Submitting...' : 'Submit Report'}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.removeItem(STORAGE_KEY)
+                  reset(getDefaultFormValues())
+                  showStatus('Form reset. All fields cleared.', 'info')
+                }}
+                className="h-12 w-full rounded-xl border border-red-300 bg-red-50 px-5 text-base font-semibold text-red-700 hover:bg-red-100 md:w-auto"
+              >
+                Reset Form
+              </button>
+            </div>
+          ) : null}
+
+          {showManagerReviewSection ? (
             <div className="mt-3 flex flex-col gap-4">
-              <p className="text-sm text-slate-600">Manager / Admin: edit, approve, and download. Submit Report is not available.</p>
               <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
@@ -1841,6 +2165,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                         setClientViewUrl(data.client_view_url)
                       }
                       showStatus('Report approved.', 'success')
+                      setTrackedReportStatus('approved')
                       onApproved?.()
                     } catch (e) {
                       showStatus(e instanceof Error ? e.message : 'Approve failed', 'error')
@@ -1848,7 +2173,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                       setIsApproving(false)
                     }
                   }}
-                  disabled={isApproving}
+                  disabled={isApproving || effectiveReportStatus === 'approved'}
                   className="h-12 rounded-xl bg-emerald-600 px-5 text-base font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
                 >
                   {isApproving ? 'Approving...' : 'Approve Report'}
@@ -1943,42 +2268,13 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                 </button>
               </div>
             </div>
-          ) : !isLocked ? (
-            <div className="mt-3 flex flex-col gap-3">
-              <div className="fixed bottom-0 left-0 right-0 z-30 flex flex-col gap-3 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur md:static md:mx-0 md:flex-row md:border-0 md:bg-transparent md:px-0 md:py-0">
-                <button
-                  type="button"
-                  onClick={handleSaveDraft}
-                  disabled={isSavingDraft || isSubmitting}
-                  className="h-14 w-full rounded-xl border border-slate-300 px-5 text-base font-bold text-slate-800 disabled:opacity-50 md:w-auto"
-                >
-                  {isSavingDraft ? 'Saving Draft...' : 'Save Draft'}
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting || !progress.allDone}
-                  className="h-14 w-full rounded-xl bg-slate-900 px-5 text-base font-bold text-white disabled:opacity-50 md:w-auto"
-                >
-                  {isSubmitting ? 'Submitting...' : 'Submit Report'}
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  localStorage.removeItem(STORAGE_KEY)
-                  reset(getDefaultFormValues())
-                  showStatus('Form reset. All fields cleared.', 'info')
-                }}
-                className="h-12 w-full rounded-xl border border-red-300 bg-red-50 px-5 text-base font-semibold text-red-700 hover:bg-red-100 md:w-auto"
-              >
-                Reset Form
-              </button>
-            </div>
-          ) : (
+          ) : null}
+
+          {!showDraftSubmitSection && !showManagerReviewSection && isLocked && !isAdminMode ? (
             <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
               Editing is locked for this submitted report.
             </p>
-          )}
+          ) : null}
 
           {pendingSyncCount > 0 && (
             <p className="mt-2 text-xs font-semibold text-amber-700">

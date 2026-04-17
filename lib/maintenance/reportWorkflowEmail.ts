@@ -28,26 +28,26 @@ async function loadClientAndLocation(
 
   const { data: locationData } = await supabase
     .from('client_locations')
-    .select('client_id, location_name, name, suburb, site_name')
+    .select('client_id, location_name, suburb')
     .eq('id', clientLocationId)
     .maybeSingle()
 
   if (locationData) {
     const loc = locationData as Record<string, unknown>
     locationName = String(
-      loc.location_name ?? loc.name ?? loc.suburb ?? loc.site_name ?? '',
+      loc.location_name ?? loc.suburb ?? '',
     ).trim()
 
     if (loc.client_id) {
       const { data: clientData } = await supabase
         .from('clients')
-        .select('client_name, name, company_name')
+        .select('name, company_name')
         .eq('id', loc.client_id)
         .maybeSingle()
 
       if (clientData) {
         const c = clientData as Record<string, unknown>
-        clientName = String(c.client_name ?? c.name ?? c.company_name ?? '').trim()
+        clientName = String(c.name ?? c.company_name ?? '').trim()
       }
     }
   }

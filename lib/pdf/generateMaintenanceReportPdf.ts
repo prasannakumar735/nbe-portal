@@ -938,6 +938,102 @@ function drawDoorNotes(page: PDFPage, notes: string, startY: number, font: PDFFo
   return boxBottom - 14
 }
 
+function shouldDrawDoorSnapshotPdf(form: MaintenanceFormValues, door: MaintenanceDoorForm): boolean {
+  if (Number(form.report_schema_version ?? 1) < 2) return false
+  const m = door.door_master
+  const hasMaster =
+    Boolean(m) &&
+    [m?.door_description, m?.door_type_alt, m?.cw, m?.ch].some(v => String(v ?? '').trim())
+  const tech = String(door.technician_door_details ?? '').trim()
+  return Boolean(hasMaster || tech)
+}
+
+type SnapshotPdfCtx = {
+  page: PDFPage
+  pdf: PDFDocument
+  reportNumber: string
+  reportDate: string
+  logoImage: PDFImageType | null
+  font: PDFFontType
+  bold: PDFFontType
+  contentTop: number
+}
+
+function drawDoorSnapshotPdfBlock(
+  ctx: SnapshotPdfCtx,
+  door: MaintenanceDoorForm,
+  startY: number,
+): { page: PDFPage; y: number } {
+  let page = ctx.page
+  let y = startY
+  const maxW = PAGE_WIDTH - MARGIN * 2
+
+  const ensureSpace = (needed: number) => {
+    if (y < PAGE_BREAK_Y + needed) {
+      page = ctx.pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT])
+      drawHeader(page, ctx.reportNumber, ctx.reportDate, ctx.logoImage, ctx.font, ctx.bold)
+      y = ctx.contentTop
+    }
+  }
+
+  const m = door.door_master
+  const hasMaster =
+    Boolean(m) &&
+    [m?.door_description, m?.door_type_alt, m?.cw, m?.ch].some(v => String(v ?? '').trim())
+  const tech = String(door.technician_door_details ?? '').trim()
+
+  if (hasMaster) {
+    ensureSpace(36)
+    page.drawText('Door specifications (snapshot at inspection)', {
+      x: MARGIN,
+      y,
+      size: 11,
+      font: ctx.bold,
+      color: SECTION_COLOR,
+    })
+    y -= 14
+
+    const rows: Array<[string, string]> = []
+    if (String(m?.door_description ?? '').trim()) rows.push(['Description', String(m?.door_description)])
+    if (String(m?.door_type_alt ?? '').trim()) rows.push(['Alternate type', String(m?.door_type_alt)])
+    if (String(m?.cw ?? '').trim()) rows.push(['CW', String(m?.cw)])
+    if (String(m?.ch ?? '').trim()) rows.push(['CH', String(m?.ch)])
+
+    for (const [label, val] of rows) {
+      const text = `${label}: ${val}`
+      const lines = wrapPdfTextLines(text, ctx.font, 9, maxW, { emptyPlaceholder: '-' })
+      for (const line of lines) {
+        ensureSpace(12)
+        page.drawText(line, { x: MARGIN, y, size: 9, font: ctx.font, color: rgb(0.2, 0.21, 0.24) })
+        y -= 11
+      }
+      y -= 2
+    }
+    y -= 6
+  }
+
+  if (tech) {
+    ensureSpace(28)
+    page.drawText('Technician door details', {
+      x: MARGIN,
+      y,
+      size: 11,
+      font: ctx.bold,
+      color: SECTION_COLOR,
+    })
+    y -= 14
+    const lines = wrapPdfTextLines(tech, ctx.font, 9, maxW)
+    for (const line of lines) {
+      ensureSpace(11)
+      page.drawText(line, { x: MARGIN, y, size: 9, font: ctx.font, color: rgb(0.2, 0.21, 0.24) })
+      y -= 11
+    }
+    y -= 6
+  }
+
+  return { page, y: y - 4 }
+}
+
 type PhotoGridLayout = {
   pdf: PDFDocument
   reportNumber: string
@@ -1146,6 +1242,25 @@ export async function generateMaintenanceReportPdf(options: MaintenancePdfOption
       dashArray: [3, 3],
     })
     y -= 10
+
+    if (shouldDrawDoorSnapshotPdf(form, door)) {
+      const snapRes = drawDoorSnapshotPdfBlock(
+        {
+          page,
+          pdf,
+          reportNumber,
+          reportDate,
+          logoImage,
+          font,
+          bold,
+          contentTop,
+        },
+        door,
+        y,
+      )
+      page = snapRes.page
+      y = snapRes.y
+    }
 
     const checklistCtx: ChecklistContext = {
       page,

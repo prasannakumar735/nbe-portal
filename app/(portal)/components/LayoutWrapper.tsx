@@ -54,19 +54,6 @@ export function LayoutWrapper({ children, user }: LayoutWrapperProps) {
   
   return (
     <div className="flex min-h-screen overflow-hidden bg-slate-50">
-      {/* Mobile Hamburger Button */}
-      {isMobile && (
-        <button
-          onClick={handleToggleMobile}
-          className="fixed left-4 top-4 z-50 p-2 bg-white rounded-lg shadow-lg border border-slate-200 hover:bg-slate-50 transition-colors md:hidden"
-          aria-label="Toggle menu"
-        >
-          <span className="material-symbols-outlined text-slate-700">
-            {isMobileOpen ? 'close' : 'menu'}
-          </span>
-        </button>
-      )}
-
       {/* Mobile Overlay */}
       {isMobile && isMobileOpen && (
         <div
@@ -91,7 +78,12 @@ export function LayoutWrapper({ children, user }: LayoutWrapperProps) {
         }}
       >
         {/* Header with Profile */}
-        <Header user={user} />
+        <Header
+          user={user}
+          mobileMenu={
+            isMobile ? { isOpen: isMobileOpen, onToggle: handleToggleMobile } : null
+          }
+        />
 
         {/* Page content: centered, compact width — single source for portal density */}
         <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">

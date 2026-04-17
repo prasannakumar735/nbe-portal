@@ -1,5 +1,5 @@
 import { MAINTENANCE_CHECKLIST_ITEMS } from '@/lib/types/maintenance.types'
-import type { MaintenanceDoorForm, MaintenanceFormValues } from '@/lib/types/maintenance.types'
+import type { DoorMasterSnapshot, MaintenanceDoorForm, MaintenanceFormValues } from '@/lib/types/maintenance.types'
 
 function createEmptyChecklist(): Record<string, 'good' | 'caution' | 'fault' | 'na' | null> {
   return MAINTENANCE_CHECKLIST_ITEMS.reduce(
@@ -40,6 +40,21 @@ export function normalizeDoorFromApi(rawDoor: unknown, index: number): Maintenan
   const doorId = String(source.door_id ?? '').trim()
   const localId = String(source.local_id ?? '').trim()
 
+  let door_master: DoorMasterSnapshot | undefined
+  const nested = source.door_master
+  if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+    const m = nested as Record<string, unknown>
+    door_master = {
+      door_description: m.door_description != null ? String(m.door_description) : null,
+      door_type_alt: m.door_type_alt != null ? String(m.door_type_alt) : null,
+      cw: m.cw != null ? String(m.cw) : null,
+      ch: m.ch != null ? String(m.ch) : null,
+    }
+    if (![door_master.door_description, door_master.door_type_alt, door_master.cw, door_master.ch].some(s => String(s ?? '').trim())) {
+      door_master = undefined
+    }
+  }
+
   return {
     local_id: localId || crypto.randomUUID(),
     door_id: doorId || undefined,
@@ -48,6 +63,8 @@ export function normalizeDoorFromApi(rawDoor: unknown, index: number): Maintenan
     door_cycles: Number(source.door_cycles ?? 0) || 0,
     view_window_visibility: Number(source.view_window_visibility ?? 0) || 0,
     notes: String(source.notes ?? '').trim(),
+    technician_door_details: String(source.technician_door_details ?? '').trim(),
+    door_master,
     checklist,
     photos,
     isCollapsed: Boolean(source.isCollapsed ?? index > 0),
@@ -58,6 +75,15 @@ export function normalizeDoorFromApi(rawDoor: unknown, index: number): Maintenan
 export function mapDraftApiReportToForm(report: Record<string, unknown>): MaintenanceFormValues {
   const maintenanceDoors: unknown[] = Array.isArray(report.doors) ? report.doors : []
   const doors = maintenanceDoors.map((door, index) => normalizeDoorFromApi(door, index))
+
+  const rawSchema = report.report_schema_version
+  let report_schema_version: number | undefined
+  if (rawSchema !== undefined && rawSchema !== null && rawSchema !== '') {
+    const n = Number(rawSchema)
+    if (Number.isFinite(n)) {
+      report_schema_version = Math.trunc(n)
+    }
+  }
 
   return {
     report_id: String(report.report_id ?? '').trim(),
@@ -71,6 +97,7 @@ export function mapDraftApiReportToForm(report: Record<string, unknown>): Mainte
     inspection_start: String(report.inspection_start ?? '').trim(),
     inspection_end: String(report.inspection_end ?? '').trim(),
     total_doors: Number(report.total_doors ?? doors.length) || doors.length || 1,
+    report_schema_version,
     notes: String(report.notes ?? '').trim(),
     signature_data_url: String(report.signature_data_url ?? '').trim(),
     signature_storage_url: String(report.signature_storage_url ?? '').trim(),

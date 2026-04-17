@@ -91,6 +91,18 @@ function normaliseDoors(value: unknown): unknown[] {
   return value.map((rawDoor, index) => {
     const door = (rawDoor && typeof rawDoor === 'object' ? rawDoor : {}) as Record<string, unknown>
 
+    const rawMaster = (door as Record<string, unknown>).door_master
+    let masterSnap: Record<string, string | null> | undefined
+    if (rawMaster && typeof rawMaster === 'object' && !Array.isArray(rawMaster)) {
+      const m = rawMaster as Record<string, unknown>
+      masterSnap = {
+        door_description: m.door_description != null ? String(m.door_description) : null,
+        door_type_alt: m.door_type_alt != null ? String(m.door_type_alt) : null,
+        cw: m.cw != null ? String(m.cw) : null,
+        ch: m.ch != null ? String(m.ch) : null,
+      }
+    }
+
     return {
       door_id: String(door.door_id ?? '').trim() || undefined,
       local_id: String(door.local_id ?? crypto.randomUUID()),
@@ -99,6 +111,8 @@ function normaliseDoors(value: unknown): unknown[] {
       door_cycles: toNumberOrZero(door.door_cycles),
       view_window_visibility: toNumberOrZero(door.view_window_visibility),
       notes: String(door.notes ?? ''),
+      technician_door_details: String((door as Record<string, unknown>).technician_door_details ?? ''),
+      door_master: masterSnap ?? undefined,
       checklist: normaliseChecklist(door.checklist),
       photos: normalisePhotos(door.photos),
       isCollapsed: Boolean(door.isCollapsed),
@@ -122,12 +136,22 @@ function normalisePayload(body: unknown): NormalizedEnvelope {
     ? rawStatus
     : 'submitted') as MaintenanceStatus
 
+  const rawSchema = rawForm.report_schema_version
+  let report_schema_version: number | undefined
+  if (rawSchema !== undefined && rawSchema !== null && rawSchema !== '') {
+    const n = Number(rawSchema)
+    if (Number.isFinite(n)) {
+      report_schema_version = Math.trunc(n)
+    }
+  }
+
   return {
     report_id,
     status,
     formCandidate: {
       report_id,
       offline_id,
+      report_schema_version,
       technician_name: String(rawForm.technician_name ?? '').trim(),
       submission_date: String(rawForm.submission_date ?? new Date().toISOString().slice(0, 10)),
       source_app: String(rawForm.source_app ?? 'Portal').trim() || 'Portal',

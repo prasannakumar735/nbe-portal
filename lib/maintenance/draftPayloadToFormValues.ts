@@ -2,9 +2,19 @@ import type { MaintenanceFormValues } from '@/lib/types/maintenance.types'
 
 /** Maps GET-draft-shaped payload to MaintenanceFormValues for PDF generation. */
 export function draftPayloadToFormValues(report: Record<string, unknown>): MaintenanceFormValues {
+  const rawSchema = report.report_schema_version
+  let report_schema_version: number | undefined
+  if (rawSchema !== undefined && rawSchema !== null && rawSchema !== '') {
+    const n = Number(rawSchema)
+    if (Number.isFinite(n)) {
+      report_schema_version = Math.trunc(n)
+    }
+  }
+
   return {
     report_id: report.report_id as string | undefined,
     offline_id: report.offline_id as string | undefined,
+    report_schema_version,
     technician_name: String(report.technician_name ?? ''),
     submission_date: String(report.submission_date ?? ''),
     source_app: String(report.source_app ?? 'Portal'),

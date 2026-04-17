@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { MAINTENANCE_CHECKLIST_ITEMS } from '@/lib/types/maintenance.types'
+import type { DoorMasterSnapshot } from '@/lib/types/maintenance.types'
 
 /**
  * Load the same payload as GET /api/maintenance/draft?reportId=… but in-process (service role).
@@ -19,6 +20,8 @@ export async function loadMaintenanceReportDraftPayload(
     if (reportError || !report) {
       return null
     }
+
+    const reportSchemaVersion = Number((report as { report_schema_version?: number | null }).report_schema_version ?? 1) || 1
 
     let resolvedClientLocationId = String(report.client_location_id ?? '').trim()
     if (!resolvedClientLocationId) {
@@ -66,8 +69,8 @@ export async function loadMaintenanceReportDraftPayload(
       locationName = String(
         (locationData as { location_name?: string | null; name?: string | null; suburb?: string | null; site_name?: string | null } | null)?.location_name ??
           (locationData as { location_name?: string | null; name?: string | null; suburb?: string | null; site_name?: string | null } | null)?.name ??
-          (locationData as { location_name?: string | null; name?: string | null; suburb?: string | null; site_name?: string | null } | null)?.suburb ??
           (locationData as { location_name?: string | null; name?: string | null; suburb?: string | null; site_name?: string | null } | null)?.site_name ??
+          (locationData as { location_name?: string | null; name?: string | null; suburb?: string | null; site_name?: string | null } | null)?.suburb ??
           '',
       ).trim()
       const companyAddress = String(
@@ -163,6 +166,7 @@ export async function loadMaintenanceReportDraftPayload(
     })
 
     const hydratedDoors = (doors ?? []).map(door => {
+      const row = door as Record<string, unknown>
       const fallbackDoorId = resolvedDoorIdByLabel.get(String(door.door_number ?? '').trim().toLowerCase())
       const resolvedDoorId = String(door.door_id ?? fallbackDoorId ?? '').trim() || undefined
 
@@ -173,6 +177,23 @@ export async function loadMaintenanceReportDraftPayload(
           .eq('id', door.id)
       }
 
+      const masterDesc = row.door_master_description != null ? String(row.door_master_description).trim() : ''
+      const masterAlt = row.door_master_type_alt != null ? String(row.door_master_type_alt).trim() : ''
+      const masterCw = row.door_master_cw != null ? String(row.door_master_cw).trim() : ''
+      const masterCh = row.door_master_ch != null ? String(row.door_master_ch).trim() : ''
+      let door_master: DoorMasterSnapshot | undefined
+      if (reportSchemaVersion >= 2 && (masterDesc || masterAlt || masterCw || masterCh)) {
+        door_master = {
+          door_description: masterDesc || null,
+          door_type_alt: masterAlt || null,
+          cw: masterCw || null,
+          ch: masterCh || null,
+        }
+      }
+
+      const technician_door_details =
+        reportSchemaVersion >= 2 ? String(row.technician_door_details ?? '').trim() : ''
+
       return {
         door_id: resolvedDoorId,
         local_id: door.local_id,
@@ -181,6 +202,8 @@ export async function loadMaintenanceReportDraftPayload(
         door_cycles: Number(door.door_cycles ?? 0),
         view_window_visibility: Number(door.view_window_visibility ?? 0),
         notes: door.notes ?? '',
+        technician_door_details,
+        door_master,
         checklist: checklistByDoor.get(door.id) ?? {},
         photos: photosByDoor.get(door.id) ?? [],
         isCollapsed: false,
@@ -189,6 +212,7 @@ export async function loadMaintenanceReportDraftPayload(
 
     return {
       report_id: report.id,
+      report_schema_version: reportSchemaVersion,
       updated_at: (report as { updated_at?: string }).updated_at ?? null,
       status: report.status,
       technician_name: report.technician_name,

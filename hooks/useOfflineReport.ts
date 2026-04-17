@@ -23,7 +23,7 @@ import type {
   SyncQueueRow,
 } from '@/lib/types/offline-report.types'
 
-const PERSIST_DEBOUNCE_MS = 300
+const PERSIST_DEBOUNCE_MS = 700
 const VERSION_DEBOUNCE_MS = 5000
 
 function omitDoors(form: MaintenanceFormValues): OfflineReportHeader {
@@ -332,13 +332,16 @@ export function useOfflineReport(reportId: string | null): UseOfflineReportResul
     await idbPutSyncQueue(queueRow)
     setSaveStatus('saved_offline')
     void refreshPending(rid)
-    void syncEngineRef.current?.tick()
+    // Do not call syncEngine.tick() here — each flush + tick produced GET /draft probes; the engine interval + online handler runs sync.
   }, [reportId, refreshPending])
 
   const persistForm = useCallback(
     (form: MaintenanceFormValues) => {
       pendingFormRef.current = form
-      setSaveStatus('saving_local')
+      // Avoid setState on every keystroke — if already saving locally, React bails (no parent re-render / watch churn).
+      setSaveStatus(prev =>
+        prev === 'saving_local' || prev === 'syncing' || prev === 'loading' ? prev : 'saving_local',
+      )
       if (persistTimer.current) clearTimeout(persistTimer.current)
       persistTimer.current = setTimeout(() => {
         void flushPersist()

@@ -69,11 +69,26 @@ export async function processSyncQueueItem(row: SyncQueueRow): Promise<{ ok: tru
     return { ok: false, retryable, message: errText || `HTTP ${res.status}` }
   }
 
-  const nextProbe = await fetchDraftReport(reportId)
+  let body: unknown = null
+  try {
+    body = await res.json()
+  } catch {
+    body = null
+  }
+  const postUpdatedAt =
+    body &&
+    typeof body === 'object' &&
+    typeof (body as { updated_at?: unknown }).updated_at === 'string' &&
+    String((body as { updated_at: string }).updated_at).trim()
+      ? String((body as { updated_at: string }).updated_at)
+      : null
+
+  const nextServerUpdatedAt = postUpdatedAt ?? (await fetchDraftReport(reportId))?.updated_at ?? serverProbe.updated_at
+
   if (existing) {
     await idbPutReport({
       ...existing,
-      lastKnownServerUpdatedAt: nextProbe?.updated_at ?? serverProbe.updated_at,
+      lastKnownServerUpdatedAt: nextServerUpdatedAt,
       updatedAt: Date.now(),
     })
   }

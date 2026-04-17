@@ -37,7 +37,7 @@ function locationDisplayName(l: {
   suburb?: string | null
   site_name?: string | null
 }) {
-  const s = String(l.location_name ?? l.name ?? l.suburb ?? l.site_name ?? '').trim()
+  const s = String(l.location_name ?? l.name ?? l.site_name ?? l.suburb ?? '').trim()
   if (s) return s
   if (l.id) return `Location ${String(l.id).slice(0, 8)}…`
   return '—'
@@ -515,8 +515,8 @@ const TIMECARD_SELECT_FLAT =
 
 /** Explicit FKs so PostgREST embeds resolve reliably for export + analytics. */
 const TIMECARD_SELECT_JOINED = `${TIMECARD_SELECT_FLAT},
-      clients!employee_timesheet_entries_client_id_fkey ( id, name, client_name, company_name ),
-      client_locations!employee_timesheet_entries_location_id_fkey ( id, client_id, location_name, name, suburb, site_name )`
+      clients!employee_timesheet_entries_client_id_fkey ( id, name, company_name ),
+      client_locations!employee_timesheet_entries_location_id_fkey ( id, client_id, location_name, suburb )`
 
 function firstRelationEmbed<T>(raw: unknown): T | null {
   if (raw == null) return null

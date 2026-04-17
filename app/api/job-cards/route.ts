@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
       const { data: ev, error: evErr } = await supabase
         .from('calendar_events')
         .select(
-          'id, title, description, assigned_to, client_id, location_id, clients ( name ), client_locations ( location_name, name, site_name, suburb, address, Company_address )',
+          'id, title, description, assigned_to, client_id, location_id, clients ( name ), client_locations ( location_name, suburb, Company_address )',
         )
         .eq('id', eventId)
         .single()

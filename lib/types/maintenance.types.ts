@@ -44,6 +44,14 @@ export type MaintenanceDoorPhoto = {
   offline_filename?: string
 }
 
+/** Copied from `doors` when the technician selects a door; stored on the report row for stable PDFs. */
+export type DoorMasterSnapshot = {
+  door_description?: string | null
+  door_type_alt?: string | null
+  cw?: string | null
+  ch?: string | null
+}
+
 export type MaintenanceDoorForm = {
   door_id?: string
   local_id: string
@@ -52,6 +60,12 @@ export type MaintenanceDoorForm = {
   door_cycles: number
   view_window_visibility: number
   notes: string
+  /** Freeform details for this inspection (separate from fault notes and global report notes). Schema >= 2 only. */
+  technician_door_details?: string
+  /** Snapshot from door registry when linked; schema >= 2 only. */
+  door_master?: DoorMasterSnapshot | null
+  /** Technician chose "Add door manually" — no registry row yet; label/master fields are entered on form. */
+  adhoc_manual?: boolean
   checklist: Record<string, MaintenanceChecklistStatus | null>
   photos: MaintenanceDoorPhoto[]
   isCollapsed?: boolean
@@ -59,6 +73,11 @@ export type MaintenanceDoorForm = {
 
 export type MaintenanceFormValues = {
   report_id?: string
+  /**
+   * `1` = legacy reports (no door master UI / PDF blocks).
+   * `2` = new reports with optional door master snapshot + technician door details.
+   */
+  report_schema_version?: number
   /** Client-generated UUID to make offline sync idempotent. */
   offline_id?: string
   technician_name: string
@@ -87,6 +106,46 @@ export type ClientLocationOption = {
   client_id: string
   name: string
   address: string
+  suburb?: string | null
+}
+
+/** Row from GET /api/maintenance/doors for dropdown + master snapshot. */
+export type MaintenanceAvailableDoor = {
+  id: string
+  door_label: string
+  door_type: string
+  door_description?: string | null
+  door_type_alt?: string | null
+  cw?: string | null
+  ch?: string | null
+}
+
+export type ClientRecord = {
+  id: string
+  client_name: string
+  created_at?: string | null
+}
+
+export type ClientLocationRecord = {
+  id: string
+  client_id: string
+  location_name: string
+  Company_address: string | null
+  suburb?: string | null
+  created_at?: string | null
+}
+
+export type DoorRecord = {
+  id: string
+  client_location_id: string
+  door_label: string
+  door_type: string
+  door_description?: string | null
+  door_type_alt?: string | null
+  cw?: string | null
+  ch?: string | null
+  install_date?: string | null
+  created_at?: string | null
 }
 
 export type MaintenanceDraftPayload = {

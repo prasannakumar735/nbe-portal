@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createServerClient } from '@/lib/supabase/server'
 import { canApproveMaintenanceReport } from '@/lib/auth/roles'
-import { parseMaintenanceDraftPayload } from '@/lib/validation/maintenance'
+import {
+  formatMaintenanceZodIssues,
+  maintenanceFormSubmitSchema,
+  parseMaintenanceDraftPayload,
+  uuidOrEmpty,
+} from '@/lib/validation/maintenance'
+import { ZodError } from 'zod'
 import { MAINTENANCE_CHECKLIST_ITEMS } from '@/lib/types/maintenance.types'
 import { loadMaintenanceReportDraftPayload } from '@/lib/maintenance/loadMaintenanceReportDraftPayload'
 import { maintenanceReportClientViewUrl } from '@/lib/app/publicAppBaseUrl'
@@ -36,6 +42,13 @@ async function persistDoorData(
     door_cycles: number
     view_window_visibility: number
     notes: string
+    technician_door_details?: string
+    door_master?: {
+      door_description?: string | null
+      door_type_alt?: string | null
+      cw?: string | null
+      ch?: string | null
+    } | null
     checklist: Record<string, 'good' | 'caution' | 'fault' | 'na' | null>
     photos: Array<{ url: string; path: string }>
   }>,
@@ -100,6 +113,19 @@ async function persistDoorData(
     resolvedDoorIds.set(door.local_id, doorId)
   }
 
+  // Keep `doors` (site registry) in sync with the inspection form. Previously we only set door_type on INSERT,
+  // so the first save with an empty type stored "Unspecified" and later edits never updated the registry —
+  // the dropdown and GET /api/maintenance/doors kept showing "Unspecified" even after the technician fixed it.
+  for (const door of doors) {
+    const doorId = resolvedDoorIds.get(door.local_id)
+    if (!doorId) continue
+    const t = String(door.door_type ?? '').trim() || 'Unspecified'
+    const { error: syncErr } = await supabase.from('doors').update({ door_type: t }).eq('id', doorId)
+    if (syncErr) {
+      console.error('Failed to sync doors.door_type from inspection:', doorId, syncErr)
+    }
+  }
+
   const maintenanceDoorsInsert: Array<{
     report_id: string
     door_id: string
@@ -110,6 +136,11 @@ async function persistDoorData(
     door_cycles: number
     view_window_visibility: number
     notes: string | null
+    door_master_description: string | null
+    door_master_type_alt: string | null
+    door_master_cw: string | null
+    door_master_ch: string | null
+    technician_door_details: string | null
   }> = []
 
   doors.forEach((door, index) => {
@@ -117,6 +148,12 @@ async function persistDoorData(
     if (!doorId) {
       throw new Error(`door_id could not be resolved for door ${door.local_id}`)
     }
+    const m = door.door_master
+    const masterDesc = m?.door_description != null ? String(m.door_description).trim() : ''
+    const masterAlt = m?.door_type_alt != null ? String(m.door_type_alt).trim() : ''
+    const masterCw = m?.cw != null ? String(m.cw).trim() : ''
+    const masterCh = m?.ch != null ? String(m.ch).trim() : ''
+    const techDetails = String(door.technician_door_details ?? '').trim()
     maintenanceDoorsInsert.push({
       report_id: reportId,
       door_id: doorId,
@@ -127,6 +164,11 @@ async function persistDoorData(
       door_cycles: Number(door.door_cycles) || 0,
       view_window_visibility: Number(door.view_window_visibility) || 0,
       notes: door.notes ?? null,
+      door_master_description: masterDesc || null,
+      door_master_type_alt: masterAlt || null,
+      door_master_cw: masterCw || null,
+      door_master_ch: masterCh || null,
+      technician_door_details: techDetails || null,
     })
   })
 
@@ -160,7 +202,10 @@ async function persistDoorData(
     })
 
     door.photos.forEach(photo => {
-      photoRows.push({ door_id: doorId, image_url: photo.url })
+      const url = String(photo.url ?? '').trim()
+      if (url) {
+        photoRows.push({ door_id: doorId, image_url: url })
+      }
     })
   })
 
@@ -239,6 +284,11 @@ export async function POST(request: NextRequest) {
     const payload = parseMaintenanceDraftPayload(body)
     console.log('Draft Payload:', payload)
 
+    // Final submitted rows must still satisfy full checklist rules; WIP draft/reviewing saves skip this.
+    if (payload.status === 'submitted') {
+      maintenanceFormSubmitSchema.parse(payload.form)
+    }
+
     const supabase = createWriteClient()
 
     let adminUserId: string | null = null
@@ -291,7 +341,7 @@ export async function POST(request: NextRequest) {
       technician_name: String(payload.form.technician_name ?? '').trim() || 'Technician',
       submission_date: payload.form.submission_date ?? new Date().toISOString().slice(0, 10),
       source_app: String(payload.form.source_app ?? 'Portal').trim() || 'Portal',
-      client_location_id: payload.form.client_location_id || null,
+      client_location_id: uuidOrEmpty(payload.form.client_location_id) || null,
       address: String(payload.form.address ?? '').trim(),
       inspection_date: payload.form.inspection_date ?? new Date().toISOString().slice(0, 10),
       inspection_start: payload.form.inspection_start ?? '00:00:00',
@@ -303,6 +353,7 @@ export async function POST(request: NextRequest) {
       status: persistedStatus,
     }
     if (!payload.report_id) {
+      reportInsert.report_schema_version = 2
       reportInsert.submitted_at =
         persistedStatus === 'submitted' || persistedStatus === 'reviewing'
           ? new Date().toISOString()
@@ -315,8 +366,9 @@ export async function POST(request: NextRequest) {
 
     let reportId = payload.report_id
 
+    const resolvedLocationId = uuidOrEmpty(payload.form.client_location_id)
     const hasDoorsWithoutId = (payload.form.doors ?? []).some((d: { door_id?: string }) => !d.door_id)
-    if (hasDoorsWithoutId && !payload.form.client_location_id) {
+    if (hasDoorsWithoutId && !resolvedLocationId) {
       throw new Error('Missing required identifiers for draft save: client_location_id is required when a door has not been linked to a location.')
     }
 
@@ -354,13 +406,38 @@ export async function POST(request: NextRequest) {
     await persistDoorData(
       supabase,
       reportId!,
-      payload.form.client_location_id,
+      resolvedLocationId,
       persistedStatus as 'draft' | 'submitted' | 'reviewing',
       payload.form.doors,
     )
 
-    return NextResponse.json({ report_id: reportId, status: persistedStatus })
+    const { data: reportMeta } = await supabase
+      .from('maintenance_reports')
+      .select('updated_at')
+      .eq('id', reportId!)
+      .single()
+
+    const updatedAt =
+      reportMeta && typeof (reportMeta as { updated_at?: unknown }).updated_at === 'string'
+        ? String((reportMeta as { updated_at: string }).updated_at)
+        : null
+
+    return NextResponse.json({ report_id: reportId, status: persistedStatus, updated_at: updatedAt })
   } catch (error) {
+    if (error instanceof ZodError) {
+      const summary = formatMaintenanceZodIssues(error)
+      return NextResponse.json(
+        {
+          error: summary,
+          details: {
+            name: 'ZodError',
+            message: error.message,
+            issues: error.issues,
+          },
+        },
+        { status: 400 },
+      )
+    }
     console.error('Supabase error:', error)
     const serializable =
       error && typeof error === 'object'

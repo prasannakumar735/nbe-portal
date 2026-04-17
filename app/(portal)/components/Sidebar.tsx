@@ -36,6 +36,7 @@ export function Sidebar({ isCollapsed, onToggleCollapse, isMobileOpen, onCloseMo
         ...NAV_ITEMS,
         { label: 'People', icon: 'groups', href: '/dashboard/people' },
         { label: 'Inventory', icon: 'inventory_2', href: '/admin/inventory' },
+        { label: 'Clients', icon: 'domain', href: '/admin/clients' },
       ]
     : NAV_ITEMS
 
@@ -58,6 +59,9 @@ export function Sidebar({ isCollapsed, onToggleCollapse, isMobileOpen, onCloseMo
     }
     if (href === '/reports') {
       return pathname === '/reports' || pathname.startsWith('/manager/reports')
+    }
+    if (href === '/admin/clients') {
+      return pathname === '/admin/clients' || pathname.startsWith('/admin/clients/')
     }
     return pathname === href
   }

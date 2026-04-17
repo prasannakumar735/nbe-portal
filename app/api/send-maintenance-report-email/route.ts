@@ -70,22 +70,22 @@ export async function POST(request: NextRequest) {
     if (report.client_location_id) {
       const { data: locationData } = await supabase
         .from('client_locations')
-        .select('client_id, location_name, name, suburb')
+        .select('client_id, location_name, suburb')
         .eq('id', report.client_location_id)
         .single()
 
       if (locationData) {
-        locationName = String(locationData.location_name ?? locationData.name ?? locationData.suburb ?? '').trim()
+        locationName = String(locationData.location_name ?? locationData.suburb ?? '').trim()
 
         if (locationData.client_id) {
           const { data: clientData } = await supabase
             .from('clients')
-            .select('client_name, name')
+            .select('name, company_name')
             .eq('id', locationData.client_id)
             .single()
 
           if (clientData) {
-            clientName = String(clientData.client_name ?? clientData.name ?? '').trim()
+            clientName = String(clientData.name ?? clientData.company_name ?? '').trim()
           }
         }
       }
