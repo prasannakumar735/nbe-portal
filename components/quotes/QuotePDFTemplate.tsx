@@ -125,7 +125,7 @@ export function QuotePDFTemplate({ values, subtotal, gst, total }: QuotePDFTempl
           <div className="mt-6 border-b border-slate-400" />
         </div>
         <div>
-          <p className="font-medium">Printed Name</p>
+          <p className="font-medium">Name</p>
           <div className="mt-6 border-b border-slate-400 pb-0.5">{values.printedName || ''}</div>
         </div>
         <div>

@@ -15,7 +15,7 @@ export async function sendInventoryLowStockAlertEmail(items: LowStockItem[]): Pr
   const user = process.env.SMTP_USER
   const pass = process.env.SMTP_PASS
   const from = process.env.SMTP_FROM || user
-  const to = process.env.INVENTORY_ALERT_EMAIL || process.env.MAINTENANCE_ADMIN_EMAIL || 'service@nbeaustralia.com.au'
+  const to = process.env.INVENTORY_ALERT_EMAIL || process.env.MAINTENANCE_ADMIN_EMAIL || 'accountsreceivable@nbeaustralia.com.au'
 
   if (!host || !user || !pass || !from) {
     throw new Error('Missing SMTP configuration for inventory low stock alerts.')

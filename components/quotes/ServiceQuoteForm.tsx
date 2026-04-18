@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { QuoteHeader } from './QuoteHeader'
@@ -23,64 +25,86 @@ function createQuoteNumber() {
   return `RRD-${year}${month}${day}-${token}`
 }
 
-export function ServiceQuoteForm() {
+const emptyDefaults = (): ServiceQuoteFormValues => ({
+  quoteNumber: createQuoteNumber(),
+  serviceDate: new Date().toISOString().split('T')[0],
+  companyName: 'NBE Australia Pty Ltd',
+  abn: '17 007 048 008',
+  companyAddress: '22a Humeside Drive, Campbellfield Victoria 3061 Australia',
+  companyEmail: 'accountsreceivable@nbeaustralia.com.au',
+  customerCompany: '',
+  contactPerson: '',
+  phone: '',
+  customerEmail: '',
+  siteAddress: '',
+  items: [
+    {
+      description: 'Conducted scheduled service on rapid roller doors',
+      width: '',
+      height: '',
+      qty: 1,
+      unitPrice: 0,
+    },
+  ],
+  notes:
+    'Should you require any further information or clarification about this quotation, please do not hesitate to contact us.',
+  printedName: '',
+  signatureDate: new Date().toISOString().split('T')[0],
+})
+
+export type ServiceQuoteFormProps = {
+  mode?: 'create' | 'edit'
+  quoteId?: string | null
+  initialValues?: ServiceQuoteFormValues | null
+}
+
+export function ServiceQuoteForm({ mode = 'create', quoteId = null, initialValues = null }: ServiceQuoteFormProps) {
+  const router = useRouter()
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
-  const { register, control, handleSubmit, watch, setValue } = useForm<ServiceQuoteFormValues>({
-    defaultValues: {
-      quoteNumber: createQuoteNumber(),
-      serviceDate: new Date().toISOString().split('T')[0],
-      companyName: 'NBE Australia Pty Ltd',
-      abn: '17 007 048 008',
-      companyAddress: '22a Humeside Drive, Campbellfield Victoria 3061 Australia',
-      companyEmail: 'Service@nbeaustralia.com.au',
-      customerCompany: '',
-      contactPerson: '',
-      phone: '',
-      customerEmail: '',
-      siteAddress: '',
-      items: [
-        {
-          description: 'Conducted scheduled service on rapid roller doors',
-          width: '',
-          height: '',
-          qty: 1,
-          unitPrice: 0,
-        },
-      ],
-      notes:
-        'Should you require any further information or clarification about this quotation, please do not hesitate to contact us.',
-      printedName: '',
-      signatureDate: new Date().toISOString().split('T')[0],
-    },
+  const {
+    register,
+    control,
+    handleSubmit,
+    watch,
+    setValue,
+    getValues,
+    reset,
+    formState: { isDirty },
+  } = useForm<ServiceQuoteFormValues>({
+    defaultValues: initialValues ?? emptyDefaults(),
   })
 
-  const watchedPhone = useWatch({ control, name: 'phone' })
-  const watchedSiteAddress = useWatch({ control, name: 'siteAddress' })
-
-  /** Client company line is derived from phone + site address; staff edit phone and site. */
   useEffect(() => {
-    const p = String(watchedPhone ?? '').trim()
-    const s = String(watchedSiteAddress ?? '').trim()
+    if (initialValues) {
+      reset(initialValues)
+    }
+  }, [initialValues, reset])
+
+  const fillCustomerCompanyFromPhoneAndSite = () => {
+    const p = String(getValues('phone') ?? '').trim()
+    const s = String(getValues('siteAddress') ?? '').trim()
     const combined = [p, s].filter(Boolean).join(' — ')
     setValue('customerCompany', combined, { shouldDirty: true, shouldValidate: true })
-  }, [watchedPhone, watchedSiteAddress, setValue])
+  }
 
   const { fields, append, remove } = useFieldArray({
     control,
     name: 'items',
   })
 
-  const watchedItems = watch('items')
+  const watchedItems = useWatch({ control, name: 'items' }) ?? []
   const watchedValues = watch()
 
   const subtotal = useMemo(() => {
     return watchedItems.reduce((sum, row) => {
-      const qty = Number(row.qty || 0)
-      const unitPrice = Number(row.unitPrice || 0)
-      return sum + qty * unitPrice
+      const qty = Number(row?.qty ?? 0)
+      const unitPrice = Number(row?.unitPrice ?? 0)
+      const q = Number.isFinite(qty) ? qty : 0
+      const u = Number.isFinite(unitPrice) ? unitPrice : 0
+      return sum + q * u
     }, 0)
   }, [watchedItems])
 
@@ -102,30 +126,57 @@ export function ServiceQuoteForm() {
     setErrorMessage(null)
     setStatusMessage(null)
 
-    const values = watch()
+    const values = getValues()
+    const form_snapshot = values
     setIsSaving(true)
 
     try {
-      const items = values.items.map(item => ({
-        ...item,
-        total: Number(item.qty || 0) * Number(item.unitPrice || 0),
-      }))
+      const items = values.items
+        .map(item => ({
+          ...item,
+          description: String(item.description ?? '').trim(),
+          total: Number(item.qty || 0) * Number(item.unitPrice || 0),
+        }))
+        .filter(item => item.description.length > 0)
 
-      const response = await fetch('/api/quotes/service', {
-        method: 'POST',
+      if (!String(values.customerCompany ?? '').trim()) {
+        throw new Error('Company name is required.')
+      }
+      if (!String(values.siteAddress ?? '').trim()) {
+        throw new Error('Site address is required.')
+      }
+      if (!String(values.serviceDate ?? '').trim()) {
+        throw new Error('Quote date is required.')
+      }
+      if (items.length === 0) {
+        throw new Error('Add at least one line item with a description (remove empty rows or fill them in).')
+      }
+
+      const saveSubtotal = items.reduce((sum, item) => sum + Number(item.qty || 0) * Number(item.unitPrice || 0), 0)
+      const saveGst = saveSubtotal * 0.1
+      const saveTotal = saveSubtotal + saveGst
+
+      const body = {
+        quote_number: values.quoteNumber,
+        customer_name: String(values.customerCompany).trim(),
+        site_address: String(values.siteAddress).trim(),
+        service_date: values.serviceDate,
+        subtotal: saveSubtotal,
+        gst: saveGst,
+        total: saveTotal,
+        items,
+        form_snapshot,
+      }
+
+      const url = mode === 'edit' && quoteId ? `/api/quotes/service/${quoteId}` : '/api/quotes/service'
+      const method = mode === 'edit' && quoteId ? 'PATCH' : 'POST'
+
+      const response = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          quote_number: values.quoteNumber,
-          customer_name: values.customerCompany,
-          site_address: values.siteAddress,
-          service_date: values.serviceDate,
-          subtotal,
-          gst,
-          total: grandTotal,
-          items,
-        }),
+        body: JSON.stringify(body),
       })
 
       const data = await response.json()
@@ -134,8 +185,12 @@ export function ServiceQuoteForm() {
         throw new Error(data.error || 'Failed to save quote.')
       }
 
-      setStatusMessage('Quote saved to Supabase.')
-      setValue('quoteNumber', createQuoteNumber())
+      if (mode === 'edit') {
+        setStatusMessage('Quote updated in Supabase.')
+      } else {
+        setStatusMessage('Quote saved to Supabase.')
+        setValue('quoteNumber', createQuoteNumber())
+      }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Failed to save quote.')
     } finally {
@@ -147,8 +202,37 @@ export function ServiceQuoteForm() {
     window.print()
   }
 
+  const handleCancel = () => {
+    if (isDirty) {
+      const ok = window.confirm('Discard unsaved changes and leave this page?')
+      if (!ok) return
+    }
+    if (mode === 'edit' && quoteId) {
+      router.push(`/dashboard/quotes/service/${quoteId}`)
+    } else {
+      router.push('/dashboard/quotes/service')
+    }
+  }
+
   return (
     <div className="mx-auto w-full max-w-[210mm] space-y-5 px-4 py-6 print:max-w-none print:px-0 print:py-0">
+      <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
+        <Link
+          href="/dashboard/quotes/service"
+          className="text-sm font-medium text-slate-700 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
+        >
+          Back to Service Quote
+        </Link>
+        {mode === 'edit' && quoteId && (
+          <Link
+            href={`/dashboard/quotes/service/${quoteId}`}
+            className="text-sm font-medium text-slate-700 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
+          >
+            View this quote
+          </Link>
+        )}
+      </div>
+
       <header className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm print:shadow-none">
         <div className="flex items-center justify-between border-b border-slate-200 pb-4">
           <NBELogo />
@@ -174,7 +258,7 @@ export function ServiceQuoteForm() {
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
         <QuoteHeader register={register} />
-        <CustomerDetails register={register} />
+        <CustomerDetails register={register} onFillCompanyFromPhoneSite={fillCustomerCompanyFromPhoneAndSite} />
         <ServiceTemplateSelector onApplyTemplate={handleApplyTemplate} />
         <LineItemsTable
           fields={fields}
@@ -202,7 +286,7 @@ export function ServiceQuoteForm() {
               Client Signature
             </div>
             <label className="flex flex-col gap-1 text-sm text-slate-700">
-              Printed Name
+              Name
               <input
                 {...register('printedName')}
                 className="rounded-md border border-slate-300 px-3 py-2 text-sm"
@@ -229,7 +313,7 @@ export function ServiceQuoteForm() {
             disabled={isSaving}
             className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800"
           >
-            {isSaving ? 'Saving...' : 'Save Quote (Supabase)'}
+            {isSaving ? 'Saving...' : mode === 'edit' ? 'Update Quote (Supabase)' : 'Save Quote (Supabase)'}
           </button>
           <PDFDownloadLink
             document={
@@ -253,6 +337,13 @@ export function ServiceQuoteForm() {
             className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800"
           >
             Print
+          </button>
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          >
+            Cancel
           </button>
         </div>
       </form>

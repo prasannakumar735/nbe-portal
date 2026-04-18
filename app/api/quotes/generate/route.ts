@@ -245,7 +245,7 @@ export async function POST(request: NextRequest) {
         },
         email: {
           status: emailStatus,
-          to: 'service@nbeaustralia.com.au',
+          to: 'accountsreceivable@nbeaustralia.com.au',
           reason: emailReason,
         },
         database: {

@@ -33,7 +33,7 @@ export async function sendQuoteEmail(
 
   await transporter.sendMail({
     from,
-    to: 'service@nbeaustralia.com.au',
+    to: 'accountsreceivable@nbeaustralia.com.au',
     subject: 'New PVC Strip Door Quote Generated',
     text: [
       'A new PVC strip door quote has been generated from the NBE Portal.',

@@ -20,7 +20,7 @@ export function QuoteHeader({ register }: QuoteHeaderProps) {
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-slate-700">
-          Service Date
+          Quote date
           <input
             type="date"
             {...register('serviceDate')}

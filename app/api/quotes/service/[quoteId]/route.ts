@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
+import { quoteRowsToFormValues } from '@/lib/quotes/serviceQuoteSnapshot'
 
 type ServiceQuoteItemPayload = {
   description: string
@@ -78,49 +79,74 @@ function errorMessage(error: unknown): string {
     const parts = [e.message, e.details, e.hint].filter(Boolean)
     if (parts.length) return parts.join(' ')
   }
-  return 'Failed to save service quote.'
+  return 'Failed to process service quote.'
 }
 
-/** List saved quotes; optional `q` filters customer_name and quote_number (ilike). */
-export async function GET(request: NextRequest) {
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+export async function GET(_request: NextRequest, context: { params: Promise<{ quoteId: string }> }) {
   try {
-    const supabase = createServiceRoleClient()
-    const { searchParams } = new URL(request.url)
-    const q = (searchParams.get('q') ?? '').trim()
-
-    let query = supabase
-      .from('quotes')
-      .select('id, quote_number, customer_name, site_address, service_date, total, created_at')
-      .order('created_at', { ascending: false })
-      .limit(200)
-
-    if (q.length > 0) {
-      const safe = q.replace(/%/g, '').replace(/,/g, '').slice(0, 120)
-      query = query.or(`customer_name.ilike.%${safe}%,quote_number.ilike.%${safe}%`)
+    const { quoteId } = await context.params
+    if (!UUID_RE.test(quoteId)) {
+      return NextResponse.json({ error: 'Invalid quote id.' }, { status: 400 })
     }
 
-    const { data, error } = await query
+    const supabase = createServiceRoleClient()
 
-    if (error) throw error
+    const { data: quote, error: qErr } = await supabase.from('quotes').select('*').eq('id', quoteId).maybeSingle()
 
-    return NextResponse.json({ quotes: data ?? [] })
+    if (qErr) throw qErr
+    if (!quote) {
+      return NextResponse.json({ error: 'Quote not found.' }, { status: 404 })
+    }
+
+    const { data: items, error: iErr } = await supabase
+      .from('quote_items')
+      .select('description, width, height, qty, unit_price, total')
+      .eq('quote_id', quoteId)
+      .order('id', { ascending: true })
+
+    if (iErr) throw iErr
+
+    const formValues = quoteRowsToFormValues(quote, items ?? [])
+
+    return NextResponse.json({
+      quote: {
+        id: quote.id,
+        quote_number: quote.quote_number,
+        customer_name: quote.customer_name,
+        site_address: quote.site_address,
+        service_date: quote.service_date,
+        subtotal: quote.subtotal,
+        gst: quote.gst,
+        total: quote.total,
+        created_at: quote.created_at,
+        form_snapshot: quote.form_snapshot,
+      },
+      items: items ?? [],
+      formValues,
+    })
   } catch (error) {
     return NextResponse.json({ error: errorMessage(error) }, { status: 400 })
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function PATCH(request: NextRequest, context: { params: Promise<{ quoteId: string }> }) {
   try {
+    const { quoteId } = await context.params
+    if (!UUID_RE.test(quoteId)) {
+      return NextResponse.json({ error: 'Invalid quote id.' }, { status: 400 })
+    }
+
     const payload = (await request.json()) as ServiceQuotePayload
     const items = normalizeItems(payload.items)
     validatePayload(payload, items)
 
-    /** Service role bypasses RLS; the user-scoped anon client often has no INSERT policy on `quotes`. */
     const supabase = createServiceRoleClient()
 
-    const { data: quote, error: quoteError } = await supabase
+    const { error: upErr } = await supabase
       .from('quotes')
-      .insert({
+      .update({
         quote_number: payload.quote_number.trim(),
         customer_name: payload.customer_name.trim(),
         site_address: payload.site_address.trim(),
@@ -130,15 +156,15 @@ export async function POST(request: NextRequest) {
         total: payload.total,
         form_snapshot: payload.form_snapshot ?? null,
       })
-      .select('id')
-      .single()
+      .eq('id', quoteId)
 
-    if (quoteError) {
-      throw quoteError
-    }
+    if (upErr) throw upErr
+
+    const { error: delErr } = await supabase.from('quote_items').delete().eq('quote_id', quoteId)
+    if (delErr) throw delErr
 
     const quoteItems = items.map(item => ({
-      quote_id: quote.id,
+      quote_id: quoteId,
       description: item.description,
       width: item.width || null,
       height: item.height || null,
@@ -147,15 +173,28 @@ export async function POST(request: NextRequest) {
       total: item.total,
     }))
 
-    const { error: itemsError } = await supabase.from('quote_items').insert(quoteItems)
+    const { error: insErr } = await supabase.from('quote_items').insert(quoteItems)
+    if (insErr) throw insErr
 
-    if (itemsError) {
-      throw itemsError
+    return NextResponse.json({ success: true, quote_id: quoteId })
+  } catch (error) {
+    return NextResponse.json({ error: errorMessage(error) }, { status: 400 })
+  }
+}
+
+export async function DELETE(_request: NextRequest, context: { params: Promise<{ quoteId: string }> }) {
+  try {
+    const { quoteId } = await context.params
+    if (!UUID_RE.test(quoteId)) {
+      return NextResponse.json({ error: 'Invalid quote id.' }, { status: 400 })
     }
 
-    return NextResponse.json({ success: true, quote_id: quote.id })
+    const supabase = createServiceRoleClient()
+    const { error } = await supabase.from('quotes').delete().eq('id', quoteId)
+    if (error) throw error
+
+    return NextResponse.json({ success: true })
   } catch (error) {
-    const message = errorMessage(error)
-    return NextResponse.json({ error: message }, { status: 400 })
+    return NextResponse.json({ error: errorMessage(error) }, { status: 400 })
   }
 }

@@ -1,5 +1,7 @@
-import { ServiceQuoteForm } from '@/components/quotes/ServiceQuoteForm'
+'use client'
+
+import ServiceQuotesList from '@/components/quotes/ServiceQuotesList'
 
 export default function ServiceQuotePage() {
-  return <ServiceQuoteForm />
+  return <ServiceQuotesList />
 }

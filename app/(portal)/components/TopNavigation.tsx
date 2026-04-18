@@ -44,6 +44,9 @@ export function TopNavigation({ user }: TopNavigationProps) {
     if (href === '/reports') {
       return pathname === '/reports' || pathname.startsWith('/manager/reports')
     }
+    if (href === '/dashboard/quotes/service') {
+      return pathname.startsWith('/dashboard/quotes/service')
+    }
     return pathname === href
   }
 

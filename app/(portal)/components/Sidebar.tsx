@@ -63,6 +63,9 @@ export function Sidebar({ isCollapsed, onToggleCollapse, isMobileOpen, onCloseMo
     if (href === '/admin/clients') {
       return pathname === '/admin/clients' || pathname.startsWith('/admin/clients/')
     }
+    if (href === '/dashboard/quotes/service') {
+      return pathname.startsWith('/dashboard/quotes/service')
+    }
     return pathname === href
   }
 
