@@ -24,6 +24,11 @@ export type TurnstileWidgetHandle = { reset: () => void }
 type TurnstileWidgetProps = {
   onToken: (token: string) => void
   onExpire?: () => void
+  /**
+   * Must match `script-src` nonce (middleware `x-nonce`). Required in production because
+   * `strict-dynamic` ignores host allowlists — external `api.js` without a nonce is blocked.
+   */
+  scriptNonce?: string
 }
 
 /**
@@ -31,7 +36,7 @@ type TurnstileWidgetProps = {
  * (`cf-turnstile` + `data-sitekey`). Renders nothing when `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is unset.
  */
 export const TurnstileWidget = forwardRef<TurnstileWidgetHandle | null, TurnstileWidgetProps>(
-  function TurnstileWidget({ onToken, onExpire }, ref) {
+  function TurnstileWidget({ onToken, onExpire, scriptNonce }, ref) {
     const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim()
     const containerRef = useRef<HTMLDivElement>(null)
     const reactId = useId().replace(/:/g, '')
@@ -80,6 +85,10 @@ export const TurnstileWidget = forwardRef<TurnstileWidgetHandle | null, Turnstil
         <Script
           src="https://challenges.cloudflare.com/turnstile/v0/api.js"
           strategy="afterInteractive"
+          // Align with Cloudflare’s embed (non-blocking load); nonce required when `script-src` includes `strict-dynamic`.
+          async
+          defer
+          nonce={scriptNonce}
         />
         <div className="flex justify-center py-1">
           <div

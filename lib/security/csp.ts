@@ -4,11 +4,16 @@
  *
  * Dev: `unsafe-eval` on scripts (React dev tools), `unsafe-inline` on styles (faster iteration).
  * Prod: strict `script-src` / `style-src` with per-request nonces (no `unsafe-inline` / `unsafe-eval`).
+ * **`strict-dynamic`**: host entries in `script-src` are ignored for trust — external scripts (e.g.
+ * Cloudflare Turnstile `api.js`) must use a **nonce** on `<script>` (see `TurnstileWidget` + `x-nonce`).
  * `style-src-attr 'unsafe-inline'` allows `style=""` on elements (React/Turnstile) without allowing
  * unnonced `<style>` tags — see MDN `style-src-attr`.
  */
 
 const isProd = process.env.NODE_ENV === 'production'
+
+/** Cloudflare Turnstile — extend `script-src` / `frame-src` / `connect-src` / `worker-src` together (do not drop other origins). */
+const TURNSTILE_ORIGIN = 'https://challenges.cloudflare.com'
 
 export function generateCspNonce(): string {
   return Buffer.from(crypto.randomUUID()).toString('base64')
@@ -21,7 +26,7 @@ export function buildContentSecurityPolicy(nonce: string): string {
     "'self'",
     `'nonce-${nonce}'`,
     "'strict-dynamic'",
-    'https://challenges.cloudflare.com',
+    TURNSTILE_ORIGIN,
     ...(isDev ? (["'unsafe-eval'"] as const) : []),
   ].join(' ')
 
@@ -37,12 +42,13 @@ export function buildContentSecurityPolicy(nonce: string): string {
     ...(isProd ? (["style-src-attr 'unsafe-inline'"] as const) : []),
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob: https:",
-    "frame-src 'self' https://challenges.cloudflare.com",
-    "worker-src 'self' blob:",
+    `frame-src 'self' ${TURNSTILE_ORIGIN}`,
+    // Turnstile may spin workers from Cloudflare origin (not only blob:).
+    `worker-src 'self' blob: ${TURNSTILE_ORIGIN}`,
     [
       'connect-src',
       "'self'",
-      'https://challenges.cloudflare.com',
+      TURNSTILE_ORIGIN,
       'https://*.supabase.co',
       'wss://*.supabase.co',
       'https://login.microsoftonline.com',

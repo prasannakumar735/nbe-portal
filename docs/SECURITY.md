@@ -66,7 +66,7 @@ When Upstash Redis env vars are set, failure counters and bans are **distributed
 
 ### Cloudflare Turnstile (optional, recommended for production)
 
-The widget uses `next/script` to load `https://challenges.cloudflare.com/turnstile/v0/api.js` and an implicit-render `div` with class `cf-turnstile` and `data-sitekey` (`components/security/TurnstileWidget.tsx`).
+The widget uses `next/script` with the **same CSP nonce** as middleware (`x-nonce` → `script` `nonce` attribute). With `script-src` **`strict-dynamic`**, host allowlists do not authorize external scripts; the nonce is required. It loads `https://challenges.cloudflare.com/turnstile/v0/api.js` and an implicit-render `div` with class `cf-turnstile` and `data-sitekey` (`components/security/TurnstileWidget.tsx`).
 
 Set **both** on Vercel (free tier):
 

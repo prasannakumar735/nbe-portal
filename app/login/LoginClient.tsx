@@ -9,9 +9,11 @@ import { createSupabaseClient } from '@/lib/supabase/client'
 type LoginClientProps = {
   inactiveNotice: boolean
   noProfileNotice: boolean
+  /** Matches middleware `x-nonce` for Turnstile `api.js` under `strict-dynamic`. */
+  cspNonce?: string
 }
 
-export function LoginClient({ inactiveNotice, noProfileNotice }: LoginClientProps) {
+export function LoginClient({ inactiveNotice, noProfileNotice, cspNonce }: LoginClientProps) {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -218,6 +220,7 @@ export function LoginClient({ inactiveNotice, noProfileNotice }: LoginClientProp
               ref={turnstileRef}
               onToken={onTurnstileToken}
               onExpire={onTurnstileExpire}
+              scriptNonce={cspNonce}
             />
 
             <button

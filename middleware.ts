@@ -38,6 +38,7 @@ function setCsp(response: NextResponse, csp: string) {
 }
 
 export async function middleware(request: NextRequest) {
+  // Fresh nonce + CSP per request — must match `headers().get('x-nonce')` in RSC and Turnstile `<Script nonce>`.
   const nonce = generateCspNonce()
   const csp = buildContentSecurityPolicy(nonce)
   const requestHeaders = new Headers(request.headers)
