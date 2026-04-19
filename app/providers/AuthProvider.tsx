@@ -1,8 +1,25 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import type { Session, User } from '@supabase/supabase-js'
+import { enforceAppSessionEpochSignOut } from '@/lib/app/sessionEpoch'
+import {
+  getLoginAtMs,
+  getSessionTimingConfig,
+  loginRedirectPath,
+  setLoginAtNow,
+  LOGIN_AT_SESSION_KEY,
+} from '@/lib/app/sessionTiming'
 import { createSupabaseClient } from '@/lib/supabase/client'
+import { isInvalidOrMissingRefreshTokenError } from '@/lib/supabase/authSessionErrors'
 import type { ProfileFromTable } from '@/lib/auth/roles'
 import { isAdmin as checkIsAdmin, isEmployee as checkIsEmployee, isManager as checkIsManager } from '@/lib/auth/roles'
 
@@ -43,6 +60,234 @@ export function useAuth() {
     throw new Error('useAuth must be used within AuthProvider')
   }
   return context
+}
+
+const MOUSEMOVE_THROTTLE_MS = 30_000
+const MAX_SESSION_CHECK_MS = 60_000
+/** Poll interval to detect App Router navigations without `usePathname()` (avoids Next dev OuterLayoutRouter / NavigationPromises races at the root). */
+const PATHNAME_POLL_MS = 200
+
+/**
+ * Idle / max session timers + warning modal. Inlined here so the root layout only imports
+ * AuthProvider (avoids RSC client-reference + circular AuthProvider ↔ SessionLifecycle issues).
+ */
+function SessionLifecycle() {
+  const { session, isLoading } = useAuth()
+  const [showIdleWarning, setShowIdleWarning] = useState(false)
+
+  const configRef = useRef(getSessionTimingConfig())
+  const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const idleLogoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastMousemoveRef = useRef(0)
+  const maxIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const lastPathPollRef = useRef('')
+
+  const clearIdleTimers = useCallback(() => {
+    if (warningTimerRef.current) {
+      clearTimeout(warningTimerRef.current)
+      warningTimerRef.current = null
+    }
+    if (idleLogoutTimerRef.current) {
+      clearTimeout(idleLogoutTimerRef.current)
+      idleLogoutTimerRef.current = null
+    }
+  }, [])
+
+  const signOutAndRedirect = useCallback(async (_reason: 'idle' | 'max') => {
+    clearIdleTimers()
+    setShowIdleWarning(false)
+    const path = typeof window !== 'undefined' ? window.location.pathname : '/'
+    const target = loginRedirectPath(path)
+    try {
+      const supabase = createSupabaseClient()
+      await supabase.auth.signOut()
+    } catch {
+      /* still redirect */
+    }
+    try {
+      sessionStorage.removeItem(LOGIN_AT_SESSION_KEY)
+    } catch {
+      /* ignore */
+    }
+    window.location.assign(target)
+  }, [clearIdleTimers])
+
+  const scheduleIdleTimers = useCallback(() => {
+    const cfg = configRef.current
+    clearIdleTimers()
+    if (cfg.idleDisabled || cfg.idleTimeoutMs <= 0) return
+
+    const safeLead = Math.min(
+      cfg.idleWarningBeforeMs,
+      Math.max(0, cfg.idleTimeoutMs - 10_000),
+    )
+    const warningDelay = Math.max(0, cfg.idleTimeoutMs - safeLead)
+
+    warningTimerRef.current = setTimeout(() => {
+      setShowIdleWarning(true)
+    }, warningDelay)
+
+    idleLogoutTimerRef.current = setTimeout(() => {
+      void signOutAndRedirect('idle')
+    }, cfg.idleTimeoutMs)
+  }, [clearIdleTimers, signOutAndRedirect])
+
+  const bumpActivity = useCallback(() => {
+    const cfg = configRef.current
+    if (cfg.idleDisabled || cfg.idleTimeoutMs <= 0) return
+    setShowIdleWarning(false)
+    scheduleIdleTimers()
+  }, [scheduleIdleTimers])
+
+  useEffect(() => {
+    const supabase = createSupabaseClient()
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (event === 'SIGNED_IN' && newSession) {
+        setLoginAtNow()
+      }
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    if (isLoading || !session) return
+    try {
+      if (!sessionStorage.getItem(LOGIN_AT_SESSION_KEY)) {
+        setLoginAtNow()
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [isLoading, session])
+
+  useEffect(() => {
+    const cfg = configRef.current
+    if (isLoading || !session || cfg.maxDisabled || cfg.sessionMaxMs <= 0) {
+      if (maxIntervalRef.current) {
+        clearInterval(maxIntervalRef.current)
+        maxIntervalRef.current = null
+      }
+      return
+    }
+
+    const checkMax = () => {
+      const loginAt = getLoginAtMs()
+      if (loginAt === null) {
+        setLoginAtNow()
+        return
+      }
+      if (Date.now() - loginAt > cfg.sessionMaxMs) {
+        void signOutAndRedirect('max')
+      }
+    }
+
+    checkMax()
+    maxIntervalRef.current = setInterval(checkMax, MAX_SESSION_CHECK_MS)
+    return () => {
+      if (maxIntervalRef.current) {
+        clearInterval(maxIntervalRef.current)
+        maxIntervalRef.current = null
+      }
+    }
+  }, [isLoading, session, signOutAndRedirect])
+
+  useEffect(() => {
+    if (isLoading || !session) {
+      clearIdleTimers()
+      setShowIdleWarning(false)
+      return
+    }
+    const cfg = configRef.current
+    if (cfg.idleDisabled || cfg.idleTimeoutMs <= 0) return
+
+    scheduleIdleTimers()
+    return () => clearIdleTimers()
+  }, [isLoading, session, clearIdleTimers, scheduleIdleTimers])
+
+  // App Router soft navigations don't fire `popstate`; poll pathname instead of `usePathname()`.
+  useEffect(() => {
+    if (!session || isLoading) return
+    const cfg = configRef.current
+    if (cfg.idleDisabled || cfg.idleTimeoutMs <= 0) return
+
+    lastPathPollRef.current =
+      typeof window !== 'undefined' ? window.location.pathname : ''
+    const id = window.setInterval(() => {
+      const p = window.location.pathname
+      if (p !== lastPathPollRef.current) {
+        lastPathPollRef.current = p
+        bumpActivity()
+      }
+    }, PATHNAME_POLL_MS)
+    return () => clearInterval(id)
+  }, [session, isLoading, bumpActivity])
+
+  useEffect(() => {
+    if (isLoading || !session) return
+    const cfg = configRef.current
+    if (cfg.idleDisabled || cfg.idleTimeoutMs <= 0) return
+
+    const onPointer = () => bumpActivity()
+    const onKey = () => bumpActivity()
+
+    const onMouseMove = () => {
+      if (!cfg.trackMousemove) return
+      const now = Date.now()
+      if (now - lastMousemoveRef.current < MOUSEMOVE_THROTTLE_MS) return
+      lastMousemoveRef.current = now
+      bumpActivity()
+    }
+
+    window.addEventListener('click', onPointer, { capture: true, passive: true })
+    window.addEventListener('keydown', onKey, { capture: true, passive: true })
+    window.addEventListener('mousemove', onMouseMove, { capture: true, passive: true })
+
+    return () => {
+      window.removeEventListener('click', onPointer, true)
+      window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('mousemove', onMouseMove, true)
+    }
+  }, [isLoading, session, bumpActivity])
+
+  const onStaySignedIn = () => {
+    bumpActivity()
+  }
+
+  if (!session || isLoading) return null
+
+  const cfg = configRef.current
+  if (cfg.idleDisabled || cfg.idleTimeoutMs <= 0 || !showIdleWarning) return null
+
+  return (
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 p-4"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="session-idle-title"
+      aria-describedby="session-idle-desc"
+    >
+      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
+        <h2 id="session-idle-title" className="text-lg font-semibold text-slate-900">
+          Still there?
+        </h2>
+        <p id="session-idle-desc" className="mt-2 text-sm text-slate-600">
+          You will be signed out soon after a period of inactivity. Choose Stay signed in to
+          continue your session.
+        </p>
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+            onClick={onStaySignedIn}
+          >
+            Stay signed in
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 type AuthProviderProps = {
@@ -113,21 +358,46 @@ export function AuthProvider({ children }: AuthProviderProps) {
       try {
         const supabase = createSupabaseClient()
 
+        await enforceAppSessionEpochSignOut(() => supabase.auth.signOut())
+
         const {
           data: { session: initialSession },
           error,
         } = await supabase.auth.getSession()
 
         if (error) {
-          console.error('Error getting session:', error)
-          setIsError(true)
+          if (isInvalidOrMissingRefreshTokenError(error)) {
+            try {
+              await supabase.auth.signOut()
+            } catch {
+              /* ignore */
+            }
+            setSession(null)
+            setUser(null)
+            setIsError(false)
+          } else {
+            console.error('Error getting session:', error)
+            setIsError(true)
+          }
         } else {
           setSession(initialSession)
           setUser(initialSession?.user || null)
         }
       } catch (err) {
-        console.error('Auth initialization error:', err)
-        setIsError(true)
+        if (isInvalidOrMissingRefreshTokenError(err)) {
+          try {
+            const supabase = createSupabaseClient()
+            await supabase.auth.signOut()
+          } catch {
+            /* ignore */
+          }
+          setSession(null)
+          setUser(null)
+          setIsError(false)
+        } else {
+          console.error('Auth initialization error:', err)
+          setIsError(true)
+        }
       } finally {
         setIsLoading(false)
       }
@@ -168,5 +438,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isError,
   }
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider value={value}>
+      <SessionLifecycle />
+      {children}
+    </AuthContext.Provider>
+  )
 }

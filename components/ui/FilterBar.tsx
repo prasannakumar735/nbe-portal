@@ -1,17 +1,20 @@
 'use client'
 
 import { useMemo } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 
 export interface FilterOption {
   id: string
   name: string
 }
 
+/** Query state comes from the server page — avoids `useSearchParams()` / OuterLayoutRouter races on Next 15+. */
 interface FilterBarProps {
   projects: FilterOption[]
-  defaultPeriod: string
-  defaultProject: string
+  period: string
+  project: string
+  startDate: string
+  endDate: string
 }
 
 const PERIOD_OPTIONS = [
@@ -21,22 +24,19 @@ const PERIOD_OPTIONS = [
   { id: 'custom', label: 'Custom range' }
 ]
 
-export function FilterBar({ projects, defaultPeriod, defaultProject }: FilterBarProps) {
+export function FilterBar({ projects, period, project, startDate, endDate }: FilterBarProps) {
   const router = useRouter()
-  const searchParams = useSearchParams()
-
-  const period = searchParams.get('period') || defaultPeriod
-  const project = searchParams.get('project') || defaultProject
-  const startDate = searchParams.get('start') || ''
-  const endDate = searchParams.get('end') || ''
 
   const projectOptions = useMemo(() => {
     return [{ id: 'all', name: 'All Projects' }, ...projects]
   }, [projects])
 
   const updateParams = (updates: Record<string, string>) => {
-    const params = new URLSearchParams(searchParams.toString())
-
+    const params = new URLSearchParams()
+    if (period) params.set('period', period)
+    if (project) params.set('project', project)
+    if (startDate) params.set('start', startDate)
+    if (endDate) params.set('end', endDate)
     Object.entries(updates).forEach(([key, value]) => {
       if (value) {
         params.set(key, value)
@@ -44,8 +44,8 @@ export function FilterBar({ projects, defaultPeriod, defaultProject }: FilterBar
         params.delete(key)
       }
     })
-
-    router.push(`/dashboard?${params.toString()}`)
+    const qs = params.toString()
+    router.push(qs ? `/dashboard?${qs}` : '/dashboard')
   }
 
   return (

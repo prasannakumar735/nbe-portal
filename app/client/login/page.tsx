@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
+import { useBrowserSearchParams } from '@/lib/app/useBrowserSearchParams'
 import Link from 'next/link'
 import { createSupabaseClient } from '@/lib/supabase/client'
 
 function ClientLoginForm() {
   const router = useRouter()
-  const searchParams = useSearchParams()
+  const searchParams = useBrowserSearchParams()
   const redirectTo = searchParams.get('redirect') || '/client'
 
   const [email, setEmail] = useState('')

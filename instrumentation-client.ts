@@ -1,5 +1,8 @@
-import * as Sentry from '@sentry/nextjs'
-
 import './sentry.client.config'
 
-export const onRouterTransitionStart = Sentry.captureRouterTransitionStart
+/**
+ * Do not export `onRouterTransitionStart` / `Sentry.captureRouterTransitionStart` here.
+ * That hook runs before the App Router is ready in Next.js 15+ (webpack dev) and spams:
+ * "Internal Next.js error: Router action dispatched before initialization".
+ * Client tracing still works via `browserTracingIntegration` in `sentry.client.config.ts`.
+ */

@@ -14,11 +14,18 @@ export function SignaturePad({ value, onChange }: SignaturePadProps) {
   useEffect(() => {
     if (!value || !canvasRef.current) return
     const image = new Image()
+    // Allow drawing saved signatures from Supabase Storage without tainting the canvas (CORS).
+    if (/^https?:\/\//i.test(value)) {
+      image.crossOrigin = 'anonymous'
+    }
     image.onload = () => {
       const context = canvasRef.current?.getContext('2d')
       if (!context || !canvasRef.current) return
       context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
       context.drawImage(image, 0, 0, canvasRef.current.width, canvasRef.current.height)
+    }
+    image.onerror = () => {
+      /* ignore — empty canvas if URL blocked or missing */
     }
     image.src = value
   }, [value])

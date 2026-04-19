@@ -1,7 +1,8 @@
 'use client'
 
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { useBrowserPathname } from '@/lib/app/useBrowserPathname'
 import { useState } from 'react'
 import { useOfflinePendingCount } from '@/hooks/useOfflinePendingCount'
 
@@ -24,7 +25,7 @@ const NAV_ITEMS = [
 
 export function TopNavigation({ user }: TopNavigationProps) {
   const router = useRouter()
-  const pathname = usePathname()
+  const pathname = useBrowserPathname()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [isUserHovered, setIsUserHovered] = useState(false)
   const { pendingCount } = useOfflinePendingCount()

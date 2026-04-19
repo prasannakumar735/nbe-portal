@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useBrowserSearchParams } from '@/lib/app/useBrowserSearchParams'
 import { ClipboardPaste } from 'lucide-react'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import { useAuth } from '@/app/providers/AuthProvider'
@@ -30,7 +30,7 @@ type L1 = { id: string; code: string; name: string }
 type L2 = { id: string; name: string; billable: boolean }
 
 export default function TimecardApp() {
-  const searchParams = useSearchParams()
+  const searchParams = useBrowserSearchParams()
   const { user, profile, isLoading: authLoading, isAdmin, isManager } = useAuth()
   const supabase = useMemo(() => createSupabaseClient(), [])
 

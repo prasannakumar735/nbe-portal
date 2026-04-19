@@ -1,7 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
+import { useBrowserPathname } from '@/lib/app/useBrowserPathname'
+import { useBrowserSearchParams } from '@/lib/app/useBrowserSearchParams'
 import { MyTimecardTab } from '@/components/timecards/MyTimecardTab'
 import { TeamApprovalsTab } from '@/components/timecards/TeamApprovalsTab'
 
@@ -19,8 +21,8 @@ type TimecardsTabsProps = {
 
 export function TimecardsTabs({ initialTab, canViewTeam }: TimecardsTabsProps) {
   const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
+  const pathname = useBrowserPathname()
+  const searchParams = useBrowserSearchParams()
   const [tab, setTab] = useState<TimecardTabId>(initialTab)
 
   useEffect(() => {

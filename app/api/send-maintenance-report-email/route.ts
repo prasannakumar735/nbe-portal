@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 import { buildMaintenanceReportEmailTemplate } from '@/lib/email/maintenanceReportEmailTemplate'
+import { resolveClientLocationForReport } from '@/lib/maintenance/resolveClientLocationForReport'
 
 export const runtime = 'nodejs'
 
@@ -64,32 +65,10 @@ export async function POST(request: NextRequest) {
       throw new Error(doorsError.message)
     }
 
-    let clientName = ''
-    let locationName = ''
-
-    if (report.client_location_id) {
-      const { data: locationData } = await supabase
-        .from('client_locations')
-        .select('client_id, location_name, suburb')
-        .eq('id', report.client_location_id)
-        .single()
-
-      if (locationData) {
-        locationName = String(locationData.location_name ?? locationData.suburb ?? '').trim()
-
-        if (locationData.client_id) {
-          const { data: clientData } = await supabase
-            .from('clients')
-            .select('name, company_name')
-            .eq('id', locationData.client_id)
-            .single()
-
-          if (clientData) {
-            clientName = String(clientData.name ?? clientData.company_name ?? '').trim()
-          }
-        }
-      }
-    }
+    const { clientName, locationName } = await resolveClientLocationForReport(
+      supabase,
+      report.client_location_id as string | null | undefined,
+    )
 
     const pdfUrl = String(report.pdf_url ?? '').trim()
     if (!pdfUrl) {

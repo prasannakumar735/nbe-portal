@@ -1,8 +1,9 @@
 'use client'
 
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/app/providers/AuthProvider'
+import { useBrowserPathname } from '@/lib/app/useBrowserPathname'
 
 interface SidebarProps {
   isCollapsed: boolean
@@ -27,7 +28,7 @@ const NAV_ITEMS = [
 
 export function Sidebar({ isCollapsed, onToggleCollapse, isMobileOpen, onCloseMobile }: SidebarProps) {
   const router = useRouter()
-  const pathname = usePathname()
+  const pathname = useBrowserPathname()
   const { isAdmin, isManager } = useAuth()
   const [isMobile, setIsMobile] = useState(false)
 

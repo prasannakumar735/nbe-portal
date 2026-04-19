@@ -405,8 +405,10 @@ export default async function DashboardPage({
               actions={
                 <FilterBar
                   projects={projectOptions}
-                  defaultPeriod="this_week"
-                  defaultProject="all"
+                  period={period}
+                  project={projectId}
+                  startDate={qp.start ?? ''}
+                  endDate={qp.end ?? ''}
                 />
               }
             />

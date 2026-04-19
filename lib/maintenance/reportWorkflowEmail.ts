@@ -3,49 +3,7 @@ import { sendMailViaGraph } from '@/lib/graph/sendMail'
 import { publicAppBaseUrl, maintenanceReportClientViewUrl } from '@/lib/app/publicAppBaseUrl'
 import { escapeHtml } from '@/lib/html/escapeHtml'
 import { getManagerPlusServiceRecipients, isValidEmail } from '@/lib/notifications/managerRecipients'
-
-async function loadClientAndLocation(
-  supabase: SupabaseClient,
-  clientLocationId: string | null | undefined,
-): Promise<{ clientName: string; locationName: string }> {
-  let clientName = ''
-  let locationName = ''
-
-  if (!clientLocationId) {
-    return { clientName: 'Unknown Client', locationName: 'Unknown Location' }
-  }
-
-  const { data: locationData } = await supabase
-    .from('client_locations')
-    .select('client_id, location_name, suburb')
-    .eq('id', clientLocationId)
-    .maybeSingle()
-
-  if (locationData) {
-    const loc = locationData as Record<string, unknown>
-    locationName = String(
-      loc.location_name ?? loc.suburb ?? '',
-    ).trim()
-
-    if (loc.client_id) {
-      const { data: clientData } = await supabase
-        .from('clients')
-        .select('name, company_name')
-        .eq('id', loc.client_id)
-        .maybeSingle()
-
-      if (clientData) {
-        const c = clientData as Record<string, unknown>
-        clientName = String(c.name ?? c.company_name ?? '').trim()
-      }
-    }
-  }
-
-  return {
-    clientName: clientName || 'Unknown Client',
-    locationName: locationName || 'Unknown Location',
-  }
-}
+import { resolveClientLocationForReport } from '@/lib/maintenance/resolveClientLocationForReport'
 
 function managerSubmissionHtml(params: {
   managerName: string
@@ -66,7 +24,7 @@ function managerSubmissionHtml(params: {
 
   return [
     `Hi Manager ${escapeHtml(managerName)},<br/><br/>`,
-    `Technician <b>${escapeHtml(technicianName)}</b> submitted a maintenance report for:<br/>`,
+    `<b>${escapeHtml(technicianName)}</b> submitted a maintenance report for:<br/>`,
     `Client: <b>${escapeHtml(clientName)}</b><br/>`,
     `Location: <b>${escapeHtml(location)}</b><br/><br/>`,
     `<b>Technician Notes:</b><br/>`,
@@ -74,7 +32,7 @@ function managerSubmissionHtml(params: {
     `Please review and approve the report.<br/><br/>`,
     `<a href="${escapeHtml(reportUrl)}">View Report</a><br/><br/>`,
     `Thanks,<br/>`,
-    `Technician ${escapeHtml(technicianName)}`,
+    `NBE Team`,
   ].join('')
 }
 
@@ -147,7 +105,7 @@ export async function notifyManagersOfReportSubmission(
   const technicianNotesRaw = String(row.notes ?? '').trim()
   const technicianNotes = technicianNotesRaw || '(None)'
 
-  const { clientName, locationName } = await loadClientAndLocation(
+  const { clientName, locationName } = await resolveClientLocationForReport(
     supabase,
     row.client_location_id as string | null | undefined,
   )
@@ -252,7 +210,7 @@ export async function notifyTechnicianOfReportApproval(
 
   const technicianName = String(row.technician_name ?? 'Technician').trim() || 'Technician'
 
-  const { clientName, locationName } = await loadClientAndLocation(
+  const { clientName, locationName } = await resolveClientLocationForReport(
     supabase,
     row.client_location_id as string | null | undefined,
   )

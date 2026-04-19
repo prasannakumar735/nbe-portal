@@ -49,6 +49,9 @@ export function buildContentSecurityPolicy(nonce: string): string {
     [
       'connect-src',
       "'self'",
+      // Canvas/data URLs — `fetch(data:...)` (e.g. signature upload) requires these
+      'data:',
+      'blob:',
       TURNSTILE_ORIGIN,
       'https://*.supabase.co',
       'wss://*.supabase.co',

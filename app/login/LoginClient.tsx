@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { TurnstileWidget, type TurnstileWidgetHandle } from '@/components/security/TurnstileWidget'
 import { createSupabaseClient } from '@/lib/supabase/client'
 
@@ -11,10 +10,11 @@ type LoginClientProps = {
   noProfileNotice: boolean
   /** Matches middleware `x-nonce` for Turnstile `api.js` under `strict-dynamic`. */
   cspNonce?: string
+  /** Safe internal path from `?next=` — resolved on the server (no `useSearchParams`). */
+  nextRedirect: string | null
 }
 
-export function LoginClient({ inactiveNotice, noProfileNotice, cspNonce }: LoginClientProps) {
-  const router = useRouter()
+export function LoginClient({ inactiveNotice, noProfileNotice, cspNonce, nextRedirect }: LoginClientProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -90,35 +90,45 @@ export function LoginClient({ inactiveNotice, noProfileNotice, cspNonce }: Login
       }
 
       const supabase = createSupabaseClient()
+
+      // Login API sets HttpOnly cookies on this response; the browser client may not see the session
+      // until the next tick or after cookies are committed — retry briefly, then hard-navigate so
+      // middleware always receives the same cookie jar (fixes first-attempt bounce to /login).
+      for (let attempt = 0; attempt < 16; attempt++) {
+        const {
+          data: { session: s },
+        } = await supabase.auth.getSession()
+        if (s?.user) break
+        await new Promise(r => setTimeout(r, 60 + attempt * 20))
+      }
+
       const {
         data: { session },
       } = await supabase.auth.getSession()
 
-      if (!session) {
-        setError('Login failed: No session created. Please try again.')
-        setLoading(false)
-        return
+      if (session?.user) {
+        const { data: staffProfile } = await supabase
+          .from('profiles')
+          .select('role, is_active')
+          .eq('id', session.user.id)
+          .maybeSingle()
+
+        if (staffProfile?.role === 'client') {
+          window.location.assign('/client')
+          return
+        }
+
+        if (staffProfile && staffProfile.is_active === false) {
+          await supabase.auth.signOut()
+          setError('Your account has been deactivated. Contact an administrator.')
+          setLoading(false)
+          return
+        }
       }
 
-      const { data: staffProfile } = await supabase
-        .from('profiles')
-        .select('role, is_active')
-        .eq('id', session.user.id)
-        .maybeSingle()
-
-      if (staffProfile?.role === 'client') {
-        router.replace('/client')
-        return
-      }
-
-      if (staffProfile && staffProfile.is_active === false) {
-        await supabase.auth.signOut()
-        setError('Your account has been deactivated. Contact an administrator.')
-        setLoading(false)
-        return
-      }
-
-      router.replace('/dashboard')
+      const nextPath = nextRedirect ?? '/dashboard'
+      // Hard navigation: full reload picks up Set-Cookie from login without relying on App Router.
+      window.location.assign(nextPath.startsWith('/') ? nextPath : '/dashboard')
     } catch (err) {
       console.error('Login error:', err)
 

@@ -12,6 +12,7 @@ import { ZodError } from 'zod'
 import { MAINTENANCE_CHECKLIST_ITEMS } from '@/lib/types/maintenance.types'
 import { loadMaintenanceReportDraftPayload } from '@/lib/maintenance/loadMaintenanceReportDraftPayload'
 import { maintenanceReportClientViewUrl } from '@/lib/app/publicAppBaseUrl'
+import { uploadSignatureDataUrlToStorage } from '@/lib/maintenance/signatureDataUrlUpload'
 
 export const runtime = 'nodejs'
 
@@ -337,6 +338,19 @@ export async function POST(request: NextRequest) {
         ? (existingStatus ?? payload.status ?? 'submitted')
         : (payload.status ?? 'draft')
 
+    let resolvedSignatureUrl: string | null =
+      String(payload.form.signature_storage_url ?? '').trim() || null
+    const inlineSig = String(
+      (payload.form as { signature_data_url?: string }).signature_data_url ?? '',
+    ).trim()
+    if (!resolvedSignatureUrl && inlineSig) {
+      const pathPrefix = String(payload.report_id ?? '').trim() || crypto.randomUUID()
+      const uploaded = await uploadSignatureDataUrlToStorage(supabase, inlineSig, pathPrefix)
+      if (uploaded) {
+        resolvedSignatureUrl = uploaded
+      }
+    }
+
     const reportInsert: Record<string, unknown> = {
       technician_name: String(payload.form.technician_name ?? '').trim() || 'Technician',
       submission_date: payload.form.submission_date ?? new Date().toISOString().slice(0, 10),
@@ -348,7 +362,7 @@ export async function POST(request: NextRequest) {
       inspection_end: payload.form.inspection_end ?? '23:59:00',
       total_doors: Number(payload.form.total_doors) ?? 1,
       notes: payload.form.notes ?? null,
-      signature_url: payload.form.signature_storage_url || null,
+      signature_url: resolvedSignatureUrl,
       offline_id: (payload.form as { offline_id?: string | null }).offline_id ?? null,
       status: persistedStatus,
     }

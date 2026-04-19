@@ -1,7 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
+import { useBrowserPathname } from '@/lib/app/useBrowserPathname'
+import { useBrowserSearchParams } from '@/lib/app/useBrowserSearchParams'
 import { ExternalLink, MapPin } from 'lucide-react'
 import {
   filtersToQueryString,
@@ -68,8 +70,8 @@ type QuotesBundle = {
 
 export function ReportsPageClient() {
   const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
+  const pathname = useBrowserPathname()
+  const searchParams = useBrowserSearchParams()
 
   const filters = useMemo(
     () => parseFiltersFromSearchParams(Object.fromEntries(searchParams.entries())),

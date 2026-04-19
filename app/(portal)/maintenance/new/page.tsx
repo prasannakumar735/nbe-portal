@@ -1,10 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
+import { useBrowserSearchParams } from '@/lib/app/useBrowserSearchParams'
 import { toast } from 'sonner'
 import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { dataUrlToBlob } from '@/lib/browser/dataUrlBlob'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import { DoorDiagram } from '@/components/report/DoorDiagram'
 import { DoorInspectionCard } from '@/components/maintenance/DoorInspectionCard'
@@ -350,7 +352,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   } = props
   const supabase = useMemo(() => createSupabaseClient(), [])
   const router = useRouter()
-  const searchParams = useSearchParams()
+  const searchParams = useBrowserSearchParams()
   const initialDoorId = searchParams.get('door_id') ?? searchParams.get('doorId')
   const isFreshMode = searchParams.get('fresh') === '1'
   const offlineEditId = searchParams.get('offline_id') ?? searchParams.get('offlineId')
@@ -542,6 +544,8 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   const watchedTotalDoors = useWatch({ control, name: 'total_doors', defaultValue: 1 })
   const watchedReportId = useWatch({ control, name: 'report_id', defaultValue: undefined })
   const watchedNotes = useWatch({ control, name: 'notes', defaultValue: '' })
+  const watchedSignatureDataUrl = useWatch({ control, name: 'signature_data_url', defaultValue: '' })
+  const watchedSignatureStorageUrl = useWatch({ control, name: 'signature_storage_url', defaultValue: '' })
   const watchedDoors = useWatch({ control, name: 'doors', defaultValue: [] }) as MaintenanceDoorForm[]
   const watchedReportSchemaVersion = useWatch({ control, name: 'report_schema_version', defaultValue: 2 })
 
@@ -1578,8 +1582,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   const uploadSignature = async (signatureDataUrl: string): Promise<string> => {
     if (!signatureDataUrl) return ''
 
-    const response = await fetch(signatureDataUrl)
-    const blob = await response.blob()
+    const blob = dataUrlToBlob(signatureDataUrl)
     const reportPart = watchedReportId ?? 'local-draft'
     const path = `signatures/${reportPart}/${crypto.randomUUID()}.png`
 
@@ -2082,9 +2085,12 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
           <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">8. Signature</h2>
           <div className="mt-3">
             <SignaturePad
-              value={getValues('signature_data_url') || ''}
+              value={String(watchedSignatureDataUrl || watchedSignatureStorageUrl || '')}
               onChange={dataUrl => {
-                setValue('signature_data_url', dataUrl)
+                setValue('signature_data_url', dataUrl, { shouldDirty: true })
+                if (!dataUrl) {
+                  setValue('signature_storage_url', '', { shouldDirty: true })
+                }
               }}
             />
           </div>

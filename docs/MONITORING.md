@@ -52,7 +52,7 @@ The app includes **`@sentry/nextjs`** with:
 | `sentry.server.config.ts` | Node (API routes, RSC) |
 | `sentry.edge.config.ts` | Edge (middleware) |
 | `instrumentation.ts` | Loads server + edge configs; `onRequestError` for server failures |
-| `instrumentation-client.ts` | Loads client config + `onRouterTransitionStart` for App Router |
+| `instrumentation-client.ts` | Loads client Sentry config (router transition hook disabled — caused Next.js router errors in dev) |
 
 **DSN:** set `SENTRY_DSN` on the server; for the browser set **`NEXT_PUBLIC_SENTRY_DSN`** to the same DSN string so the client SDK can send events (the DSN is public in the bundle by design).
 
@@ -72,6 +72,11 @@ Optional: add `SENTRY_AUTH_TOKEN` + org/project in CI and enable source maps in 
 | `NEXT_PUBLIC_SENTRY_DSN` | Browser Sentry DSN (recommended for client) |
 | `SENTRY_SECURITY_EVENTS=0` | Stop sending security `captureMessage` events to Sentry (stdout JSON logs continue) |
 | `SECURITY_LOG_SESSION_REDIRECTS=1` | Log protected-route redirects to login (HTML), for IP / path scanning analysis. |
+| `NEXT_PUBLIC_APP_SESSION_EPOCH` | Optional string (e.g. `2026-04-14b`). When changed and redeployed, browsers clear local Supabase session once so **all users must sign in again** (stored in `localStorage` key `nbe_app_session_epoch`). |
+| `NEXT_PUBLIC_IDLE_TIMEOUT_MS` | Idle limit in ms (default 15 minutes). Set to `0` to disable idle logout + warning. |
+| `NEXT_PUBLIC_SESSION_MAX_MS` | Absolute max session length from login time in `sessionStorage` (`nbe_login_at`, default 8 hours). Set to `0` to disable. |
+| `NEXT_PUBLIC_IDLE_WARNING_BEFORE_MS` | How long before idle expiry to show the “Stay signed in” modal (default 2 minutes). |
+| `NEXT_PUBLIC_IDLE_TRACK_MOUSEMOVE` | Set to `0` or `false` to stop counting throttled mousemove as activity (clicks/keys/routes still count). |
 
 ## Query examples (Datadog / generic)
 

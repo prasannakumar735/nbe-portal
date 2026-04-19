@@ -8,6 +8,7 @@ import { generateMaintenanceReportPdf } from '@/lib/pdf/generateMaintenanceRepor
 import { buildMaintenancePdfOptions } from '@/lib/pdf/buildMaintenancePdfOptions'
 import { uploadFileToOneDrive } from '@/lib/graph/uploadFile'
 import { notifyManagersOfReportSubmission } from '@/lib/maintenance/reportWorkflowEmail'
+import { resolveClientLocationForReport } from '@/lib/maintenance/resolveClientLocationForReport'
 import { jsonError500 } from '@/lib/security/safeApiError'
 
 function getBodyForm(body: unknown): unknown {
@@ -125,25 +126,13 @@ export async function runMaintenanceSubmit(request: NextRequest): Promise<NextRe
     }
 
     try {
-      const { data: locationRow } = await supabase
-        .from('client_locations')
-        .select('location_name, suburb, client_id')
-        .eq('id', finalForm.client_location_id)
-        .single()
-
-      const loc = locationRow as Record<string, unknown> | null
-      let clientLocationSegment = String(
-        loc?.location_name ?? loc?.suburb ?? 'Unknown',
-      ).trim()
-      if (loc?.client_id) {
-        const { data: clientRow } = await supabase
-          .from('clients')
-          .select('name, company_name')
-          .eq('id', loc.client_id)
-          .single()
-        const c = clientRow as Record<string, unknown> | null
-        const clientName = String(c?.name ?? c?.company_name ?? '').trim()
-        if (clientName) clientLocationSegment = `${clientName} ${clientLocationSegment}`.trim()
+      const { clientName, locationName } = await resolveClientLocationForReport(
+        supabase,
+        finalForm.client_location_id,
+      )
+      let clientLocationSegment = locationName !== 'Unknown Location' ? locationName : 'Unknown'
+      if (clientName !== 'Unknown Client') {
+        clientLocationSegment = `${clientName} ${clientLocationSegment}`.trim()
       }
       clientLocationSegment = clientLocationSegment.replace(/[\\/:*?"<>|]/g, '_') || 'Unknown'
 
