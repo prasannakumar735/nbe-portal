@@ -5,7 +5,7 @@ import { upsertDoorSchema } from '@/lib/validation/admin-clients'
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
-  const auth = await requireManagerOrAdminApi()
+  const auth = await requireManagerOrAdminApi(request)
   if (!auth.ok) return auth.response
 
   try {

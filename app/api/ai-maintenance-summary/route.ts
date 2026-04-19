@@ -1,6 +1,8 @@
 import Groq from 'groq-sdk'
-import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+
+import { createServerClient } from '@/lib/supabase/server'
+import { requireUser, UnauthorizedError } from '@/lib/security/requireUser'
 
 export const runtime = 'nodejs'
 
@@ -17,6 +19,12 @@ export async function POST(request: Request) {
 
     if (!notes) {
       return NextResponse.json({ error: 'Technician notes are required.' }, { status: 400 })
+    }
+
+    let userSupabase: Awaited<ReturnType<typeof createServerClient>> | null = null
+    if (reportId) {
+      userSupabase = await createServerClient()
+      await requireUser(userSupabase)
     }
 
     const apiKey = process.env.GROQ_API_KEY
@@ -69,23 +77,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No AI summary returned.' }, { status: 400 })
     }
 
-    if (reportId) {
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-      if (url && serviceKey) {
-        const supabase = createClient(url, serviceKey, { auth: { persistSession: false } })
-        const { error } = await supabase
-          .from('maintenance_reports')
-          .update({ ai_summary: content })
-          .eq('id', reportId)
-        if (error) {
-          console.error('[AI Maintenance Summary] Failed to save ai_summary:', error)
-        }
+    if (reportId && userSupabase) {
+      const { data: updated, error } = await userSupabase
+        .from('maintenance_reports')
+        .update({ ai_summary: content })
+        .eq('id', reportId)
+        .select('id')
+        .maybeSingle()
+
+      if (error) {
+        console.error('[AI Maintenance Summary] Failed to save ai_summary:', error)
+        return NextResponse.json({ error: 'Could not save summary to this report.' }, { status: 500 })
+      }
+      if (!updated) {
+        return NextResponse.json({ error: 'Report not found or access denied.' }, { status: 403 })
       }
     }
 
     return NextResponse.json({ summary: content })
   } catch (error: unknown) {
+    if (error instanceof UnauthorizedError) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     console.error('AI Summary Error:', error)
 
     const message = error instanceof Error ? error.message : 'AI summary failed'

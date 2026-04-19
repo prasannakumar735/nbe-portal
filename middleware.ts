@@ -1,12 +1,14 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createSupabaseMiddlewareClient } from '@/lib/supabase/middleware'
+import { buildContentSecurityPolicy, generateCspNonce } from '@/lib/security/csp'
+import { getApiRateLimitTier } from '@/lib/security/apiPathTiers'
+import { enforceDistributedRateLimit } from '@/lib/security/rateLimitDistributed'
+import { IP_BAN_RETRY_AFTER_SEC, isBlocked, recordFailure } from '@/lib/security/ipBlocker'
+import { getClientIp } from '@/lib/security/rateLimitEdge'
+import { isSuspiciousApiRequest } from '@/lib/security/botDefense'
+import { NBE_REQUEST_ID_HEADER, truncateUserAgent } from '@/lib/security/requestIdentity'
+import { logSecurityEvent, securityLog, securityLogIpBlocked } from '@/lib/security/securityLogger'
 
-/**
- * Staff portal paths that require a Supabase session (not client-role).
- * Public routes (`/login`, `/report/view/*`, `/client/*` marketing pages) stay out of this list.
- * The `(portal)` route group still enforces auth in `app/(portal)/layout.tsx`; this matcher
- * refreshes the session cookie on navigation for these prefixes.
- */
 const PROTECTED_PREFIXES = [
   '/dashboard',
   '/timecard',
@@ -30,23 +32,145 @@ function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))
 }
 
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl
+function setCsp(response: NextResponse, csp: string) {
+  response.headers.set('Content-Security-Policy', csp)
+  return response
+}
 
-  if (!isProtectedPath(pathname)) {
-    return NextResponse.next()
+export async function middleware(request: NextRequest) {
+  const nonce = generateCspNonce()
+  const csp = buildContentSecurityPolicy(nonce)
+  const requestHeaders = new Headers(request.headers)
+  const incomingRequestId = request.headers.get(NBE_REQUEST_ID_HEADER)?.trim()
+  const requestId = incomingRequestId || crypto.randomUUID()
+  requestHeaders.set(NBE_REQUEST_ID_HEADER, requestId)
+  requestHeaders.set('x-nonce', nonce)
+  requestHeaders.set('Content-Security-Policy', csp)
+
+  const { pathname } = request.nextUrl
+  const clientIp = getClientIp(request)
+  const ua = truncateUserAgent(request.headers.get('user-agent'))
+
+  if (pathname.startsWith('/api')) {
+    if (await isBlocked(clientIp)) {
+      securityLogIpBlocked(
+        {
+          path: pathname,
+          method: request.method,
+          ip: clientIp,
+          user_agent: ua,
+          route_name: pathname,
+          correlation_id: requestId,
+        },
+        request,
+      )
+      return setCsp(
+        NextResponse.json(
+          { error: 'Too many attempts. Try later.' },
+          {
+            status: 429,
+            headers: { 'Retry-After': String(IP_BAN_RETRY_AFTER_SEC) },
+          },
+        ),
+        csp,
+      )
+    }
+
+    if (isSuspiciousApiRequest(request, pathname)) {
+      logSecurityEvent(
+        'bot_blocked',
+        {
+          monitoring: { signal: 'bot_block' },
+          path: pathname,
+          method: request.method,
+          ip: clientIp,
+          user_agent: ua,
+          route_name: pathname,
+          correlation_id: requestId,
+          http_status_code: 400,
+          detail: 'missing_user_agent',
+        },
+        request,
+      )
+      return setCsp(NextResponse.json({ error: 'Bad request.' }, { status: 400 }), csp)
+    }
+
+    const tier = getApiRateLimitTier(pathname)
+    const rl = await enforceDistributedRateLimit(clientIp, pathname, tier)
+    if (!rl.ok) {
+      await recordFailure(clientIp)
+      logSecurityEvent(
+        'rate_limit_exceeded',
+        {
+          monitoring: { signal: 'rate_limit_429' },
+          path: pathname,
+          method: request.method,
+          ip: clientIp,
+          user_agent: ua,
+          route_name: pathname,
+          correlation_id: requestId,
+          tier,
+          http_status_code: 429,
+          detail: `retry_after_s=${rl.retryAfterSec}`,
+        },
+        request,
+      )
+      return setCsp(
+        NextResponse.json(
+          { error: 'Too many requests.' },
+          {
+            status: 429,
+            headers: { 'Retry-After': String(rl.retryAfterSec) },
+          },
+        ),
+        csp,
+      )
+    }
+
+    return setCsp(
+      NextResponse.next({
+        request: { headers: requestHeaders },
+      }),
+      csp,
+    )
   }
 
-  const { supabase, response } = createSupabaseMiddlewareClient(request)
+  if (!isProtectedPath(pathname)) {
+    return setCsp(
+      NextResponse.next({
+        request: { headers: requestHeaders },
+      }),
+      csp,
+    )
+  }
+
+  const { supabase, response } = createSupabaseMiddlewareClient(request, requestHeaders)
 
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
   if (!user) {
+    if (process.env.SECURITY_LOG_SESSION_REDIRECTS === '1') {
+      securityLog(
+        {
+          event: 'session_required',
+          monitoring: { signal: 'session_required_redirect' },
+          path: pathname,
+          method: request.method,
+          ip: clientIp,
+          user_agent: ua,
+          correlation_id: requestId,
+          route_name: pathname,
+          http_status_code: 307,
+          detail: 'redirect_to_login',
+        },
+        request,
+      )
+    }
     const login = new URL('/login', request.url)
     login.searchParams.set('next', pathname)
-    return NextResponse.redirect(login)
+    return setCsp(NextResponse.redirect(login), csp)
   }
 
   const { data: profile } = await supabase
@@ -59,24 +183,24 @@ export async function middleware(request: NextRequest) {
     await supabase.auth.signOut()
     const login = new URL('/login', request.url)
     login.searchParams.set('error', 'no_profile')
-    return NextResponse.redirect(login)
+    return setCsp(NextResponse.redirect(login), csp)
   }
 
   if (profile.is_active === false) {
     await supabase.auth.signOut()
     const login = new URL('/login', request.url)
     login.searchParams.set('inactive', '1')
-    return NextResponse.redirect(login)
+    return setCsp(NextResponse.redirect(login), csp)
   }
 
   if (profile.role === 'client') {
-    return NextResponse.redirect(new URL('/client', request.url))
+    return setCsp(NextResponse.redirect(new URL('/client', request.url)), csp)
   }
 
   if (pathname.startsWith('/dashboard/users') || pathname.startsWith('/dashboard/people')) {
     const role = profile.role
     if (role !== 'admin' && role !== 'manager') {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
+      return setCsp(NextResponse.redirect(new URL('/dashboard', request.url)), csp)
     }
   }
 
@@ -87,48 +211,22 @@ export async function middleware(request: NextRequest) {
       if (role !== 'admin' && role !== 'manager') {
         const url = request.nextUrl.clone()
         url.searchParams.set('tab', 'my')
-        return NextResponse.redirect(url)
+        return setCsp(NextResponse.redirect(url), csp)
       }
     }
   }
 
-  return response
+  return setCsp(response, csp)
 }
 
-/** Static matchers only — Next.js cannot parse computed `matcher` (see route segment config). */
 export const config = {
   matcher: [
-    '/dashboard',
-    '/dashboard/:path*',
-    '/timecard',
-    '/timecard/:path*',
-    '/timecard-enhanced',
-    '/timecard-enhanced/:path*',
-    '/calendar',
-    '/calendar/:path*',
-    '/maintenance',
-    '/maintenance/:path*',
-    '/reimbursement',
-    '/reimbursement/:path*',
-    '/pvc-calculator',
-    '/pvc-calculator/:path*',
-    '/qr-codes',
-    '/qr-codes/:path*',
-    '/qr',
-    '/qr/:path*',
-    '/manager',
-    '/manager/:path*',
-    '/admin/inventory',
-    '/admin/inventory/:path*',
-    '/admin/contacts',
-    '/admin/contacts/:path*',
-    '/admin/orders',
-    '/admin/orders/:path*',
-    '/reports',
-    '/reports/:path*',
-    '/knowledge',
-    '/knowledge/:path*',
-    '/job-card',
-    '/job-card/:path*',
+    {
+      source: '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2)$).*)',
+      missing: [
+        { type: 'header', key: 'next-router-prefetch' },
+        { type: 'header', key: 'purpose', value: 'prefetch' },
+      ],
+    },
   ],
 }

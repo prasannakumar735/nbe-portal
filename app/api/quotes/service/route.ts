@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { unauthorizedOrForbiddenResponse } from '@/lib/security/httpAuthErrors'
+import { requirePortalStaff } from '@/lib/security/requirePortalStaff'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 
 type ServiceQuoteItemPayload = {
@@ -84,6 +86,8 @@ function errorMessage(error: unknown): string {
 /** List saved quotes; optional `q` filters customer_name and quote_number (ilike). */
 export async function GET(request: NextRequest) {
   try {
+    await requirePortalStaff()
+
     const supabase = createServiceRoleClient()
     const { searchParams } = new URL(request.url)
     const q = (searchParams.get('q') ?? '').trim()
@@ -105,12 +109,16 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ quotes: data ?? [] })
   } catch (error) {
+    const auth = unauthorizedOrForbiddenResponse(error)
+    if (auth) return auth
     return NextResponse.json({ error: errorMessage(error) }, { status: 400 })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
+    await requirePortalStaff()
+
     const payload = (await request.json()) as ServiceQuotePayload
     const items = normalizeItems(payload.items)
     validatePayload(payload, items)
@@ -155,6 +163,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, quote_id: quote.id })
   } catch (error) {
+    const auth = unauthorizedOrForbiddenResponse(error)
+    if (auth) return auth
     const message = errorMessage(error)
     return NextResponse.json({ error: message }, { status: 400 })
   }

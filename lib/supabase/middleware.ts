@@ -4,9 +4,18 @@ import { NextResponse, type NextRequest } from 'next/server'
 /**
  * Supabase client for Edge middleware — reads session from cookies and can refresh session.
  * Must not use the service role key here.
+ *
+ * @param forwardedHeaders — Pass through headers from middleware (e.g. `x-nonce` + CSP) so Next.js can
+ *   attach nonces to streamed HTML; must be reused on every `NextResponse.next` refresh.
  */
-export function createSupabaseMiddlewareClient(request: NextRequest) {
-  let response = NextResponse.next({ request })
+export function createSupabaseMiddlewareClient(request: NextRequest, forwardedHeaders: Headers) {
+  function nextWithForwardedHeaders() {
+    return NextResponse.next({
+      request: { headers: forwardedHeaders },
+    })
+  }
+
+  let response = nextWithForwardedHeaders()
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,7 +29,7 @@ export function createSupabaseMiddlewareClient(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) => {
             request.cookies.set(name, value)
           })
-          response = NextResponse.next({ request })
+          response = nextWithForwardedHeaders()
           cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, options)
           })

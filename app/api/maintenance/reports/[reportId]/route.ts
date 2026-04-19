@@ -6,6 +6,7 @@ import { canApproveMaintenanceReport } from '@/lib/auth/roles'
 import { regenerateMaintenanceReportPdfWithClientQr } from '@/lib/maintenance/regenerateReportPdfWithQr'
 import { maintenanceReportClientViewUrl } from '@/lib/app/publicAppBaseUrl'
 import { notifyTechnicianOfReportApproval } from '@/lib/maintenance/reportWorkflowEmail'
+import { jsonError500 } from '@/lib/security/safeApiError'
 
 export const runtime = 'nodejs'
 
@@ -94,7 +95,14 @@ export async function PATCH(
       .single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      console.error('[approve report] DB update', error)
+      return NextResponse.json(
+        {
+          error:
+            process.env.NODE_ENV === 'production' ? 'Could not update report.' : error.message,
+        },
+        { status: 500 },
+      )
     }
 
     let technicianApprovalEmail: { status: string; detail?: string } = { status: 'skipped' }
@@ -111,7 +119,12 @@ export async function PATCH(
     } catch (e) {
       technicianApprovalEmail = {
         status: 'failed',
-        detail: e instanceof Error ? e.message : String(e),
+        detail:
+          process.env.NODE_ENV === 'production'
+            ? 'Email could not be sent.'
+            : e instanceof Error
+              ? e.message
+              : String(e),
       }
       console.error('[approve report] Technician approval email error', e)
     }
@@ -124,12 +137,24 @@ export async function PATCH(
         shareToken,
       })
       if ('error' in regen) {
-        pdfRegen = { error: regen.error }
+        pdfRegen = {
+          error:
+            process.env.NODE_ENV === 'production'
+              ? 'PDF update failed.'
+              : regen.error,
+        }
       } else {
         pdfRegen = { pdf_url: regen.pdf_url }
       }
     } catch (e) {
-      pdfRegen = { error: e instanceof Error ? e.message : 'PDF regeneration failed' }
+      pdfRegen = {
+        error:
+          process.env.NODE_ENV === 'production'
+            ? 'PDF regeneration failed.'
+            : e instanceof Error
+              ? e.message
+              : 'PDF regeneration failed',
+      }
     }
 
     const tokenOut = String((report as { share_token?: string }).share_token ?? '').trim()
@@ -146,7 +171,6 @@ export async function PATCH(
       pdf_regeneration: pdfRegen,
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to approve report'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return jsonError500(err, 'maintenance-approve-report')
   }
 }

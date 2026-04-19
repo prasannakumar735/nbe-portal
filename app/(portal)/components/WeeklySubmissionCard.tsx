@@ -64,7 +64,18 @@ export default function WeeklySubmissionCard({
 
       // Submit it
       await WeeklySubmissionService.submit(submissionId, userId)
-      
+
+      try {
+        await fetch('/api/notifications/timesheet-submitted', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ submission_id: submissionId }),
+        })
+      } catch (notifyErr) {
+        console.warn('[WeeklySubmissionCard] Timesheet notification request failed', notifyErr)
+      }
+
       await loadSubmissionData()
       if (onUpdate) onUpdate()
     } catch (error: any) {

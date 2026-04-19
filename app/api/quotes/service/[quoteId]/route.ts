@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { unauthorizedOrForbiddenResponse } from '@/lib/security/httpAuthErrors'
+import { requirePortalStaff } from '@/lib/security/requirePortalStaff'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { quoteRowsToFormValues } from '@/lib/quotes/serviceQuoteSnapshot'
 
@@ -86,6 +88,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 
 export async function GET(_request: NextRequest, context: { params: Promise<{ quoteId: string }> }) {
   try {
+    await requirePortalStaff()
+
     const { quoteId } = await context.params
     if (!UUID_RE.test(quoteId)) {
       return NextResponse.json({ error: 'Invalid quote id.' }, { status: 400 })
@@ -127,12 +131,16 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ qu
       formValues,
     })
   } catch (error) {
+    const auth = unauthorizedOrForbiddenResponse(error)
+    if (auth) return auth
     return NextResponse.json({ error: errorMessage(error) }, { status: 400 })
   }
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ quoteId: string }> }) {
   try {
+    await requirePortalStaff()
+
     const { quoteId } = await context.params
     if (!UUID_RE.test(quoteId)) {
       return NextResponse.json({ error: 'Invalid quote id.' }, { status: 400 })
@@ -178,12 +186,16 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ q
 
     return NextResponse.json({ success: true, quote_id: quoteId })
   } catch (error) {
+    const auth = unauthorizedOrForbiddenResponse(error)
+    if (auth) return auth
     return NextResponse.json({ error: errorMessage(error) }, { status: 400 })
   }
 }
 
 export async function DELETE(_request: NextRequest, context: { params: Promise<{ quoteId: string }> }) {
   try {
+    await requirePortalStaff()
+
     const { quoteId } = await context.params
     if (!UUID_RE.test(quoteId)) {
       return NextResponse.json({ error: 'Invalid quote id.' }, { status: 400 })
@@ -195,6 +207,8 @@ export async function DELETE(_request: NextRequest, context: { params: Promise<{
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    const auth = unauthorizedOrForbiddenResponse(error)
+    if (auth) return auth
     return NextResponse.json({ error: errorMessage(error) }, { status: 400 })
   }
 }

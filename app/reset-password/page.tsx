@@ -1,21 +1,37 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { validatePasswordPolicy, passwordPolicySummary } from '@/lib/validation/passwordPolicy'
 
-export default function ResetPasswordPage() {
+function ResetPasswordInner() {
   const router = useRouter()
+  /** Avoid `useSearchParams()` here — on Next.js 16 it can be undefined briefly and `.get` throws in OuterLayoutRouter. */
+  const [tokenFromEmail, setTokenFromEmail] = useState<string | null>(null)
+
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [loading, setLoading] = useState(false)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  useLayoutEffect(() => {
+    if (typeof window === 'undefined') return
+    const t = new URLSearchParams(window.location.search).get('token')
+    setTokenFromEmail(t)
+    if (t) setReady(true)
+  }, [])
+
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    const t = new URLSearchParams(window.location.search).get('token')
+    if (t) return
+
     const supabase = createSupabaseClient()
     let cancelled = false
     ;(async () => {
@@ -40,8 +56,10 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.')
+
+    const policy = validatePasswordPolicy(password)
+    if (!policy.valid) {
+      setError(policy.errors.join(' '))
       return
     }
     if (password !== confirm) {
@@ -51,12 +69,31 @@ export default function ResetPasswordPage() {
 
     setLoading(true)
     try {
+      if (tokenFromEmail && tokenFromEmail.length > 0) {
+        const res = await fetch('/api/auth/reset-password-confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: tokenFromEmail, password }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          setError(typeof data.error === 'string' ? data.error : 'Reset failed.')
+          return
+        }
+        toast.success('Your password has been reset successfully. You can sign in with your new password.')
+        router.replace('/login')
+        router.refresh()
+        return
+      }
+
       const supabase = createSupabaseClient()
       const { error: updateError } = await supabase.auth.updateUser({ password })
       if (updateError) {
         setError(updateError.message)
         return
       }
+      void fetch('/api/auth/password-reset-success-email', { method: 'POST' }).catch(() => {})
+      toast.success('Your password has been reset successfully.')
       router.replace('/dashboard')
       router.refresh()
     } finally {
@@ -72,7 +109,7 @@ export default function ResetPasswordPage() {
         </div>
         <h1 className="text-center text-xl font-semibold text-slate-900">Set new password</h1>
         <p className="mt-2 text-center text-sm text-slate-500">
-          Choose a strong password for your portal account.
+          {passwordPolicySummary()}
         </p>
 
         {!ready ? (
@@ -118,4 +155,8 @@ export default function ResetPasswordPage() {
       </div>
     </div>
   )
+}
+
+export default function ResetPasswordPage() {
+  return <ResetPasswordInner />
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { generateVCard } from '@/lib/generateVCard'
+import { parsePublicContactSlug } from '@/lib/security/publicContactSlug'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { getContactDisplayName } from '@/lib/contact-qr'
 import type { Contact } from '@/lib/types/contact.types'
@@ -8,7 +9,13 @@ export const runtime = 'nodejs'
 
 export async function GET(_: Request, { params }: { params: Promise<{ slug: string }> }) {
   try {
-    const { slug } = await params
+    const { slug: raw } = await params
+    const slug = parsePublicContactSlug(raw)
+    if (!slug) {
+      return NextResponse.json({ error: 'Contact not found' }, { status: 404 })
+    }
+
+    /** Public catalog read: service role because `contacts` is not exposed to `anon`; slug is validated above (not identity). */
     const supabase = createServiceRoleClient()
 
     const { data: contact, error } = await supabase

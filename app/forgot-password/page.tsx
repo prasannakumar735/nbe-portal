@@ -1,16 +1,29 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import Link from 'next/link'
-import { createSupabaseClient } from '@/lib/supabase/client'
+import { TurnstileWidget, type TurnstileWidgetHandle } from '@/components/security/TurnstileWidget'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { sanitizePlainText } from '@/lib/validation/safeText'
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const turnstileRef = useRef<TurnstileWidgetHandle | null>(null)
+
+  const turnstileEnabled = Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim())
+
+  const onTurnstileToken = useCallback((token: string) => {
+    setTurnstileToken(token)
+  }, [])
+
+  const onTurnstileExpire = useCallback(() => {
+    setTurnstileToken(null)
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -19,17 +32,32 @@ export default function ForgotPasswordPage() {
     setMessage(null)
 
     try {
-      const supabase = createSupabaseClient()
-      const origin =
-        typeof window !== 'undefined' ? window.location.origin : ''
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${origin}/reset-password`,
-      })
-      if (resetError) {
-        setError(resetError.message)
+      if (turnstileEnabled && !turnstileToken) {
+        setError('Please complete the CAPTCHA.')
         return
       }
-      setMessage('Check your email for a password reset link.')
+
+      const clean = sanitizePlainText(email, 320).trim()
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: clean,
+          ...(turnstileToken ? { turnstileToken } : {}),
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        turnstileRef.current?.reset()
+        setTurnstileToken(null)
+        setError(typeof data.error === 'string' ? data.error : 'Request failed.')
+        return
+      }
+      setMessage(
+        typeof data.message === 'string'
+          ? data.message
+          : 'If an account exists for that email, a reset message was sent.',
+      )
     } finally {
       setLoading(false)
     }
@@ -43,7 +71,7 @@ export default function ForgotPasswordPage() {
         </div>
         <h1 className="text-center text-xl font-semibold text-slate-900">Forgot password</h1>
         <p className="mt-2 text-center text-sm text-slate-500">
-          Enter your email and we will send a link to reset your password.
+          Enter your email and we will send a link to reset your password. Links expire in 15 minutes.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -63,6 +91,11 @@ export default function ForgotPasswordPage() {
           {message && (
             <p className="text-sm text-emerald-700">{message}</p>
           )}
+          <TurnstileWidget
+            ref={turnstileRef}
+            onToken={onTurnstileToken}
+            onExpire={onTurnstileExpire}
+          />
           <Button type="submit" className="w-full" loading={loading}>
             Send reset link
           </Button>

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { unauthorizedOrForbiddenResponse } from '@/lib/security/httpAuthErrors'
+import { requireUser } from '@/lib/security/requireUser'
 import { createServerClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { KNOWLEDGE_MEDIA_BUCKET } from '@/lib/storage/knowledgeBucket'
@@ -17,12 +19,7 @@ function guessMediaType(file: File): KnowledgeMediaType {
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createServerClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const user = await requireUser(supabase)
 
     const form = await req.formData()
     const articleId = String(form.get('article_id') ?? '').trim()
@@ -79,6 +76,8 @@ export async function POST(req: NextRequest) {
       },
     })
   } catch (e) {
+    const auth = unauthorizedOrForbiddenResponse(e)
+    if (auth) return auth
     console.error('[POST /api/knowledge/upload]', e)
     return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
   }

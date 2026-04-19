@@ -1,6 +1,9 @@
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 
-/** Best-effort analytics after a successful client gate check (server-only). */
+/**
+ * Best-effort analytics (service role). Call only after JWT auth + `checkMergedReportClientGate` / equivalent
+ * (e.g. `app/report/view/[token]/page.tsx`).
+ */
 export async function recordMergedReportView(mergedReportId: string): Promise<void> {
   const supabase = createServiceRoleClient()
   const { data: row } = await supabase

@@ -10,7 +10,7 @@ export const runtime = 'nodejs'
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createServerClient()
-    const gate = await requireManagerReportsApi(supabase)
+    const gate = await requireManagerReportsApi(supabase, request)
     if (gate instanceof NextResponse) return gate
 
     const sp = Object.fromEntries(request.nextUrl.searchParams.entries())

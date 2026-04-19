@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { parsePublicContactSlug } from '@/lib/security/publicContactSlug'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { getContactDisplayName } from '@/lib/contact-qr'
 import type { Contact } from '@/lib/types/contact.types'
@@ -6,11 +7,14 @@ import type { Contact } from '@/lib/types/contact.types'
 export const runtime = 'nodejs'
 
 async function getContactBySlug(slug: string) {
+  const normalized = parsePublicContactSlug(slug)
+  if (!normalized) return null
+
   const supabase = createServiceRoleClient()
   const { data, error } = await supabase
     .from('contacts')
     .select('id, slug, first_name, last_name, company, title, phone, email, status, qr_type, created_at')
-    .eq('slug', slug)
+    .eq('slug', normalized)
     .maybeSingle<Contact>()
 
   if (error || !data) return null

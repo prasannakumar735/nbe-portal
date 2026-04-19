@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { unauthorizedOrForbiddenResponse } from '@/lib/security/httpAuthErrors'
+import { requireUser } from '@/lib/security/requireUser'
 import { createServerClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { KNOWLEDGE_MEDIA_BUCKET } from '@/lib/storage/knowledgeBucket'
@@ -36,12 +38,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     const supabase = await createServerClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    await requireUser(supabase)
 
     const detail = await loadArticle(supabase, id)
     if (!detail) {
@@ -50,6 +47,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
     return NextResponse.json(detail)
   } catch (e) {
+    const auth = unauthorizedOrForbiddenResponse(e)
+    if (auth) return auth
     console.error('[GET /api/knowledge/[id]]', e)
     return NextResponse.json({ error: 'Failed' }, { status: 500 })
   }
@@ -70,12 +69,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     const supabase = await createServerClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    await requireUser(supabase)
 
     const body = (await req.json()) as PatchBody
     const patch: Record<string, unknown> = {}
@@ -96,6 +90,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const detail = await loadArticle(supabase, id)
     return NextResponse.json(detail)
   } catch (e) {
+    const auth = unauthorizedOrForbiddenResponse(e)
+    if (auth) return auth
     console.error('[PATCH /api/knowledge/[id]]', e)
     return NextResponse.json({ error: 'Failed' }, { status: 500 })
   }
@@ -109,12 +105,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     }
 
     const supabase = await createServerClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    await requireUser(supabase)
 
     const { error } = await supabase.from('knowledge_articles').delete().eq('id', id)
     if (error) {
@@ -123,6 +114,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
     return NextResponse.json({ ok: true })
   } catch (e) {
+    const auth = unauthorizedOrForbiddenResponse(e)
+    if (auth) return auth
     console.error('[DELETE /api/knowledge/[id]]', e)
     return NextResponse.json({ error: 'Failed' }, { status: 500 })
   }

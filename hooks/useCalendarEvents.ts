@@ -262,6 +262,18 @@ export function useCalendarEvents(options: { userId: string; canManage: boolean 
       if (e) throw e
       const inserted = mapCalendarEventFromDb(data as Record<string, unknown>)
       setEvents(prev => [...prev, inserted].sort((a, b) => a.date.localeCompare(b.date)))
+
+      if (inserted.created_by !== inserted.assigned_to) {
+        void fetch('/api/notifications/calendar-event-assigned', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ event_id: inserted.id }),
+        }).catch(err => {
+          console.warn('[useCalendarEvents] Calendar assignee notification failed', err)
+        })
+      }
+
       return inserted
     },
     []

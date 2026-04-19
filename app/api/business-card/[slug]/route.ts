@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { ImageResponse } from 'next/og'
 import React from 'react'
 import BusinessCard from '@/components/business-card/BusinessCard'
+import { parsePublicContactSlug } from '@/lib/security/publicContactSlug'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { getContactDisplayName, getContactQrPayload } from '@/lib/contact-qr'
 import { generateQRCode } from '@/lib/generateQRCode'
@@ -15,7 +16,13 @@ const BACKGROUND_IMAGE_URL = process.env.BUSINESS_CARD_TEMPLATE_URL
 
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   try {
-    const { slug } = await params
+    const { slug: raw } = await params
+    const slug = parsePublicContactSlug(raw)
+    if (!slug) {
+      return NextResponse.json({ error: 'Contact not found' }, { status: 404 })
+    }
+
+    /** Public catalog read — see `parsePublicContactSlug` / SECURITY.md (service role + validated slug). */
     const supabase = createServiceRoleClient()
 
     const { data: contact, error } = await supabase

@@ -8,7 +8,7 @@ export const runtime = 'nodejs'
 type Params = { params: Promise<{ clientId: string }> }
 
 export async function PATCH(request: Request, { params }: Params) {
-  const auth = await requireManagerOrAdminApi()
+  const auth = await requireManagerOrAdminApi(request)
   if (!auth.ok) return auth.response
 
   try {
@@ -49,7 +49,7 @@ export async function PATCH(request: Request, { params }: Params) {
 }
 
 export async function DELETE(_request: Request, { params }: Params) {
-  const auth = await requireManagerOrAdminApi()
+  const auth = await requireManagerOrAdminApi(_request)
   if (!auth.ok) return auth.response
 
   try {

@@ -22,8 +22,10 @@ function esc(s: string): string {
 
 export async function GET(request: NextRequest) {
   try {
+    const cspNonce = request.headers.get('x-nonce')?.trim() ?? ''
+
     const supabase = await createServerClient()
-    const gate = await requireManagerReportsApi(supabase)
+    const gate = await requireManagerReportsApi(supabase, request)
     if (gate instanceof NextResponse) return gate
 
     const sp = Object.fromEntries(request.nextUrl.searchParams.entries())
@@ -166,7 +168,7 @@ export async function GET(request: NextRequest) {
   <meta charset="utf-8"/>
   <title>NBE Reports — Print</title>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet" />
-  <style>
+  <style${cspNonce ? ` nonce="${esc(cspNonce)}"` : ''}>
     body { font-family: 'Roboto', sans-serif; color: #0f172a; margin: 24px; background: #fff; }
     .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
     .brand img { height: 40px; width: auto; }
@@ -196,7 +198,7 @@ export async function GET(request: NextRequest) {
   <h2>Filters</h2>
   <table class="meta">${filterBlock}</table>
   ${bodyInner}
-  <script>window.onload = () => { window.focus(); }</script>
+  <script${cspNonce ? ` nonce="${esc(cspNonce)}"` : ''}>window.onload = () => { window.focus(); }</script>
 </body>
 </html>`
 

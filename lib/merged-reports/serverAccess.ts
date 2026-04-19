@@ -10,7 +10,8 @@ export type MergedReportSecureRow = {
 }
 
 /**
- * Service role lookup by public token (server-only).
+ * Service role lookup by public token (server-only). Do not use for authorization by itself — the caller must
+ * enforce JWT + client gate (`checkMergedReportClientGate`) before exposing PDFs or incrementing views.
  * Accepts `share_token` text or legacy `access_token` UUID string (same value for new rows).
  */
 export async function fetchMergedReportByAccessToken(

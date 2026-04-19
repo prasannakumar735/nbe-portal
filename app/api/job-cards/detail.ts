@@ -4,6 +4,10 @@ import { clientLocationLabel } from '@/app/api/job-cards/helpers'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { JOB_CARD_IMAGE_BUCKET } from '@/lib/storage/jobCardBucket'
 
+/**
+ * Storage signing with service role. Call only after the caller has already loaded `job_cards` / images
+ * with a JWT-backed client so RLS has authorized the export paths.
+ */
 async function signImageUrlIfNeeded(pathOrUrl: string): Promise<string> {
   const p = String(pathOrUrl ?? '').trim()
   if (!p) return p

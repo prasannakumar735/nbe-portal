@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { maintenanceFormDraftSchema, maintenanceFormSubmitSchema } from '@/lib/validation/maintenance'
 import type { MaintenanceChecklistStatus } from '@/lib/types/maintenance.types'
 import { createClient } from '@supabase/supabase-js'
+import { runMaintenanceSubmit } from '@/lib/maintenance/runMaintenanceSubmit'
 
 export const runtime = 'nodejs'
 
@@ -311,12 +312,12 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const upstreamResponse = await fetch(new URL('/api/maintenance/submit', request.url), {
+        const submitReq = new NextRequest(new URL('/api/maintenance/submit', request.url), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: request.headers,
           body: JSON.stringify(submitBody),
         })
-
+        const upstreamResponse = await runMaintenanceSubmit(submitReq)
         const upstreamJson = (await upstreamResponse.json()) as Record<string, unknown>
 
         if (!upstreamResponse.ok) {
@@ -360,6 +361,43 @@ export async function POST(request: NextRequest) {
         : {
             form: payload.form,
           }
+
+    if (endpoint === '/api/maintenance/submit') {
+      const submitReq = new NextRequest(new URL(endpoint, request.url), {
+        method: 'POST',
+        headers: request.headers,
+        body: JSON.stringify(forwardBody),
+      })
+      const upstreamResponse = await runMaintenanceSubmit(submitReq)
+      const upstreamJson = (await upstreamResponse.json()) as Record<string, unknown>
+
+      if (!upstreamResponse.ok) {
+        console.error('[Maintenance API] Upstream request failed', {
+          endpoint,
+          status: upstreamResponse.status,
+          error: upstreamJson.error,
+        })
+
+        return NextResponse.json(
+          {
+            error: String(upstreamJson.error ?? `Maintenance request failed (${upstreamResponse.status})`),
+            details: upstreamJson,
+            endpoint,
+          },
+          { status: upstreamResponse.status },
+        )
+      }
+
+      const reportId = String(upstreamJson.report_id ?? payload.form.report_id ?? '')
+
+      return NextResponse.json({
+        success: true,
+        report_id: reportId || null,
+        status: upstreamJson.status ?? payload.status,
+        endpoint,
+        data: upstreamJson,
+      })
+    }
 
     const upstreamResponse = await fetch(new URL(endpoint, request.url), {
       method: 'POST',

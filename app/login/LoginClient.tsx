@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { TurnstileWidget, type TurnstileWidgetHandle } from '@/components/security/TurnstileWidget'
 import { createSupabaseClient } from '@/lib/supabase/client'
 
 type LoginClientProps = {
@@ -17,6 +18,18 @@ export function LoginClient({ inactiveNotice, noProfileNotice }: LoginClientProp
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [configError, setConfigError] = useState<string | null>(null)
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const turnstileRef = useRef<TurnstileWidgetHandle | null>(null)
+
+  const turnstileEnabled = Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim())
+
+  const onTurnstileToken = useCallback((token: string) => {
+    setTurnstileToken(token)
+  }, [])
+
+  const onTurnstileExpire = useCallback(() => {
+    setTurnstileToken(null)
+  }, [])
 
   useEffect(() => {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -41,28 +54,45 @@ export function LoginClient({ inactiveNotice, noProfileNotice }: LoginClientProp
         return
       }
 
-      const supabase = createSupabaseClient()
-
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: password,
-      })
-
-      if (signInError) {
-        if (signInError.message.includes('Invalid login credentials')) {
-          setError('Invalid email or password. Please try again.')
-        } else if (signInError.message.includes('Email not confirmed')) {
-          setError('Please confirm your email address before logging in.')
-        } else if (signInError.message.includes('Failed to fetch')) {
-          setError('Unable to connect to authentication service. Please check your internet connection or contact support.')
-        } else {
-          setError(signInError.message)
-        }
+      if (turnstileEnabled && !turnstileToken) {
+        setError('Please complete the CAPTCHA.')
         setLoading(false)
         return
       }
 
-      if (!data.session) {
+      const loginRes = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          ...(turnstileToken ? { turnstileToken } : {}),
+        }),
+      })
+
+      const loginJson = (await loginRes.json().catch(() => ({}))) as { error?: string; ok?: boolean }
+
+      if (!loginRes.ok) {
+        turnstileRef.current?.reset()
+        setTurnstileToken(null)
+        setError(
+          typeof loginJson.error === 'string'
+            ? loginJson.error
+            : loginRes.status === 401
+              ? 'Invalid email or password. Please try again.'
+              : 'Sign in failed. Please try again.',
+        )
+        setLoading(false)
+        return
+      }
+
+      const supabase = createSupabaseClient()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session) {
         setError('Login failed: No session created. Please try again.')
         setLoading(false)
         return
@@ -71,7 +101,7 @@ export function LoginClient({ inactiveNotice, noProfileNotice }: LoginClientProp
       const { data: staffProfile } = await supabase
         .from('profiles')
         .select('role, is_active')
-        .eq('id', data.session.user.id)
+        .eq('id', session.user.id)
         .maybeSingle()
 
       if (staffProfile?.role === 'client') {
@@ -183,6 +213,12 @@ export function LoginClient({ inactiveNotice, noProfileNotice }: LoginClientProp
                 required
               />
             </div>
+
+            <TurnstileWidget
+              ref={turnstileRef}
+              onToken={onTurnstileToken}
+              onExpire={onTurnstileExpire}
+            />
 
             <button
               type="submit"

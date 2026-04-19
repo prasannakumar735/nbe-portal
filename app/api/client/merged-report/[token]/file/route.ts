@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { unauthorizedOrForbiddenResponse } from '@/lib/security/httpAuthErrors'
+import { requireUser } from '@/lib/security/requireUser'
 import { createServerClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import {
@@ -22,12 +24,7 @@ export async function GET(
     }
 
     const serverSupabase = await createServerClient()
-    const {
-      data: { user },
-    } = await serverSupabase.auth.getUser()
-    if (!user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const user = await requireUser(serverSupabase)
 
     const { data: profile } = await serverSupabase
       .from('profiles')
@@ -75,6 +72,8 @@ export async function GET(
       },
     })
   } catch (err) {
+    const auth = unauthorizedOrForbiddenResponse(err)
+    if (auth) return auth
     const message = err instanceof Error ? err.message : 'Failed to load report'
     return NextResponse.json({ error: message }, { status: 500 })
   }
