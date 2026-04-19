@@ -5,7 +5,7 @@
 - **Source of truth:** `middleware.ts` + `lib/security/csp.ts`.
 - Each HTML/API request gets a fresh **`x-nonce`** header and a **`Content-Security-Policy`** header with:
   - **`script-src`**: `'self' 'nonce-{nonce}' 'strict-dynamic'` — production has **no** `'unsafe-inline'` / `'unsafe-eval'`.
-  - **`style-src`**: production uses **`'nonce-{nonce}'`** plus `https://fonts.googleapis.com` (Material / Roboto stylesheets). Development keeps **`'unsafe-inline'`** on styles so React/Tailwind iteration stays smooth.
+  - **`style-src`**: production uses **`'nonce-{nonce}'`** plus `https://fonts.googleapis.com` (e.g. manager print export HTML). Root layout uses self-hosted Roboto + Material Symbols via `globals.css` (`font-src` includes `https://fonts.gstatic.com`). **`style-src-attr 'unsafe-inline'`** allows `style=""` on elements (React, Turnstile) without `'unsafe-inline'` on `<style>` tags. Development keeps **`'unsafe-inline'`** on styles so React/Tailwind iteration stays smooth.
 - **Development** still adds **`'unsafe-eval'`** on `script-src` (React dev tooling / stack traces per [Next.js CSP guide](https://nextjs.org/docs/app/guides/content-security-policy)).
 - **`connect-src`**: Supabase, Microsoft Graph, Nominatim, Google Maps APIs.
 - **`worker-src 'self' blob:`** — service workers / workers.

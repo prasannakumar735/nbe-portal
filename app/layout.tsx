@@ -18,12 +18,6 @@ export default async function RootLayout({
 
   return (
     <html lang="en" className="font-sans" suppressHydrationWarning>
-      <head>
-        <link
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
       <body className="font-sans">
         <AuthProvider>
           <RoleProvider>

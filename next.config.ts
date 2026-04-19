@@ -27,7 +27,8 @@ const baseSecurityHeaders = [
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   {
     key: 'Permissions-Policy',
-    value: 'camera=(), microphone=(), geolocation=(self), interest-cohort=(), payment=()',
+    value:
+      'camera=(), microphone=(), geolocation=(self), interest-cohort=(), payment=(), xr-spatial-tracking=(self "https://challenges.cloudflare.com")',
   },
 ]
 

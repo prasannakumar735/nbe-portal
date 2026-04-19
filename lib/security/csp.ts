@@ -4,6 +4,8 @@
  *
  * Dev: `unsafe-eval` on scripts (React dev tools), `unsafe-inline` on styles (faster iteration).
  * Prod: strict `script-src` / `style-src` with per-request nonces (no `unsafe-inline` / `unsafe-eval`).
+ * `style-src-attr 'unsafe-inline'` allows `style=""` on elements (React/Turnstile) without allowing
+ * unnonced `<style>` tags — see MDN `style-src-attr`.
  */
 
 const isProd = process.env.NODE_ENV === 'production'
@@ -31,6 +33,8 @@ export function buildContentSecurityPolicy(nonce: string): string {
     "default-src 'self'",
     `script-src ${scriptSrc}`,
     `style-src ${styleSrc}`,
+    // Inline `style=""` (React hydration, Turnstile) — does not relax `<style>` tags (still nonce-only).
+    ...(isProd ? (["style-src-attr 'unsafe-inline'"] as const) : []),
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob: https:",
     "frame-src 'self' https://challenges.cloudflare.com",
