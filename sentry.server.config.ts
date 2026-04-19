@@ -1,6 +1,11 @@
+import { nodeProfilingIntegration } from '@sentry/profiling-node'
 import * as Sentry from '@sentry/nextjs'
 
-import { getSentryDsn } from '@/lib/sentry.dsn'
+import {
+  getSentryDsn,
+  getSentryProfileSessionSampleRate,
+  getSentryTracesSampleRate,
+} from '@/lib/sentry.dsn'
 
 const dsn = getSentryDsn()
 
@@ -8,7 +13,15 @@ Sentry.init({
   dsn,
   environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? 'development',
 
-  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.05 : 0,
+  tracesSampleRate: getSentryTracesSampleRate(),
+  profileSessionSampleRate: getSentryProfileSessionSampleRate(),
+  profileLifecycle: 'trace',
+
+  enableLogs: true,
+  integrations: [
+    nodeProfilingIntegration(),
+    Sentry.consoleLoggingIntegration({ levels: ['log', 'warn', 'error'] }),
+  ],
 
   sendDefaultPii: false,
 

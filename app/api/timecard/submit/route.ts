@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
+import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
+import { notifyTimesheetSubmittedEmail } from '@/lib/notifications/portalGraphNotifications'
+import type { PortalNotifyResult } from '@/lib/notifications/portalGraphNotifications'
+import { weekEndFromStart } from '@/lib/timecard/weekDates'
 
 export const runtime = 'nodejs'
 
@@ -52,7 +56,42 @@ export async function POST(request: NextRequest) {
       throw upErr
     }
 
-    return NextResponse.json({ timesheet: updated })
+    /** Notify managers + service inbox (Microsoft Graph). Failure does not roll back submit. */
+    let notification: PortalNotifyResult | undefined
+    try {
+      const admin = createServiceRoleClient()
+      const { data: profile } = await admin
+        .from('profiles')
+        .select('full_name, first_name, last_name')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      const p = profile as Record<string, unknown> | null
+      const employeeDisplayName =
+        String(p?.full_name ?? '').trim() ||
+        [p?.first_name, p?.last_name].filter(Boolean).join(' ').trim() ||
+        user.email?.split('@')[0] ||
+        'Employee'
+
+      notification = await notifyTimesheetSubmittedEmail(admin, {
+        employeeId: user.id,
+        employeeDisplayName,
+        weekStartDate: weekStart,
+        weekEndDate: weekEndFromStart(weekStart),
+      })
+
+      if (notification.status === 'failed') {
+        console.error('[POST /api/timecard/submit] notifyTimesheetSubmittedEmail:', notification.error)
+      }
+    } catch (notifyErr) {
+      console.error('[POST /api/timecard/submit] notification exception:', notifyErr)
+      notification = {
+        status: 'failed',
+        error: notifyErr instanceof Error ? notifyErr.message : 'Notification failed.',
+      }
+    }
+
+    return NextResponse.json({ timesheet: updated, notification })
   } catch (e) {
     console.error('[POST /api/timecard/submit]', e)
     return NextResponse.json({ error: 'Submit failed' }, { status: 500 })

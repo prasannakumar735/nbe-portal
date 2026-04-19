@@ -25,6 +25,8 @@ const baseSecurityHeaders = [
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+  /** Required for Sentry browser profiling (JS Self Profiling API). */
+  { key: 'Document-Policy', value: 'js-profiling' },
   {
     key: 'Permissions-Policy',
     value:

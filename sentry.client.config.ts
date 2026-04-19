@@ -1,15 +1,44 @@
+import { browserProfilingIntegration, browserTracingIntegration } from '@sentry/browser'
 import * as Sentry from '@sentry/nextjs'
 
-import { getSentryDsn } from '@/lib/sentry.dsn'
+import {
+  getSentryDsn,
+  getSentryProfileSessionSampleRate,
+  getSentryTracesSampleRate,
+} from '@/lib/sentry.dsn'
 
 const dsn = getSentryDsn()
+
+function clientTracePropagationTargets(): (string | RegExp)[] {
+  const targets: (string | RegExp)[] = ['localhost', /^https?:\/\/localhost(:\d+)?\/?/]
+  const site = process.env.NEXT_PUBLIC_SITE_URL?.trim()
+  if (!site) return targets
+  try {
+    const { origin, hostname } = new URL(site)
+    if (hostname !== 'localhost') {
+      targets.push(origin)
+    }
+  } catch {
+    /* ignore invalid NEXT_PUBLIC_SITE_URL */
+  }
+  return targets
+}
 
 Sentry.init({
   dsn,
   environment: process.env.NODE_ENV ?? 'development',
 
-  // Minimal client overhead: errors + optional low sample tracing
-  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.05 : 0,
+  tracesSampleRate: getSentryTracesSampleRate(),
+  profileSessionSampleRate: getSentryProfileSessionSampleRate(),
+  profileLifecycle: 'trace',
+
+  enableLogs: true,
+  integrations: [
+    browserTracingIntegration(),
+    browserProfilingIntegration(),
+    Sentry.consoleLoggingIntegration({ levels: ['log', 'warn', 'error'] }),
+  ],
+  tracePropagationTargets: clientTracePropagationTargets(),
 
   // Security / auth issues only — no session replay by default
   replaysSessionSampleRate: 0,

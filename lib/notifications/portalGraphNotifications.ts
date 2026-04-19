@@ -22,7 +22,7 @@ export async function notifyTimesheetSubmittedEmail(
   },
 ): Promise<PortalNotifyResult> {
   const { employeeDisplayName, weekStartDate, weekEndDate } = params
-  const dashboardUrl = `${publicAppBaseUrl()}/timecard`
+  const dashboardUrl = `${publicAppBaseUrl()}/dashboard/timecards?tab=team`
 
   let recipients: Array<{ email: string; full_name: string | null }>
   try {
