@@ -2,6 +2,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendMailViaGraph } from '@/lib/graph/sendMail'
 import { publicAppBaseUrl, maintenanceReportClientViewUrl } from '@/lib/app/publicAppBaseUrl'
 
+/** Always CC-style copy for new maintenance report submissions (Graph). Deduped against manager emails. */
+const SERVICE_SUBMISSION_NOTIFY_EMAIL = 'service@nbeaustralia.com.au'
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -135,17 +138,23 @@ export async function notifyManagersOfReportSubmission(
     .maybeSingle()
 
   if (reportError || !report) {
-    return { status: 'failed', error: reportError?.message ?? 'Report not found.' }
+    const msg = reportError?.message ?? 'Report not found.'
+    console.error('[notifyManagersOfReportSubmission] Load report failed', { reportId, msg })
+    return { status: 'failed', error: msg }
   }
 
   const row = report as Record<string, unknown>
   const status = String(row.status ?? '').trim()
   if (status !== 'submitted') {
-    return { status: 'skipped', reason: `Report status is "${status}", not submitted.` }
+    const reason = `Report status is "${status}", not submitted.`
+    console.warn('[notifyManagersOfReportSubmission] Skipped:', reason)
+    return { status: 'skipped', reason }
   }
 
   if (row.manager_workflow_email_sent_at) {
-    return { status: 'skipped', reason: 'Manager notification already sent.' }
+    const reason = 'Manager notification already sent.'
+    console.warn('[notifyManagersOfReportSubmission] Skipped:', reason)
+    return { status: 'skipped', reason }
   }
 
   const technicianName = String(row.technician_name ?? 'Unknown').trim() || 'Unknown'
@@ -175,7 +184,14 @@ export async function notifyManagersOfReportSubmission(
       const id = String((row as { id?: string }).id ?? '').trim()
       if (!id) return
       const { data, error } = await supabase.auth.admin.getUserById(id)
-      if (error || !data.user?.email) return
+      if (error) {
+        console.warn('[notifyManagersOfReportSubmission] auth.admin.getUserById failed', {
+          userId: id,
+          message: error.message,
+        })
+        return
+      }
+      if (!data.user?.email) return
       const em = String(data.user.email).trim()
       if (isValidEmail(em)) emailByUserId.set(id, em)
     }),
@@ -196,10 +212,23 @@ export async function notifyManagersOfReportSubmission(
     })
   }
 
+  const serviceEmail = SERVICE_SUBMISSION_NOTIFY_EMAIL.trim().toLowerCase()
+  if (isValidEmail(SERVICE_SUBMISSION_NOTIFY_EMAIL) && !seen.has(serviceEmail)) {
+    seen.add(serviceEmail)
+    recipients.push({
+      email: SERVICE_SUBMISSION_NOTIFY_EMAIL.trim(),
+      full_name: 'Team',
+    })
+  }
+
   if (recipients.length === 0) {
+    const reason = 'No recipients (no manager/admin emails and service inbox could not be added).'
+    console.warn('[notifyManagersOfReportSubmission] Skipped:', reason, {
+      managerAdminProfileRows: profileRows.length,
+    })
     return {
       status: 'skipped',
-      reason: 'No manager or admin profiles with a valid email address.',
+      reason,
     }
   }
 
@@ -232,9 +261,14 @@ export async function notifyManagersOfReportSubmission(
       console.error('[notifyManagersOfReportSubmission] Failed to persist sent timestamp', updErr)
     }
 
+    console.log('[notifyManagersOfReportSubmission] Sent', {
+      reportId,
+      recipients: recipients.length,
+    })
     return { status: 'sent', recipients: recipients.length }
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Graph send failed.'
+    console.error('[notifyManagersOfReportSubmission] Graph send failed', { reportId, message })
     return { status: 'failed', error: message }
   }
 }
@@ -257,19 +291,25 @@ export async function notifyTechnicianOfReportApproval(
     .maybeSingle()
 
   if (reportError || !report) {
-    return { status: 'failed', error: reportError?.message ?? 'Report not found.' }
+    const msg = reportError?.message ?? 'Report not found.'
+    console.error('[notifyTechnicianOfReportApproval] Load report failed', { reportId, msg })
+    return { status: 'failed', error: msg }
   }
 
   const row = report as Record<string, unknown>
   if (row.technician_approval_email_sent_at) {
-    return { status: 'skipped', reason: 'Technician approval notification already sent.' }
+    const reason = 'Technician approval notification already sent.'
+    console.warn('[notifyTechnicianOfReportApproval] Skipped:', reason)
+    return { status: 'skipped', reason }
   }
 
   const technicianEmail = String(row.technician_email ?? row.submitter_email ?? '')
     .trim()
 
   if (!isValidEmail(technicianEmail)) {
-    return { status: 'skipped', reason: 'No valid technician email on the report.' }
+    const reason = 'No valid technician email on the report.'
+    console.warn('[notifyTechnicianOfReportApproval] Skipped:', reason, { reportId })
+    return { status: 'skipped', reason }
   }
 
   const technicianName = String(row.technician_name ?? 'Technician').trim() || 'Technician'
@@ -305,9 +345,11 @@ export async function notifyTechnicianOfReportApproval(
       console.error('[notifyTechnicianOfReportApproval] Failed to persist sent timestamp', updErr)
     }
 
+    console.log('[notifyTechnicianOfReportApproval] Sent', { reportId, to: technicianEmail })
     return { status: 'sent', recipients: 1 }
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Graph send failed.'
+    console.error('[notifyTechnicianOfReportApproval] Graph send failed', { reportId, message })
     return { status: 'failed', error: message }
   }
 }

@@ -6,6 +6,7 @@ import type { MaintenanceFormValues } from '@/lib/types/maintenance.types'
 import { generateMaintenanceReportPdf } from '@/lib/pdf/generateMaintenanceReportPdf'
 import { buildMaintenancePdfOptions } from '@/lib/pdf/buildMaintenancePdfOptions'
 import { uploadFileToOneDrive } from '@/lib/graph/uploadFile'
+import { notifyManagersOfReportSubmission } from '@/lib/maintenance/reportWorkflowEmail'
 
 export const runtime = 'nodejs'
 
@@ -104,20 +105,18 @@ export async function POST(request: NextRequest) {
     let submissionEmailStatus: 'sent' | 'failed' | 'skipped' = 'skipped'
     let submissionEmailReason = ''
     try {
-      const submissionEmailRes = await fetch(
-        new URL('/api/maintenance/send-submission-email', request.url),
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ report_id: reportId }),
-        },
-      )
-      if (submissionEmailRes.ok) {
+      // Call workflow email in-process (avoids unreliable self-fetch on some serverless hosts).
+      const workflow = await notifyManagersOfReportSubmission(supabase, reportId)
+      if (workflow.status === 'sent') {
         submissionEmailStatus = 'sent'
+        submissionEmailReason =
+          workflow.recipients > 0 ? `Sent to ${workflow.recipients} recipient(s).` : 'Sent.'
+      } else if (workflow.status === 'skipped') {
+        submissionEmailStatus = 'skipped'
+        submissionEmailReason = workflow.reason
       } else {
-        const err = await submissionEmailRes.json()
-        submissionEmailReason = err.error ?? submissionEmailRes.statusText
         submissionEmailStatus = 'failed'
+        submissionEmailReason = workflow.error
       }
     } catch (e) {
       submissionEmailStatus = 'failed'
