@@ -172,16 +172,17 @@ export default function MaintenanceDashboardPage() {
   const [mergeTotalDoorsInput, setMergeTotalDoorsInput] = useState('')
   const [mergeDoorsFieldError, setMergeDoorsFieldError] = useState<string | null>(null)
   const [deletingMergedId, setDeletingMergedId] = useState<string | null>(null)
+  const [deletingReportId, setDeletingReportId] = useState<string | null>(null)
   const [restoringMergedId, setRestoringMergedId] = useState<string | null>(null)
   const [offlineReports, setOfflineReports] = useState<OfflineInspectionRecord[]>([])
   const [offlineLoading, setOfflineLoading] = useState(false)
   const [offlineSyncingAll, setOfflineSyncingAll] = useState(false)
 
   const [openSubmitted, setOpenSubmitted] = useState(true)
-  const [openApproved, setOpenApproved] = useState(true)
+  const [openApproved, setOpenApproved] = useState(false)
   const [openDrafts, setOpenDrafts] = useState(true)
-  const [openMerged, setOpenMerged] = useState(true)
-  const [openDeletedMerged, setOpenDeletedMerged] = useState(true)
+  const [openMerged, setOpenMerged] = useState(false)
+  const [openDeletedMerged, setOpenDeletedMerged] = useState(false)
 
   const submittedReports = useMemo(
     () => reports.filter((r) => ['submitted', 'reviewing', 'rejected'].includes(r.status)),
@@ -201,31 +202,25 @@ export default function MaintenanceDashboardPage() {
     return () => clearInterval(id)
   }, [merging])
 
-  useEffect(() => {
-    let cancelled = false
-    const fetchReports = async () => {
-      try {
-        const res = await fetch('/api/maintenance/reports')
-        const data = await res.json()
-        if (!res.ok) {
-          throw new Error(data.error ?? 'Failed to load reports')
-        }
-        if (!cancelled) {
-          setReports(data.reports ?? [])
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'Failed to load reports')
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
+  const loadReports = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = Boolean(opts?.silent)
+    if (!silent) {
+      setLoading(true)
     }
-    fetchReports()
-    return () => {
-      cancelled = true
+    try {
+      const res = await fetch('/api/maintenance/reports', { cache: 'no-store' })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error ?? 'Failed to load reports')
+      }
+      setReports(data.reports ?? [])
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load reports')
+    } finally {
+      if (!silent) {
+        setLoading(false)
+      }
     }
   }, [])
 
@@ -233,8 +228,8 @@ export default function MaintenanceDashboardPage() {
     if (!canMergeReports) return
     try {
       const [activeRes, deletedRes] = await Promise.all([
-        fetch('/api/maintenance/merged-reports'),
-        fetch('/api/maintenance/merged-reports?scope=deleted'),
+        fetch('/api/maintenance/merged-reports', { cache: 'no-store' }),
+        fetch('/api/maintenance/merged-reports?scope=deleted', { cache: 'no-store' }),
       ])
       const activeData = await activeRes.json().catch(() => ({}))
       const deletedData = await deletedRes.json().catch(() => ({}))
@@ -248,6 +243,36 @@ export default function MaintenanceDashboardPage() {
       // non-blocking
     }
   }, [canMergeReports])
+
+  useEffect(() => {
+    void loadReports()
+  }, [loadReports])
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void loadReports({ silent: true })
+        if (canMergeReports) {
+          void loadMergedLists()
+        }
+      }
+    }
+    /** BFCache restore can show stale React state; refetch when the page is shown again. */
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        void loadReports({ silent: true })
+        if (canMergeReports) {
+          void loadMergedLists()
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('pageshow', onPageShow)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('pageshow', onPageShow)
+    }
+  }, [loadReports, loadMergedLists, canMergeReports])
 
   useEffect(() => {
     if (!canMergeReports) return
@@ -493,6 +518,31 @@ export default function MaintenanceDashboardPage() {
     }
   }
 
+  const handleDeleteMaintenanceReport = async (reportId: string, label: string) => {
+    if (!window.confirm(`Delete report ${label}? This cannot be undone.`)) return
+    setDeletingReportId(reportId)
+    setError(null)
+    try {
+      const res = await fetch(`/api/maintenance/reports/${encodeURIComponent(reportId)}`, {
+        method: 'DELETE',
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error((data as { error?: string }).error ?? 'Delete failed')
+      }
+      setReports((prev) => prev.filter((r) => r.id !== reportId))
+      setSelectedReports((prev) => prev.filter((id) => id !== reportId))
+      toast.success('Report deleted')
+      await loadReports({ silent: true })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to delete report'
+      setError(msg)
+      toast.error(msg)
+    } finally {
+      setDeletingReportId(null)
+    }
+  }
+
   const handleDownloadAllPhotos = async (reportId: string) => {
     try {
       const res = await fetch(`/api/maintenance/photos/${reportId}/zip`)
@@ -516,9 +566,11 @@ export default function MaintenanceDashboardPage() {
     if (list.length === 0) {
       return <div className="px-4 py-6 text-sm text-slate-600">{emptyMessage}</div>
     }
+    const actionBtn =
+      'inline-flex shrink-0 items-center justify-center rounded-lg border px-2.5 py-1.5 text-xs font-medium sm:px-3'
     return (
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[1000px] border-collapse text-left text-sm lg:min-w-0">
           <thead>
             <tr className="border-b border-slate-200 bg-white">
               {canMergeReports && (
@@ -532,7 +584,9 @@ export default function MaintenanceDashboardPage() {
               <th className="px-4 py-3 font-semibold text-slate-700">Technician</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Inspection Date</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Status</th>
-              <th className="px-4 py-3 font-semibold text-slate-700">Actions</th>
+              <th className="min-w-[12rem] px-4 py-3 font-semibold text-slate-700 xl:min-w-[28rem]">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -565,18 +619,18 @@ export default function MaintenanceDashboardPage() {
                     {statusLabel(report.status)}
                   </span>
                 </td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-2">
+                <td className="max-w-[min(100vw-2rem,32rem)] px-4 py-3 align-top xl:max-w-none">
+                  <div className="flex flex-wrap gap-1.5 md:flex-nowrap md:gap-2">
                     <Link
                       href={`/maintenance/${report.id}`}
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      className={`${actionBtn} border-slate-300 bg-white text-slate-700 hover:bg-slate-50`}
                     >
                       View Report
                     </Link>
                     <button
                       type="button"
                       onClick={() => void handleDownloadPdf(report.id)}
-                      className="rounded-lg border border-gray-300 px-3 py-1 text-sm hover:bg-gray-100"
+                      className={`${actionBtn} border-gray-300 text-slate-800 hover:bg-gray-100`}
                     >
                       Download
                     </button>
@@ -588,17 +642,30 @@ export default function MaintenanceDashboardPage() {
                             toast.success('Client link copied')
                           })
                         }}
-                        className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
+                        className={`${actionBtn} border-emerald-200 bg-emerald-50 font-medium text-emerald-800 hover:bg-emerald-100`}
                       >
-                        Copy client link
+                        Copy link
                       </button>
                     ) : null}
                     <button
                       type="button"
                       onClick={() => handleDownloadAllPhotos(report.id)}
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      className={`${actionBtn} border-slate-300 bg-white text-slate-700 hover:bg-slate-50`}
                     >
-                      Download All Photos
+                      All photos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void handleDeleteMaintenanceReport(
+                          report.id,
+                          report.report_number ?? report.id.slice(0, 8),
+                        )
+                      }
+                      disabled={deletingReportId === report.id}
+                      className={`${actionBtn} border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50`}
+                    >
+                      {deletingReportId === report.id ? 'Deleting…' : 'Delete'}
                     </button>
                   </div>
                 </td>

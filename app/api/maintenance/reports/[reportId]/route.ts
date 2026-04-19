@@ -2,10 +2,11 @@ import { randomUUID } from 'crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@/lib/supabase/server'
-import { canApproveMaintenanceReport } from '@/lib/auth/roles'
+import { canApproveMaintenanceReport, isTechnician } from '@/lib/auth/roles'
 import { regenerateMaintenanceReportPdfWithClientQr } from '@/lib/maintenance/regenerateReportPdfWithQr'
 import { maintenanceReportClientViewUrl } from '@/lib/app/publicAppBaseUrl'
 import { notifyTechnicianOfReportApproval } from '@/lib/maintenance/reportWorkflowEmail'
+import { deleteMaintenanceReportStorageAssets } from '@/lib/maintenance/deleteMaintenanceReportStorage'
 import { jsonError500 } from '@/lib/security/safeApiError'
 
 export const runtime = 'nodejs'
@@ -172,5 +173,111 @@ export async function PATCH(
     })
   } catch (err) {
     return jsonError500(err, 'maintenance-approve-report')
+  }
+}
+
+function emailsMatchReport(
+  userEmail: string,
+  row: { technician_email?: string | null; submitter_email?: string | null },
+): boolean {
+  const u = userEmail.trim().toLowerCase()
+  const te = String(row.technician_email ?? '')
+    .trim()
+    .toLowerCase()
+  const se = String(row.submitter_email ?? '')
+    .trim()
+    .toLowerCase()
+  return Boolean(u && (te === u || se === u))
+}
+
+/**
+ * Delete a maintenance report and related storage. Managers/admins: any report.
+ * Technicians: only if their auth email matches technician_email or submitter_email on the row.
+ * Blocked if the report id is still referenced by a non–soft-deleted merged report.
+ */
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ reportId: string }> },
+) {
+  try {
+    const serverSupabase = await createServerClient()
+    const {
+      data: { user },
+    } = await serverSupabase.auth.getUser()
+    if (!user?.id || !user.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { data: profile } = await serverSupabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    const isManager = canApproveMaintenanceReport(profile as { role?: string } | null)
+    const isTech = isTechnician(profile as { role?: string } | null)
+
+    const { reportId } = await params
+    if (!reportId) {
+      return NextResponse.json({ error: 'Report ID required' }, { status: 400 })
+    }
+
+    const supabase = createServiceClient()
+
+    const { data: row, error: loadErr } = await supabase
+      .from('maintenance_reports')
+      .select('id, technician_email, submitter_email')
+      .eq('id', reportId)
+      .maybeSingle()
+
+    if (loadErr || !row) {
+      return NextResponse.json({ error: 'Report not found' }, { status: 404 })
+    }
+
+    if (!isManager) {
+      if (!isTech) {
+        return NextResponse.json({ error: 'Forbidden.' }, { status: 403 })
+      }
+      if (!emailsMatchReport(user.email, row)) {
+        return NextResponse.json(
+          { error: 'You can only delete maintenance reports linked to your account email.' },
+          { status: 403 },
+        )
+      }
+    }
+
+    const { data: mergedBlock } = await supabase
+      .from('merged_reports')
+      .select('id')
+      .is('deleted_at', null)
+      .contains('report_ids', [reportId])
+      .limit(1)
+      .maybeSingle()
+
+    if (mergedBlock) {
+      return NextResponse.json(
+        {
+          error:
+            'This report is included in a merged PDF. Remove it from merged reports (or delete the merged report) before deleting.',
+        },
+        { status: 409 },
+      )
+    }
+
+    await deleteMaintenanceReportStorageAssets(supabase, reportId)
+
+    const { error: delErr } = await supabase.from('maintenance_reports').delete().eq('id', reportId)
+
+    if (delErr) {
+      console.error('[DELETE maintenance report]', delErr)
+      return NextResponse.json(
+        { error: process.env.NODE_ENV === 'production' ? 'Could not delete report.' : delErr.message },
+        { status: 500 },
+      )
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    return jsonError500(err, 'maintenance-delete-report')
   }
 }

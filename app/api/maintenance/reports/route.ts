@@ -131,7 +131,14 @@ export async function GET() {
       }
     })
 
-    return NextResponse.json({ reports: list })
+    return NextResponse.json(
+      { reports: list },
+      {
+        headers: {
+          'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
+        },
+      },
+    )
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to fetch maintenance reports'
     return NextResponse.json({ error: message }, { status: 500 })

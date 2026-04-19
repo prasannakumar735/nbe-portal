@@ -76,7 +76,14 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({ merged_reports: list, scope: isDeletedScope ? 'deleted' : 'active' })
+    return NextResponse.json(
+      { merged_reports: list, scope: isDeletedScope ? 'deleted' : 'active' },
+      {
+        headers: {
+          'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
+        },
+      },
+    )
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to fetch merged reports'
     return NextResponse.json({ error: message }, { status: 500 })

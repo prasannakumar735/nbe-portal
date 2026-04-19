@@ -1651,7 +1651,21 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         throw new Error(result.error || 'Failed to submit report')
       }
 
-      setValue('report_id', result.report_id)
+      const envelope = result as {
+        report_id?: string
+        data?: { submission_email?: { status: string; reason?: string } }
+      }
+      const submissionEmail = envelope.data?.submission_email
+      if (submissionEmail?.status === 'failed') {
+        toast.error(
+          `Manager notification failed: ${submissionEmail.reason ?? 'Check Microsoft Graph env (production).'}`,
+          { duration: 14_000 },
+        )
+      } else if (submissionEmail?.status === 'skipped' && submissionEmail.reason) {
+        toast.warning(submissionEmail.reason, { duration: 10_000 })
+      }
+
+      setValue('report_id', envelope.report_id ?? (result as { report_id?: string }).report_id)
 
       if (isAdminMode && reportIdFromRoute) {
         setTrackedReportStatus('submitted')
@@ -1664,6 +1678,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         }
         showStatus('Report submitted. You can still edit doors and details, then save and approve when ready.', 'success')
         toast.success('Report submitted')
+        router.refresh()
         return
       }
 
@@ -1672,6 +1687,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       setIsLocked(true)
       showStatus('Report submitted successfully. Editing is now locked.', 'success')
       toast.success('Report submitted successfully')
+      router.refresh()
       router.push('/maintenance')
     } catch (error) {
       // If we failed due to connectivity, queue offline

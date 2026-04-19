@@ -87,7 +87,7 @@ export function LayoutWrapper({ children, user }: LayoutWrapperProps) {
 
         {/* Page content: centered, compact width — single source for portal density */}
         <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="mx-auto w-full min-w-0 max-w-5xl px-4 py-5">{children}</div>
+          <div className="mx-auto w-full min-w-0 max-w-[min(100%,88rem)] px-4 py-5">{children}</div>
         </main>
       </div>
     </div>

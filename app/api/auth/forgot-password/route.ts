@@ -18,6 +18,19 @@ export const runtime = 'nodejs'
 const FORGOT_COOLDOWN_MS = 60_000
 const lastForgotByEmail = new Map<string, number>()
 
+/**
+ * When Graph/custom mail fails, optionally fall back to Supabase's built-in recovery email
+ * (`noreply@mail.app.supabase.io`). In production this defaults to **false** so misconfigured
+ * Graph does not silently send Supabase-branded mail. Set `PASSWORD_RESET_ALLOW_SUPABASE_FALLBACK=true`
+ * to allow fallback (e.g. emergency).
+ */
+function allowSupabasePasswordFallback(): boolean {
+  const v = process.env.PASSWORD_RESET_ALLOW_SUPABASE_FALLBACK?.trim().toLowerCase()
+  if (v === 'true') return true
+  if (v === 'false') return false
+  return process.env.NODE_ENV !== 'production'
+}
+
 function hashToken(token: string): string {
   return createHash('sha256').update(token, 'utf8').digest('hex')
 }
@@ -115,21 +128,22 @@ async function postForgotPassword(request: SecurityRequest, _sec: ApiSecurityBin
 
     if (insErr) {
       console.error('[forgot-password] insert token', insErr)
-      const fb = await trySupabaseRecoveryEmail(email)
-      if (fb.ok) {
-        return NextResponse.json({
-          success: true,
-          message: 'If an account exists for that email, a reset message was sent.',
-        })
+      if (allowSupabasePasswordFallback()) {
+        const fb = await trySupabaseRecoveryEmail(email)
+        if (fb.ok) {
+          return NextResponse.json({
+            success: true,
+            message: 'If an account exists for that email, a reset message was sent.',
+          })
+        }
+        console.error('[forgot-password] fallback resetPasswordForEmail', fb.message)
       }
-      console.error('[forgot-password] fallback resetPasswordForEmail', fb.message)
       const payload =
         process.env.NODE_ENV === 'production'
           ? { error: 'Unable to create reset link.' }
           : {
               error: 'Unable to create reset link.',
               debug: insErr.message,
-              fallbackError: fb.message,
             }
       return NextResponse.json(payload, { status: 500 })
     }
@@ -158,14 +172,17 @@ async function postForgotPassword(request: SecurityRequest, _sec: ApiSecurityBin
         .eq('user_id', userId)
         .eq('token_hash', tokenHash)
 
-      const fb = await trySupabaseRecoveryEmail(email)
-      if (fb.ok) {
-        return NextResponse.json({
-          success: true,
-          message: 'If an account exists for that email, a reset message was sent.',
-        })
+      if (allowSupabasePasswordFallback()) {
+        const fb = await trySupabaseRecoveryEmail(email)
+        if (fb.ok) {
+          return NextResponse.json({
+            success: true,
+            message: 'If an account exists for that email, a reset message was sent.',
+          })
+        }
+        console.error('[forgot-password] Supabase recovery after Graph failed', fb.message)
       }
-      console.error('[forgot-password] Supabase recovery after Graph failed', fb.message)
+
       const graphMsg = e instanceof Error ? e.message : String(e)
       const payload =
         process.env.NODE_ENV === 'production'
@@ -173,7 +190,6 @@ async function postForgotPassword(request: SecurityRequest, _sec: ApiSecurityBin
           : {
               error: 'Unable to send reset email.',
               debug: graphMsg,
-              fallbackError: fb.message,
             }
       return NextResponse.json(payload, { status: 500 })
     }

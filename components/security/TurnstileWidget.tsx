@@ -6,15 +6,26 @@ import {
   useEffect,
   useId,
   useImperativeHandle,
-  useLayoutEffect,
   useRef,
+  useState,
 } from 'react'
 
-/** Minimal typing for Cloudflare’s implicit `cf-turnstile` widget API. */
+/** Cloudflare Turnstile `render` / `reset` / `remove` (explicit widget lifecycle). */
 declare global {
   interface Window {
     turnstile?: {
-      reset: (container?: string | HTMLElement) => void
+      render: (
+        container: HTMLElement | string,
+        options: {
+          sitekey: string
+          callback?: (token: string) => void
+          'expired-callback'?: () => void
+          theme?: 'light' | 'dark' | 'auto'
+          size?: 'normal' | 'compact'
+        },
+      ) => string | undefined
+      reset?: (widgetId?: string) => void
+      remove?: (widgetId?: string) => void
     }
   }
 }
@@ -32,16 +43,17 @@ type TurnstileWidgetProps = {
 }
 
 /**
- * Cloudflare Turnstile (free): loads `turnstile/v0/api.js` and renders an implicit widget
- * (`cf-turnstile` + `data-sitekey`). Renders nothing when `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is unset.
+ * Cloudflare Turnstile: loads `turnstile/v0/api.js` and calls `turnstile.render()` on a container.
+ * Uses **explicit** rendering so the widget works after client-side navigation (implicit `cf-turnstile`
+ * only auto-initializes for nodes present when `api.js` first runs — soft navigations often left the
+ * widget blank until a full reload).
  */
 export const TurnstileWidget = forwardRef<TurnstileWidgetHandle | null, TurnstileWidgetProps>(
   function TurnstileWidget({ onToken, onExpire, scriptNonce }, ref) {
     const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim()
     const containerRef = useRef<HTMLDivElement>(null)
     const reactId = useId().replace(/:/g, '')
-    const callbackName = `__turnstile_cb_${reactId}`
-    const expiredName = `__turnstile_exp_${reactId}`
+    const widgetIdRef = useRef<string | null>(null)
 
     const onTokenRef = useRef(onToken)
     const onExpireRef = useRef(onExpire)
@@ -50,25 +62,51 @@ export const TurnstileWidget = forwardRef<TurnstileWidgetHandle | null, Turnstil
       onExpireRef.current = onExpire
     }, [onToken, onExpire])
 
-    useLayoutEffect(() => {
-      if (!siteKey) return
-      const w = window as unknown as Record<string, unknown>
-      w[callbackName] = (token: string) => onTokenRef.current(token)
-      w[expiredName] = () => onExpireRef.current?.()
-      return () => {
-        delete w[callbackName]
-        delete w[expiredName]
+    /** True once `window.turnstile` is available (script loaded, possibly from a previous route). */
+    const [apiReady, setApiReady] = useState(() =>
+      typeof window !== 'undefined' ? Boolean(window.turnstile?.render) : false,
+    )
+
+    useEffect(() => {
+      if (typeof window !== 'undefined' && window.turnstile?.render) {
+        setApiReady(true)
       }
-    }, [siteKey, callbackName, expiredName])
+    }, [])
+
+    /**
+     * `next/script` `onLoad` may not run when `api.js` is already cached (soft navigation), so the
+     * widget stayed blank until a full reload. Poll briefly until `turnstile.render` exists.
+     */
+    useEffect(() => {
+      if (!siteKey || typeof window === 'undefined') return
+      if (window.turnstile?.render) {
+        setApiReady(true)
+        return
+      }
+      let attempts = 0
+      const maxAttempts = 150
+      const id = window.setInterval(() => {
+        attempts += 1
+        if (window.turnstile?.render) {
+          setApiReady(true)
+          window.clearInterval(id)
+          return
+        }
+        if (attempts >= maxAttempts) {
+          window.clearInterval(id)
+        }
+      }, 100)
+      return () => window.clearInterval(id)
+    }, [siteKey])
 
     useImperativeHandle(
       ref,
       () => ({
         reset: () => {
+          const id = widgetIdRef.current
           try {
-            const el = containerRef.current
-            if (el && window.turnstile) {
-              window.turnstile.reset(el)
+            if (id && window.turnstile?.reset) {
+              window.turnstile.reset(id)
             }
           } catch {
             /* ignore */
@@ -78,6 +116,35 @@ export const TurnstileWidget = forwardRef<TurnstileWidgetHandle | null, Turnstil
       [],
     )
 
+    useEffect(() => {
+      if (!siteKey || !apiReady) return
+      const el = containerRef.current
+      const api = window.turnstile
+      if (!el || !api?.render) return
+
+      const id = api.render(el, {
+        sitekey: siteKey,
+        callback: (token: string) => onTokenRef.current(token),
+        'expired-callback': () => onExpireRef.current?.(),
+        theme: 'light',
+        size: 'normal',
+      })
+
+      widgetIdRef.current = id ?? null
+
+      return () => {
+        const wid = widgetIdRef.current
+        widgetIdRef.current = null
+        try {
+          if (wid && api.remove) {
+            api.remove(wid)
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    }, [siteKey, apiReady])
+
     if (!siteKey) return null
 
     return (
@@ -85,21 +152,17 @@ export const TurnstileWidget = forwardRef<TurnstileWidgetHandle | null, Turnstil
         <Script
           src="https://challenges.cloudflare.com/turnstile/v0/api.js"
           strategy="afterInteractive"
-          // Align with Cloudflare’s embed (non-blocking load); nonce required when `script-src` includes `strict-dynamic`.
           async
           defer
           nonce={scriptNonce}
+          onLoad={() => {
+            if (window.turnstile?.render) {
+              setApiReady(true)
+            }
+          }}
         />
         <div className="flex justify-center py-1">
-          <div
-            ref={containerRef}
-            className="cf-turnstile"
-            data-sitekey={siteKey}
-            data-callback={callbackName}
-            data-expired-callback={expiredName}
-            data-theme="light"
-            data-size="normal"
-          />
+          <div ref={containerRef} className="min-h-[65px] min-w-[300px]" />
         </div>
       </>
     )

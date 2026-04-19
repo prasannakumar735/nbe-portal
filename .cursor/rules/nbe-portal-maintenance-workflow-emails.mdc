@@ -1,0 +1,26 @@
+---
+description: Maintenance workflow emails — client/location resolution, technician wording
+globs:
+  - lib/maintenance/reportWorkflowEmail.ts
+  - lib/maintenance/resolveClientLocationForReport.ts
+  - lib/maintenance/runMaintenanceSubmit.ts
+  - app/api/send-maintenance-report-email/**/*.ts
+  - lib/email/maintenanceReportEmailTemplate.ts
+---
+
+# NBE Portal — maintenance workflow emails
+
+## Resolving client and site labels
+
+- Use **`resolveClientLocationForReport`** (`lib/maintenance/resolveClientLocationForReport.ts`) whenever emails or paths need human-readable **client** and **location** from `client_location_id`.
+- **Client display name** must use **`clientNameFromDbRow`** semantics: read `clients` with `select('*')` and resolve via **`name`**, **`client_name`**, and **`company_name`** (not only `name` / `company_name`). Omitting `client_name` caused **Unknown Client** when that column held the label.
+- **Location label** should use **`locationLabelFromDbRow`** so `location_name`, legacy `name` / `site_name` / `suburb`, and address fallbacks match PDFs (`buildMaintenancePdfOptions`).
+
+## Manager notification HTML (`managerSubmissionHtml`)
+
+- Do **not** prefix the body with the literal word **Technician** before `technician_name`. The form default is often `"Technician"`, which produced **Technician Technician**.
+- Prefer **`<b>{technician_name}</b> submitted a maintenance report…`** and close with **`Thanks` / `NBE Team`** (same tone as technician approval email), not `Technician {name}` in the sign-off.
+
+## Data prerequisites
+
+- If **Unknown Client** still appears, verify **`client_locations.client_id`** points at a **`clients`** row with at least one of **`name`**, **`client_name`**, or **`company_name`** set.
