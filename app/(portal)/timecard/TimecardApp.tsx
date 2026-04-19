@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { ClipboardPaste } from 'lucide-react'
 import { createSupabaseClient } from '@/lib/supabase/client'
@@ -334,11 +335,16 @@ export default function TimecardApp() {
   return (
     <div className="w-full min-w-0 space-y-5">
         {(isAdmin || isManager) && !tc.isManagerView ? (
-          <p className="text-xs text-slate-500">
-            Manager review: open{' '}
-            <code className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-800">
-              /timecard?user=&lt;employee user id&gt;
-            </code>
+          <p className="text-xs text-slate-600">
+            <span className="font-medium text-slate-700">Manager:</span>{' '}
+            Open the{' '}
+            <Link
+              href="/dashboard/timecards?tab=team"
+              className="font-medium text-indigo-600 underline decoration-indigo-300 underline-offset-2 hover:text-indigo-800"
+            >
+              Team
+            </Link>{' '}
+            tab to review and approve your team&apos;s timecards.
           </p>
         ) : null}
 

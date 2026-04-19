@@ -30,9 +30,10 @@ export function buildContentSecurityPolicy(nonce: string): string {
     ...(isDev ? (["'unsafe-eval'"] as const) : []),
   ].join(' ')
 
+  // `'unsafe-inline'` on styles only: Recharts and some client libs inject `<style>` blocks; scripts stay strict.
   const styleSrc = isDev
     ? ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'].join(' ')
-    : ["'self'", `'nonce-${nonce}'`, 'https://fonts.googleapis.com'].join(' ')
+    : ["'self'", `'nonce-${nonce}'`, "'unsafe-inline'", 'https://fonts.googleapis.com'].join(' ')
 
   const parts = [
     "default-src 'self'",

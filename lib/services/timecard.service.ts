@@ -2,6 +2,7 @@
 // Handles all database operations and business logic
 
 import { supabase } from '../supabase'
+import { mapLocationDbRowToApi, type ClientLocationDbRow } from '../supabase/clientLocationsDb'
 import type {
   TimeEntry,
   TimeEntryWithDetails,
@@ -194,11 +195,11 @@ export class ClientLocationService {
     }
     const { data, error } = await supabase
       .from('client_locations')
-      .select('id, client_id, suburb')
+      .select('id, client_id, location_name, name, site_name, Company_address, suburb, created_at')
       .eq('client_id', clientId)
 
     if (error) throw error
-    return data || []
+    return (data ?? []).map(row => mapLocationDbRowToApi(row as ClientLocationDbRow))
   }
 }
 

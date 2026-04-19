@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
+import { locationLabelFromDbRow } from '@/lib/supabase/clientLocationsDb'
 
 function mapLocationRow(row: Record<string, unknown>) {
-  const name = String(row.location_name ?? row.name ?? row.site_name ?? '').trim()
-  const companyAddress = String(row.Company_address ?? '').trim()
+  const name = locationLabelFromDbRow(row as Parameters<typeof locationLabelFromDbRow>[0])
+  const companyAddress = String(row.Company_address ?? row.company_address ?? '').trim()
   const normalizedCompanyAddress = companyAddress.toLowerCase() === 'null' ? '' : companyAddress
   const fallbackAddress = String(row.address ?? row.site_address ?? row.location_address ?? '')
   const suburbRaw = String(row.suburb ?? '').trim()
   return {
     id: String(row.id ?? ''),
     client_id: String(row.client_id ?? ''),
-    name: name || 'Unknown Location',
+    name,
     address: String(normalizedCompanyAddress || fallbackAddress),
     suburb: suburbRaw || null,
   }

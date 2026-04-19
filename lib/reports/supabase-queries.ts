@@ -708,9 +708,9 @@ export async function fetchMaintenanceReport(
   }
 
   const locIds = list.map(r => (r.client_location_id ? String(r.client_location_id) : null)).filter(Boolean) as string[]
-  const locMap = await loadLocationsMap(supabase, locIds)
+  const locMap = await mapWithServiceRoleFallback(loadLocationsMap, supabase, locIds)
   const clientIds = [...new Set(locIds.map(id => locMap.get(id)?.client_id).filter(Boolean) as string[])]
-  const clientMap = await loadClientsMap(supabase, clientIds)
+  const clientMap = await mapWithServiceRoleFallback(loadClientsMap, supabase, clientIds)
 
   if (filters.clientId) {
     list = list.filter(r => {

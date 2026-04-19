@@ -1,3 +1,6 @@
+/* Bundled variable font — avoids brittle fonts.gstatic.com versioned URLs (404 in prod). */
+@import '@fontsource-variable/material-symbols-outlined/index.css';
+
 @import "tailwindcss";
 
 /*
@@ -55,14 +58,6 @@ html {
   --font-sans: 'Roboto', sans-serif;
 }
 
-@font-face {
-  font-family: 'Material Symbols Outlined';
-  src: url('https://fonts.gstatic.com/s/materialsymbolsoutlined/v104/-Hthj4j_w-1Fc7Y2K1z0Cwxq-g.woff2') format('woff2');
-  font-weight: 100 700;
-  font-style: normal;
-  font-display: swap;
-}
-
 html,
 body {
   font-family: 'Roboto', sans-serif;
@@ -76,7 +71,7 @@ body {
 }
 
 .material-symbols-outlined {
-  font-family: 'Material Symbols Outlined';
+  font-family: 'Material Symbols Outlined Variable', 'Material Symbols Outlined', sans-serif;
   font-weight: normal;
   font-style: normal;
   font-size: 18px;

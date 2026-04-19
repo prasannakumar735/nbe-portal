@@ -332,7 +332,7 @@ export default function TimeEntryStartForm({ user, onSuccess }: TimeEntryStartFo
                 <div className="border-b border-gray-100 pb-4">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Location</p>
                   <p className="text-lg font-semibold text-slate-700">
-                    {selectedLocation?.suburb || 'Unknown Location'}
+                    {selectedLocation?.location_name || selectedLocation?.suburb || 'Unknown Location'}
                   </p>
                 </div>
 
@@ -488,7 +488,7 @@ export default function TimeEntryStartForm({ user, onSuccess }: TimeEntryStartFo
                       <option value="">Select Location...</option>
                       {locations.map(location => (
                         <option key={location.id} value={location.id}>
-                          {location.suburb}
+                          {location.location_name || location.suburb || location.name || 'Location'}
                         </option>
                       ))}
                     </select>
