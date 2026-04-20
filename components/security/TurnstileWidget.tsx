@@ -1,14 +1,7 @@
 'use client'
 
 import Script from 'next/script'
-import {
-  forwardRef,
-  useEffect,
-  useId,
-  useImperativeHandle,
-  useRef,
-  useState,
-} from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 
 /** Cloudflare Turnstile `render` / `reset` / `remove` (explicit widget lifecycle). */
 declare global {
@@ -52,7 +45,6 @@ export const TurnstileWidget = forwardRef<TurnstileWidgetHandle | null, Turnstil
   function TurnstileWidget({ onToken, onExpire, scriptNonce }, ref) {
     const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim()
     const containerRef = useRef<HTMLDivElement>(null)
-    const reactId = useId().replace(/:/g, '')
     const widgetIdRef = useRef<string | null>(null)
 
     const onTokenRef = useRef(onToken)
@@ -121,6 +113,20 @@ export const TurnstileWidget = forwardRef<TurnstileWidgetHandle | null, Turnstil
       const el = containerRef.current
       const api = window.turnstile
       if (!el || !api?.render) return
+
+      // Prod: avoid stacked iframes when remove() failed, navigation race, or render() without id.
+      const previousId = widgetIdRef.current
+      widgetIdRef.current = null
+      try {
+        if (previousId && api.remove) api.remove(previousId)
+      } catch {
+        /* ignore */
+      }
+      try {
+        el.innerHTML = ''
+      } catch {
+        /* ignore */
+      }
 
       const id = api.render(el, {
         sitekey: siteKey,

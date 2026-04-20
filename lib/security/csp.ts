@@ -4,6 +4,8 @@
  *
  * Dev: `unsafe-eval` on scripts (React dev tools), `unsafe-inline` on styles (faster iteration).
  * Prod: strict `script-src` / `style-src` with per-request nonces (no `unsafe-inline` / `unsafe-eval`).
+ * Prod also adds **`'wasm-unsafe-eval'`** so `@react-pdf/renderer` (Yoga WASM) can generate PDFs
+ * (quote download + `PDFDownloadLink`) without relaxing general `'unsafe-eval'`.
  * **`strict-dynamic`**: host entries in `script-src` are ignored for trust — external scripts (e.g.
  * Cloudflare Turnstile `api.js`) must use a **nonce** on `<script>` (see `TurnstileWidget` + `x-nonce`).
  * `style-src-attr 'unsafe-inline'` allows `style=""` on elements (React/Turnstile) without allowing
@@ -27,6 +29,10 @@ export function buildContentSecurityPolicy(nonce: string): string {
     `'nonce-${nonce}'`,
     "'strict-dynamic'",
     TURNSTILE_ORIGIN,
+    // `@react-pdf/renderer` (Yoga layout) instantiates a WebAssembly module in the browser.
+    // CSP3 `'wasm-unsafe-eval'` authorises WASM compile/instantiate WITHOUT re-enabling general `'unsafe-eval'`.
+    // Keyword sources are still honored under `'strict-dynamic'` (only host-source entries are ignored).
+    "'wasm-unsafe-eval'",
     ...(isDev ? (["'unsafe-eval'"] as const) : []),
   ].join(' ')
 

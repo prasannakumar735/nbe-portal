@@ -4,7 +4,7 @@
 
 - **Source of truth:** `middleware.ts` + `lib/security/csp.ts`.
 - Each HTML/API request gets a fresh **`x-nonce`** header and a **`Content-Security-Policy`** header with:
-  - **`script-src`**: `'self' 'nonce-{nonce}' 'strict-dynamic'` — production has **no** `'unsafe-inline'` / `'unsafe-eval'`.
+  - **`script-src`**: `'self' 'nonce-{nonce}' 'strict-dynamic' 'wasm-unsafe-eval'` — production has **no** `'unsafe-inline'` / `'unsafe-eval'`. `'wasm-unsafe-eval'` (CSP3) is required so `@react-pdf/renderer` (Yoga layout WASM) can instantiate when generating service-quote PDFs (`components/quotes/downloadServiceQuotePdf.tsx`, `PDFDownloadLink` on the edit page). Keyword sources are still honored under `'strict-dynamic'` (only host-source entries get ignored).
   - **`style-src`**: production uses **`'nonce-{nonce}'`**, **`'unsafe-inline'`** (for Recharts / other libs that inject `<style>` nodes — **scripts** remain strict), and `https://fonts.googleapis.com` where needed. Roboto stays under `/public/fonts`; **Material Symbols** is bundled via **`@fontsource-variable/material-symbols-outlined`** (no fragile `fonts.gstatic.com` version URLs). **`style-src-attr 'unsafe-inline'`** still allows `style=""` on elements. Development keeps **`'unsafe-inline'`** on styles so React/Tailwind iteration stays smooth.
 - **Development** still adds **`'unsafe-eval'`** on `script-src` (React dev tooling / stack traces per [Next.js CSP guide](https://nextjs.org/docs/app/guides/content-security-policy)).
 - **`connect-src`**: `'self'`, Turnstile (`https://challenges.cloudflare.com`), Supabase, Microsoft Graph, Nominatim, Google Maps, Sentry ingest.
