@@ -54,8 +54,10 @@ export async function mergeMaintenanceReportPdfs(params: {
   signatureDateLabel?: string
   /** QR on first segment cover only (PNG bytes). */
   coverQrPngBytes?: Uint8Array | null
+  /** Manager-entered consolidated total doors for the merged bundle (shown once on the cover). */
+  mergedTotalDoorsInspected?: number | null
 }): Promise<Uint8Array> {
-  const { supabase, drafts, signatureDateLabel, coverQrPngBytes } = params
+  const { supabase, drafts, signatureDateLabel, coverQrPngBytes, mergedTotalDoorsInspected } = params
   if (drafts.length === 0) {
     throw new Error('No mergeable reports found')
   }
@@ -79,6 +81,9 @@ export async function mergeMaintenanceReportPdfs(params: {
     const baseOptions = pdfOptionsList[i]!
     const pdfBytes = await generateMaintenanceReportPdf({
       ...baseOptions,
+      ...(i === 0 && mergedTotalDoorsInspected != null && Number.isFinite(mergedTotalDoorsInspected)
+        ? { mergedTotalDoorsCustomerInfo: { omitLine: false, displayValue: mergedTotalDoorsInspected } }
+        : {}),
       ...(i === 0 && coverQrPngBytes && coverQrPngBytes.length > 0
         ? { coverQrPngBytes }
         : {}),

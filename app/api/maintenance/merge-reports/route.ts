@@ -129,6 +129,7 @@ export async function POST(request: NextRequest) {
         drafts,
         signatureDateLabel: preparedOn,
         coverQrPngBytes,
+        mergedTotalDoorsInspected: totalDoorsInspected,
       })
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to merge PDFs'

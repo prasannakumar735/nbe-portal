@@ -142,10 +142,16 @@ export async function GET(
 
     let pdfBytes: Uint8Array
     try {
+      const mergedTotalDoorsInspectedRaw = Number(
+        (mergedRow as { total_doors_inspected?: number | null }).total_doors_inspected ?? NaN,
+      )
       pdfBytes = await mergeMaintenanceReportPdfs({
         supabase,
         drafts,
         signatureDateLabel: preparedOn,
+        mergedTotalDoorsInspected: Number.isFinite(mergedTotalDoorsInspectedRaw)
+          ? mergedTotalDoorsInspectedRaw
+          : null,
       })
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to merge PDFs'
