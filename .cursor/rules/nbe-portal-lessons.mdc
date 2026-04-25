@@ -1,0 +1,43 @@
+---
+description: Key fixes/patterns learned while stabilizing NBE Portal (Next.js + Supabase + PDFs).
+alwaysApply: true
+---
+
+# NBE Portal – stability & PDF generation rules
+
+## Dev chunk / caching stability (Next.js App Router)
+
+- Do **not** register Service Worker in development. A previously registered SW can cache stale `_next` chunks and cause `ChunkLoadError` / App Router runtime crashes.
+- If dev chunk timeouts occur, prefer raising the dev chunk load timeout (webpack `output.chunkLoadTimeout`) rather than weakening security headers or adding global retries.
+
+## React state updates after unmount (Strict Mode)
+
+- Any async effect that calls `setState` **must** guard against unmount:
+  - Use a `cancelled` flag (or `AbortController`) inside the effect.
+  - Check `cancelled` after each `await` before calling `setState`.
+- This is especially important for auth/session initialization and subscriptions.
+
+## Supabase auth provider patterns
+
+- Keep a **single source of truth**:
+  - `AuthProvider` owns `getSession()` and auth subscriptions.
+  - Route guards redirect **only in `useEffect`**, never in render.
+- On auth subscriptions (`onAuthStateChange`), ensure callbacks do not run state updates after cleanup/unsubscribe.
+
+## Clickjacking / iframe embedding for PDFs
+
+- Default stance is **locked down**:
+  - `X-Frame-Options: DENY`
+  - CSP `frame-ancestors 'none'`
+- If embedding is required, allow it **only** on the specific PDF file routes and only as needed:
+  - `X-Frame-Options: SAMEORIGIN`
+  - CSP `frame-ancestors 'self'`
+- Do **not** loosen framing for the entire site.
+
+## Maintenance PDF rendering (pdf-lib)
+
+- `pdf-lib` `drawText()` does **not** handle `\n` newlines automatically. When rendering user notes:
+  - Preserve newlines by splitting paragraphs on `\r?\n`.
+  - Wrap each paragraph to the **actual available width** using font metrics (e.g. `wrapPdfTextLines`).
+  - Never hard-break by character count (causes “half width” look and poor wrapping).
+

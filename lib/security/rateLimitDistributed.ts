@@ -8,7 +8,7 @@ const LIMIT_AUTH = 10
 /** Stricter tier for high-value read/write APIs */
 const LIMIT_SENSITIVE = 30
 /** Default for remaining /api routes */
-const LIMIT_GENERAL = 60
+const LIMIT_GENERAL = 120
 
 let redisSingleton: Redis | null | undefined
 
@@ -82,7 +82,7 @@ export async function enforceDistributedRateLimit(
   const limiter = getRatelimit(tier)
   const pathKey = pathname.split('/').slice(0, 6).join('/') || pathname
   const identifier =
-    tier === 'auth' ? `auth:${ip}` : tier === 'sensitive' ? `s:${ip}:${pathKey}` : `g:${ip}`
+    tier === 'auth' ? `auth:${ip}` : tier === 'sensitive' ? `s:${ip}:${pathKey}` : `g:${ip}:${pathKey}`
 
   if (limiter) {
     const res = await limiter.limit(identifier)
@@ -103,7 +103,7 @@ export async function enforceDistributedRateLimit(
   const max =
     tier === 'auth' ? LIMIT_AUTH : tier === 'sensitive' ? LIMIT_SENSITIVE : LIMIT_GENERAL
   const windowMs = 60_000
-  const fbKey = `fb:${tier}:${ip}:${tier === 'sensitive' ? pathKey : ''}`
+  const fbKey = `fb:${tier}:${ip}:${tier === 'auth' ? '' : pathKey}`
   if (!checkSlidingWindow(fbKey, max, windowMs)) {
     return { ok: false, retryAfterSec: 60 }
   }

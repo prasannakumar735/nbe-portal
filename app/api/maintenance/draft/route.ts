@@ -311,11 +311,12 @@ export async function POST(request: NextRequest) {
     }
 
     let existingStatus: string | undefined
+    let existingReportSchemaVersion: number | null = null
 
     if (payload.report_id) {
       const { data: existing, error: existingError } = await supabase
         .from('maintenance_reports')
-        .select('id, status')
+        .select('id, status, report_schema_version')
         .eq('id', payload.report_id)
         .single()
 
@@ -331,6 +332,9 @@ export async function POST(request: NextRequest) {
       }
 
       existingStatus = String(existing?.status ?? '').trim() || undefined
+      const rawExistingSchema = (existing as { report_schema_version?: unknown } | null)?.report_schema_version
+      const n = Number(rawExistingSchema)
+      existingReportSchemaVersion = Number.isFinite(n) && n > 0 ? Math.trunc(n) : null
     }
 
     const persistedStatus =
@@ -366,8 +370,13 @@ export async function POST(request: NextRequest) {
       offline_id: (payload.form as { offline_id?: string | null }).offline_id ?? null,
       status: persistedStatus,
     }
+    const rawIncomingSchema = (payload.form as { report_schema_version?: unknown }).report_schema_version
+    const incomingSchemaNum = Number(rawIncomingSchema)
+    const incomingSchema = Number.isFinite(incomingSchemaNum) && incomingSchemaNum > 0 ? Math.trunc(incomingSchemaNum) : null
+    const resolvedSchema = incomingSchema ?? existingReportSchemaVersion ?? 2
+    reportInsert.report_schema_version = Math.max(2, resolvedSchema)
+
     if (!payload.report_id) {
-      reportInsert.report_schema_version = 2
       reportInsert.submitted_at =
         persistedStatus === 'submitted' || persistedStatus === 'reviewing'
           ? new Date().toISOString()

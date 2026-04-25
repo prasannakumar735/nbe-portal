@@ -1,6 +1,6 @@
 'use client'
 
-import { memo } from 'react'
+import { memo, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Controller, type Control, type FieldPath } from 'react-hook-form'
 import { MAINTENANCE_CHECKLIST_ITEMS } from '@/lib/types/maintenance.types'
 import type {
@@ -19,11 +19,71 @@ const COLUMNS: Array<{ key: MaintenanceChecklistStatus; label: string }> = [
 
 type ChecklistRowItem = MaintenanceChecklistItem & { sectionChanged: boolean }
 
+const ITEMS_WITH_SECTION: ChecklistRowItem[] = MAINTENANCE_CHECKLIST_ITEMS.map((item, index, list) => ({
+  ...item,
+  sectionChanged: index === 0 || list[index - 1]?.section !== item.section,
+}))
+
+function NoteTooltipButton({ note, label }: { note: string; label: string }) {
+  const id = useId()
+  const [open, setOpen] = useState(false)
+  const btnRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    const onPointerDown = (e: PointerEvent) => {
+      const el = btnRef.current
+      if (!el) return
+      if (e.target instanceof Node && el.contains(e.target)) return
+      setOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('pointerdown', onPointerDown, { capture: true })
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('pointerdown', onPointerDown, { capture: true } as never)
+    }
+  }, [open])
+
+  return (
+    <span className="relative inline-flex">
+      <button
+        ref={btnRef}
+        type="button"
+        aria-label={`${label} info`}
+        aria-describedby={open ? id : undefined}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onClick={() => setOpen(v => !v)}
+        className="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white text-[10px] font-bold text-slate-600 hover:bg-slate-50"
+      >
+        ?
+      </button>
+      {open ? (
+        <span
+          id={id}
+          role="tooltip"
+          className="absolute left-1/2 top-full z-30 mt-2 w-[min(320px,calc(100vw-2rem))] -translate-x-1/2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shadow-lg"
+        >
+          <span className="absolute left-1/2 top-[-6px] h-3 w-3 -translate-x-1/2 rotate-45 border-l border-t border-slate-200 bg-white" />
+          <span className="block whitespace-pre-wrap leading-snug">{note}</span>
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
 type ChecklistRowProps = {
   control: Control<MaintenanceFormValues>
   doorIndex: number
   item: ChecklistRowItem
   variant: 'mobile' | 'desktop'
+  showFloatingNotes?: boolean
 }
 
 /**
@@ -36,8 +96,10 @@ const ChecklistRow = memo(function ChecklistRow({
   doorIndex,
   item,
   variant,
+  showFloatingNotes = false,
 }: ChecklistRowProps) {
   const fieldName = `doors.${doorIndex}.checklist.${item.code}` as FieldPath<MaintenanceFormValues>
+  const floatingNote = showFloatingNotes ? String(item.floating_note ?? '').trim() : ''
 
   return (
     <Controller
@@ -59,7 +121,10 @@ const ChecklistRow = memo(function ChecklistRow({
               )}
               <div>
                 <p className="text-sm font-semibold text-slate-900">{item.code.toUpperCase()}</p>
-                <p className="text-sm text-slate-700">{item.label}</p>
+                <p className="text-sm text-slate-700">
+                  {item.label}
+                  {floatingNote ? <span className="ml-2"><NoteTooltipButton note={floatingNote} label={item.code.toUpperCase()} /></span> : null}
+                </p>
               </div>
               <ChecklistRadioGroup
                 value={typeof field.value === 'string' ? field.value : ''}
@@ -71,7 +136,7 @@ const ChecklistRow = memo(function ChecklistRow({
           )
         }
         return (
-          <div className="grid grid-cols-[1fr_60px_75px_60px_50px] border-t border-slate-200">
+          <div className="grid w-full grid-cols-[minmax(240px,1fr)_repeat(4,minmax(40px,60px))] border-t border-slate-200">
             <div className="px-3 py-3 align-top text-sm text-slate-700">
               {item.sectionChanged && (
                 <div className="mb-2 inline-flex rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600">
@@ -79,7 +144,10 @@ const ChecklistRow = memo(function ChecklistRow({
                 </div>
               )}
               <p className="font-semibold text-slate-900">{item.code.toUpperCase()}</p>
-              <p>{item.label}</p>
+              <p className="flex items-start gap-2">
+                <span className="min-w-0">{item.label}</span>
+                {floatingNote ? <NoteTooltipButton note={floatingNote} label={item.code.toUpperCase()} /> : null}
+              </p>
             </div>
             <div className="col-span-4 flex items-center py-3">
               <ChecklistRadioGroup
@@ -96,14 +164,12 @@ const ChecklistRow = memo(function ChecklistRow({
   )
 })
 
-const ITEMS_WITH_SECTION: ChecklistRowItem[] = MAINTENANCE_CHECKLIST_ITEMS.map((item, index, list) => ({
-  ...item,
-  sectionChanged: index === 0 || list[index - 1]?.section !== item.section,
-}))
-
 type ChecklistSectionProps = {
   control: Control<MaintenanceFormValues>
   doorIndex: number
+  items?: MaintenanceChecklistItem[]
+  headerLabel?: string
+  showFloatingNotes?: boolean
 }
 
 /**
@@ -113,26 +179,39 @@ type ChecklistSectionProps = {
 export const ChecklistSection = memo(function ChecklistSection({
   control,
   doorIndex,
+  items,
+  headerLabel = 'Checklist Item',
+  showFloatingNotes = false,
 }: ChecklistSectionProps) {
+  const source = items ?? MAINTENANCE_CHECKLIST_ITEMS
+  const itemsWithSection = useMemo(
+    () =>
+      source.map((item, index, list) => ({
+        ...item,
+        sectionChanged: index === 0 || list[index - 1]?.section !== item.section,
+      })),
+    [source],
+  )
   return (
     <div className="space-y-4">
       <div className="block space-y-4 md:hidden">
-        {ITEMS_WITH_SECTION.map(item => (
+        {itemsWithSection.map(item => (
           <ChecklistRow
             key={item.code}
             control={control}
             doorIndex={doorIndex}
             item={item}
             variant="mobile"
+            showFloatingNotes={showFloatingNotes}
           />
         ))}
       </div>
 
-      <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
-        <div className="min-w-[600px]">
-          <div className="grid grid-cols-[1fr_60px_75px_60px_50px] border-b border-slate-200 bg-slate-50">
+      <div className="hidden rounded-xl border border-slate-200 bg-white md:block">
+        <div className="w-full">
+          <div className="grid w-full grid-cols-[minmax(240px,1fr)_repeat(4,minmax(40px,60px))] border-b border-slate-200 bg-slate-50">
             <div className="px-3 py-3 text-xs font-bold uppercase tracking-wide text-slate-600">
-              Checklist Item
+              {headerLabel}
             </div>
             {COLUMNS.map(column => (
               <div
@@ -143,13 +222,14 @@ export const ChecklistSection = memo(function ChecklistSection({
               </div>
             ))}
           </div>
-          {ITEMS_WITH_SECTION.map(item => (
+          {itemsWithSection.map(item => (
             <ChecklistRow
               key={item.code}
               control={control}
               doorIndex={doorIndex}
               item={item}
               variant="desktop"
+              showFloatingNotes={showFloatingNotes}
             />
           ))}
         </div>
@@ -177,9 +257,9 @@ export function ChecklistMatrix({ value, onChange }: ChecklistMatrixProps) {
           />
         ))}
       </div>
-      <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
-        <div className="min-w-[600px]">
-          <div className="grid grid-cols-[1fr_repeat(4,80px)] border-b border-slate-200 bg-slate-50">
+      <div className="hidden rounded-xl border border-slate-200 bg-white md:block">
+        <div className="w-full">
+          <div className="grid w-full grid-cols-[minmax(240px,1fr)_repeat(4,minmax(40px,60px))] border-b border-slate-200 bg-slate-50">
             <div className="px-3 py-3 text-xs font-bold uppercase tracking-wide text-slate-600">
               Checklist Item
             </div>
@@ -255,7 +335,7 @@ const ChecklistRowDesktopLegacy = memo(function ChecklistRowDesktopLegacy({
   onChange,
 }: LegacyRowProps) {
   return (
-    <div className="grid grid-cols-[1fr_repeat(4,80px)] border-t border-slate-200">
+    <div className="grid w-full grid-cols-[minmax(240px,1fr)_repeat(4,minmax(40px,60px))] border-t border-slate-200">
       <div className="px-3 py-3 align-top text-sm text-slate-700">
         {item.sectionChanged && (
           <div className="mb-2 inline-flex rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600">

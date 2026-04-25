@@ -22,6 +22,7 @@ const hstsHeader = {
 } as const
 
 const baseSecurityHeaders = [
+  // Default: clickjacking-safe for the whole app. Specific routes override below.
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
@@ -37,11 +38,28 @@ const baseSecurityHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   productionBrowserSourceMaps: false,
+  /** Dev: slow HMR / large portal chunks can hit default chunk load timeouts and surface as ChunkLoadError. */
+  webpack: (config, { dev }) => {
+    if (dev && config.output && typeof config.output === 'object') {
+      config.output.chunkLoadTimeout = 120_000
+    }
+    return config
+  },
   async headers() {
     return [
       {
         source: '/(.*)',
         headers: [...baseSecurityHeaders, ...(hstsEligible ? [hstsHeader] : [])],
+      },
+      // Allow same-origin framing for embedded client report PDFs only.
+      // The rest of the site stays DENY to reduce clickjacking risk.
+      {
+        source: '/api/client/merged-report/:token/file',
+        headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }],
+      },
+      {
+        source: '/api/client/maintenance-report/:token/file',
+        headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }],
       },
     ]
   },

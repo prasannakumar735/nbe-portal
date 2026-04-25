@@ -7,7 +7,7 @@ import { useAuth } from '@/app/providers/AuthProvider'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { offlineDelete, offlineListAll, offlineSetStatus } from '@/lib/offline-db'
 import type { OfflineInspectionRecord } from '@/lib/offline-db'
-import { fetchPdfBlob } from '@/lib/browser/fetchPdfBlob'
+import { downloadFile, type DownloadProgress } from '@/lib/browser/downloadFile'
 import { formatDateTime } from '@/lib/utils/formatDateTime'
 
 type ReportRow = {
@@ -173,6 +173,8 @@ export default function MaintenanceDashboardPage() {
   const [mergeDoorsFieldError, setMergeDoorsFieldError] = useState<string | null>(null)
   const [deletingMergedId, setDeletingMergedId] = useState<string | null>(null)
   const [deletingReportId, setDeletingReportId] = useState<string | null>(null)
+  const [downloadingKey, setDownloadingKey] = useState<string | null>(null)
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
   const [restoringMergedId, setRestoringMergedId] = useState<string | null>(null)
   const [offlineReports, setOfflineReports] = useState<OfflineInspectionRecord[]>([])
   const [offlineLoading, setOfflineLoading] = useState(false)
@@ -405,20 +407,17 @@ export default function MaintenanceDashboardPage() {
     setMergeDoorsFieldError(null)
     setMerging(true)
     try {
-      const { blob, filename: serverName } = await fetchPdfBlob('/api/maintenance/merge-reports', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reportIds: selectedReports, totalDoorsInspected: n }),
+      setDownloadingKey('merge')
+      setDownloadProgress({ loaded: 0 })
+      await downloadFile('/api/maintenance/merge-reports', {
+        init: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reportIds: selectedReports, totalDoorsInspected: n }),
+        },
+        filenameFallback: `Merged_Report_${new Date().toISOString().slice(0, 10)}.pdf`,
+        onProgress: p => setDownloadProgress(p),
       })
-
-      const url = URL.createObjectURL(blob)
-      const filename = serverName || `Merged_Report_${new Date().toISOString().slice(0, 10)}.pdf`
-
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename
-      a.click()
-      URL.revokeObjectURL(url)
 
       toast.success('Reports merged successfully. PDF downloaded.')
       setSelectedReports([])
@@ -434,6 +433,8 @@ export default function MaintenanceDashboardPage() {
       toast.error(msg)
     } finally {
       setMerging(false)
+      setDownloadingKey(null)
+      setDownloadProgress(null)
     }
   }
 
@@ -489,32 +490,34 @@ export default function MaintenanceDashboardPage() {
 
   const handleDownloadPdf = async (reportId: string) => {
     try {
-      const { blob, filename } = await fetchPdfBlob(`/api/maintenance/pdf/${reportId}`)
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename ?? `maintenance-report-${reportId.slice(0, 8)}.pdf`
-      a.click()
-      URL.revokeObjectURL(url)
+      setDownloadingKey(`report:${reportId}`)
+      setDownloadProgress({ loaded: 0 })
+      await downloadFile(`/api/maintenance/pdf/${reportId}`, {
+        filenameFallback: `maintenance-report-${reportId.slice(0, 8)}.pdf`,
+        onProgress: p => setDownloadProgress(p),
+      })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Download failed')
+    } finally {
+      setDownloadingKey(null)
+      setDownloadProgress(null)
     }
   }
 
   const handleDownloadMergedPdf = async (mergedId: string) => {
     try {
-      const { blob, filename } = await fetchPdfBlob(
-        `/api/maintenance/merged-reports/${encodeURIComponent(mergedId)}/pdf`,
-      )
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename ?? `merged-report-${mergedId.slice(0, 8)}.pdf`
-      a.click()
-      URL.revokeObjectURL(url)
+      setDownloadingKey(`merged:${mergedId}`)
+      setDownloadProgress({ loaded: 0 })
+      await downloadFile(`/api/maintenance/merged-reports/${encodeURIComponent(mergedId)}/pdf`, {
+        filenameFallback: `merged-report-${mergedId.slice(0, 8)}.pdf`,
+        onProgress: p => setDownloadProgress(p),
+      })
       toast.success('PDF downloaded')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Download failed')
+    } finally {
+      setDownloadingKey(null)
+      setDownloadProgress(null)
     }
   }
 
@@ -545,22 +548,25 @@ export default function MaintenanceDashboardPage() {
 
   const handleDownloadAllPhotos = async (reportId: string) => {
     try {
-      const res = await fetch(`/api/maintenance/photos/${reportId}/zip`)
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error ?? 'Download failed')
-      }
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `maintenance-photos-${reportId.slice(0, 8)}.zip`
-      a.click()
-      URL.revokeObjectURL(url)
+      setDownloadingKey(`photos:${reportId}`)
+      setDownloadProgress({ loaded: 0 })
+      await downloadFile(`/api/maintenance/photos/${reportId}/zip`, {
+        filenameFallback: `maintenance-photos-${reportId.slice(0, 8)}.zip`,
+        onProgress: p => setDownloadProgress(p),
+      })
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Download failed')
+    } finally {
+      setDownloadingKey(null)
+      setDownloadProgress(null)
     }
   }
+
+  const progressLabel = useMemo(() => {
+    if (!downloadProgress) return ''
+    if (typeof downloadProgress.percent === 'number') return `${downloadProgress.percent}%`
+    return '…'
+  }, [downloadProgress])
 
   const renderReportTable = (list: ReportRow[], emptyMessage: string) => {
     if (list.length === 0) {
@@ -630,9 +636,10 @@ export default function MaintenanceDashboardPage() {
                     <button
                       type="button"
                       onClick={() => void handleDownloadPdf(report.id)}
+                      disabled={downloadingKey === `report:${report.id}`}
                       className={`${actionBtn} border-gray-300 text-slate-800 hover:bg-gray-100`}
                     >
-                      Download
+                      {downloadingKey === `report:${report.id}` ? `Downloading ${progressLabel}` : 'Download'}
                     </button>
                     {report.client_view_url ? (
                       <button
@@ -650,9 +657,10 @@ export default function MaintenanceDashboardPage() {
                     <button
                       type="button"
                       onClick={() => handleDownloadAllPhotos(report.id)}
+                      disabled={downloadingKey === `photos:${report.id}`}
                       className={`${actionBtn} border-slate-300 bg-white text-slate-700 hover:bg-slate-50`}
                     >
-                      All photos
+                      {downloadingKey === `photos:${report.id}` ? `Downloading ${progressLabel}` : 'All photos'}
                     </button>
                     <button
                       type="button"
@@ -1066,9 +1074,10 @@ export default function MaintenanceDashboardPage() {
                           <button
                             type="button"
                             onClick={() => void handleDownloadMergedPdf(m.id)}
+                            disabled={downloadingKey === `merged:${m.id}`}
                             className="rounded-lg border border-gray-300 px-3 py-1 text-sm hover:bg-gray-100"
                           >
-                            Download
+                            {downloadingKey === `merged:${m.id}` ? `Downloading ${progressLabel}` : 'Download'}
                           </button>
                           {m.pdf_url ? (
                             <button

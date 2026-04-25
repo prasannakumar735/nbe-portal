@@ -21,8 +21,20 @@ export function generateCspNonce(): string {
   return Buffer.from(crypto.randomUUID()).toString('base64')
 }
 
-export function buildContentSecurityPolicy(nonce: string): string {
+type FrameAncestorsPolicy = "'none'" | "'self'"
+
+export function buildContentSecurityPolicy(
+  nonce: string,
+  options?: {
+    /**
+     * Controls which origins may embed *this response* in a frame/iframe.
+     * Default: `'none'` (most strict).
+     */
+    frameAncestors?: FrameAncestorsPolicy
+  },
+): string {
   const isDev = !isProd
+  const frameAncestors: FrameAncestorsPolicy = options?.frameAncestors ?? "'none'"
 
   const scriptSrc = [
     "'self'",
@@ -72,7 +84,7 @@ export function buildContentSecurityPolicy(nonce: string): string {
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
-    "frame-ancestors 'none'",
+    `frame-ancestors ${frameAncestors}`,
     ...(isProd ? (['upgrade-insecure-requests'] as const) : []),
   ]
 

@@ -7,7 +7,7 @@ import { useAuth } from '@/app/providers/AuthProvider'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import { canApproveMaintenanceReport } from '@/lib/auth/roles'
 import { formatOfflineSaveStatus, useOfflineReport } from '@/hooks/useOfflineReport'
-import { MaintenanceInspectionForm } from '../new/page'
+import { MaintenanceInspectionForm } from '@/components/maintenance/MaintenanceInspectionForm'
 
 export default function MaintenanceReportEditPage() {
   const params = useParams()

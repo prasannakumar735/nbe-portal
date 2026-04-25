@@ -14,7 +14,7 @@ import {
 import { ChecklistSection } from './ChecklistMatrix'
 import { PhotoUploader } from './PhotoUploader'
 import { createSupabaseClient } from '@/lib/supabase/client'
-import { MAINTENANCE_CHECKLIST_ITEMS } from '@/lib/types/maintenance.types'
+import { MAINTENANCE_CHECKLIST_ITEMS, MAINTENANCE_CHECKLIST_ITEMS_NEW } from '@/lib/types/maintenance.types'
 import type {
   DoorMasterSnapshot,
   MaintenanceAvailableDoor,
@@ -36,6 +36,21 @@ function formatInspectorDoorType(raw: unknown): string {
   return s
 }
 
+function extractDoorSerial(label: string): string | null {
+  const raw = String(label ?? '')
+  if (!raw.trim()) return null
+
+  // Prefer current-style IDs like P0823; otherwise fall back to older PJ####; otherwise any P####.
+  const pLeadingZero = raw.match(/\bP0\d+\b/i)?.[0]
+  if (pLeadingZero) return pLeadingZero.toUpperCase()
+
+  const pj = raw.match(/\bPJ\d+\b/i)?.[0]
+  if (pj) return pj.toUpperCase()
+
+  const p = raw.match(/\bP\d+\b/i)?.[0]
+  return p ? p.toUpperCase() : null
+}
+
 function emptyDoorMaster(): DoorMasterSnapshot {
   return {
     door_description: null,
@@ -45,9 +60,9 @@ function emptyDoorMaster(): DoorMasterSnapshot {
   }
 }
 
-function calculateDoorCompletion(door: MaintenanceDoorForm): string {
-  const total = MAINTENANCE_CHECKLIST_ITEMS.length
-  const done = MAINTENANCE_CHECKLIST_ITEMS.filter(item => Boolean(door.checklist[item.code])).length
+function calculateDoorCompletion(door: MaintenanceDoorForm, codes: string[]): string {
+  const total = codes.length
+  const done = codes.filter(code => Boolean(door.checklist[code])).length
   return `${done}/${total} checklist items complete`
 }
 
@@ -62,6 +77,8 @@ type DoorInspectionCardProps = {
   register: UseFormRegister<MaintenanceFormValues>
   update: (index: number, value: MaintenanceDoorForm) => void
   availableDoors: MaintenanceAvailableDoor[]
+  /** New report UI has more compact door labels and hides history/details blocks unless present. */
+  uiVariant?: 'new' | 'existing'
   /** `>= 2` enables door master snapshot + technician door details (new reports only). */
   reportSchemaVersion: number
   hasFault?: boolean
@@ -86,6 +103,7 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
   register,
   update,
   availableDoors,
+  uiVariant = 'existing',
   reportSchemaVersion,
   hasFault = false,
   faultCount = 0,
@@ -96,7 +114,10 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
 }: DoorInspectionCardProps) {
   const { isOnline } = useOnlineStatus()
   const door = useWatch({ control, name: `doors.${index}` }) as MaintenanceDoorForm | undefined
-  const completionLabel = door ? calculateDoorCompletion(door) : '0/0 checklist items complete'
+  const hasNewChecklistText = reportSchemaVersion >= 2
+  const checklistItems = hasNewChecklistText ? MAINTENANCE_CHECKLIST_ITEMS_NEW : MAINTENANCE_CHECKLIST_ITEMS
+  const checklistCodes = checklistItems.map(i => i.code)
+  const completionLabel = door ? calculateDoorCompletion(door, checklistCodes) : '0/0 checklist items complete'
 
   const getLatestDoor = (): MaintenanceDoorForm | undefined => getValues().doors?.[index]
 
@@ -196,10 +217,12 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
   if (!door) return null
 
   const doorDetailsEnabled = reportSchemaVersion >= 2
+  const compactLabels = uiVariant === 'new'
+  const showDoorDetails = doorDetailsEnabled && uiVariant !== 'new'
   const master = door.door_master
   /** Description / alt type stay read-only when present; CW & CH are edited in the main grid below. */
   const registryMasterReadonly =
-    doorDetailsEnabled &&
+    showDoorDetails &&
     !door.adhoc_manual &&
     master &&
     [master.door_description, master.door_type_alt].some(v => String(v ?? '').trim())
@@ -211,9 +234,11 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
       : ''
 
   const doorNumberLabel = String(door.door_number ?? '').trim() || String(index + 1)
+  const serialForHeader = compactLabels ? extractDoorSerial(doorNumberLabel) : null
   const cyclesNum = Number(door.door_cycles)
   const cyclesDisplay = cyclesNum > 0 && !Number.isNaN(cyclesNum) ? cyclesNum : 'N/A'
   const visibilityPct = door.view_window_visibility
+  const hasMeaningfulHistory = history.some(item => String(item.technician_notes ?? '').trim().length > 0)
 
   const formatHistoryDate = (item: DoorInspectionHistoryItem) => {
     const raw = item.created_at
@@ -224,7 +249,9 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
   }
 
   return (
-    <section className={`mx-auto w-full max-w-screen-md rounded-2xl border bg-white shadow-sm ${hasFault ? 'border-red-300' : 'border-slate-200'}`}>
+    <section
+      className={`mx-auto w-full max-w-screen-xl rounded-2xl border bg-white shadow-sm ${hasFault ? 'border-red-300' : 'border-slate-200'}`}
+    >
       <button
         type="button"
         onClick={() => {
@@ -236,7 +263,7 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
       >
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-base font-semibold text-blue-900">Door {doorNumberLabel}</h3>
+            <h3 className="text-base font-semibold text-blue-900">Door {serialForHeader ?? doorNumberLabel}</h3>
             {hasFault && (
               <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-red-700">
                 Fault Detected{faultCount > 0 ? ` (${faultCount})` : ''}
@@ -320,12 +347,12 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
               >
                 <option value="">Select a door</option>
                 {availableDoors.map(option => {
+                  const compact = compactLabels ? extractDoorSerial(option.door_label) : null
                   const regType = String(option.door_type ?? '').trim()
-                  const typeSuffix =
-                    !regType || regType.toLowerCase() === 'unspecified' ? 'Door' : regType
+                  const typeSuffix = !regType || regType.toLowerCase() === 'unspecified' ? 'Door' : regType
                   return (
                     <option key={option.id} value={option.id}>
-                      {`${option.door_label} - ${typeSuffix}`}
+                      {compactLabels ? (compact ?? option.door_label) : `${option.door_label} - ${typeSuffix}`}
                     </option>
                   )
                 })}
@@ -355,7 +382,7 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
                     className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3 text-base"
                   />
                 </label>
-                {doorDetailsEnabled && (
+                {showDoorDetails && (
                   <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <label className="block text-sm font-medium text-slate-800 sm:col-span-2">
                       Description
@@ -407,7 +434,7 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
               </div>
             )}
 
-            {doorDetailsEnabled && (
+            {showDoorDetails && (
               <label className="block text-sm font-medium text-slate-700">
                 Technician door details
                 <textarea
@@ -466,7 +493,7 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
                 <p className="mt-1 text-xs text-slate-500">Enter the door cycle count from the control panel.</p>
               </label>
 
-              {doorDetailsEnabled && (
+              {showDoorDetails && (
                 <>
                   <label className="text-sm font-medium text-slate-700">
                     CW
@@ -526,39 +553,71 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
             </div>
           </div>
 
-          <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <h4 className="text-sm font-bold text-slate-800">Previous Maintenance History</h4>
+          {uiVariant === 'new' ? (
+            hasMeaningfulHistory ? (
+              <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <h4 className="text-sm font-bold text-slate-800">Previous Maintenance History</h4>
+                <div className="mt-3 space-y-3">
+                  {history
+                    .filter(item => String(item.technician_notes ?? '').trim().length > 0)
+                    .map((item, historyIndex) => (
+                      <article
+                        key={`${item.created_at}-${historyIndex}`}
+                        className="rounded-lg border border-slate-200 bg-white p-3"
+                      >
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          {formatHistoryDate(item)}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-700">
+                          <span className="font-semibold">Technician Notes:</span>{' '}
+                          {String(item.technician_notes).trim()}
+                        </p>
+                      </article>
+                    ))}
+                </div>
+              </section>
+            ) : null
+          ) : (
+            <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <h4 className="text-sm font-bold text-slate-800">Previous Maintenance History</h4>
 
-            {isHistoryLoading ? (
-              <p className="mt-2 text-xs text-slate-500">Loading history...</p>
-            ) : history.length === 0 ? (
-              <p className="mt-2 text-xs text-slate-500">No previous inspection history found for this door.</p>
-            ) : (
-              <div className="mt-3 space-y-3">
-                {history.map((item, historyIndex) => (
-                  <article
-                    key={`${item.created_at}-${historyIndex}`}
-                    className="rounded-lg border border-slate-200 bg-white p-3"
-                  >
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      {formatHistoryDate(item)}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-700">
-                      <span className="font-semibold">Technician Notes:</span>{' '}
-                      {item.technician_notes || '-'}
-                    </p>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
+              {isHistoryLoading ? (
+                <p className="mt-2 text-xs text-slate-500">Loading history...</p>
+              ) : history.length === 0 ? (
+                <p className="mt-2 text-xs text-slate-500">No previous inspection history found for this door.</p>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  {history.map((item, historyIndex) => (
+                    <article
+                      key={`${item.created_at}-${historyIndex}`}
+                      className="rounded-lg border border-slate-200 bg-white p-3"
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {formatHistoryDate(item)}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-700">
+                        <span className="font-semibold">Technician Notes:</span>{' '}
+                        {item.technician_notes || '-'}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
-          <div className="overflow-x-auto">
-            <ChecklistSection control={control} doorIndex={index} />
+          <div className="overflow-x-hidden">
+            <ChecklistSection
+              control={control}
+              doorIndex={index}
+              items={checklistItems}
+              headerLabel={hasNewChecklistText ? 'Checklist' : undefined}
+              showFloatingNotes={hasNewChecklistText}
+            />
           </div>
 
           <label className="block text-sm font-medium text-slate-700">
-            Door Fault Notes
+            {hasNewChecklistText ? 'Service Notes' : 'Door Fault Notes'}
             <textarea
               {...register(`doors.${index}.notes`)}
               rows={3}

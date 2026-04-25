@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, PDFPage } from 'pdf-lib'
-import { MAINTENANCE_CHECKLIST_ITEMS } from '@/lib/types/maintenance.types'
+import { MAINTENANCE_CHECKLIST_ITEMS, MAINTENANCE_CHECKLIST_ITEMS_NEW } from '@/lib/types/maintenance.types'
 import type {
   MaintenanceFormValues,
   MaintenanceDoorForm,
@@ -708,6 +708,7 @@ function drawSectionHeader(
 function drawChecklistTable(
   ctx: ChecklistContext,
   door: MaintenanceDoorForm,
+  checklistItems: MaintenanceChecklistItem[],
   startY: number
 ): { page: PDFPage; y: number } {
   const { page: initialPage, pdf, reportNumber, reportDate, logoImage, font, bold, contentTop } = ctx
@@ -730,7 +731,7 @@ function drawChecklistTable(
 
   let page = initialPage
   let y = startY
-  const groups = groupChecklistBySection(MAINTENANCE_CHECKLIST_ITEMS)
+  const groups = groupChecklistBySection(checklistItems)
 
   const ensureSpace = (required: number) => {
     if (y < PAGE_BREAK_Y + required) {
@@ -887,23 +888,30 @@ function drawDoorNotes(page: PDFPage, notes: string, startY: number, font: PDFFo
   const text = raw || '-'
   const prefix = raw ? 'Attention: ' : ''
   const full = prefix + text
-  const lines: string[] = []
-  let remaining = full
-  while (remaining.length > 0) {
-    if (remaining.length <= 88) {
-      lines.push(remaining)
-      break
-    }
-    lines.push(remaining.slice(0, 88))
-    remaining = remaining.slice(88)
-  }
 
   const pad = 10
   const accentW = 3.5
-  const lineH = 11
+  const fontSize = 9
+  const lineH = 12
   const innerW = PAGE_WIDTH - MARGIN * 2 - pad * 2 - accentW
+
+  // Preserve manual line breaks, but still wrap each paragraph to the available width.
+  // pdf-lib drawText does not handle "\n" automatically.
+  const paragraphs = String(full ?? '').split(/\r?\n/)
+  const lines: string[] = []
+  for (let i = 0; i < paragraphs.length; i += 1) {
+    const p = paragraphs[i] ?? ''
+    if (!p.trim()) {
+      // Blank line spacing in notes.
+      lines.push('')
+      continue
+    }
+    lines.push(...wrapPdfTextLines(p, font, fontSize, innerW, { emptyPlaceholder: '' }))
+  }
+  if (lines.length === 0) lines.push('-')
+
   const boxLines = lines.length
-  const boxH = pad * 2 + boxLines * lineH + 4
+  const boxH = pad * 2 + boxLines * lineH + 6
 
   const boxBottom = y - boxH
   page.drawRectangle({
@@ -923,16 +931,18 @@ function drawDoorNotes(page: PDFPage, notes: string, startY: number, font: PDFFo
     color: rgb(0.95, 0.78, 0.2),
   })
 
-  let ly = y - pad - 9
+  let ly = y - pad - 10
   for (const line of lines) {
     if (ly < FOOTER_MARGIN + 20) break
-    page.drawText(line, {
-      x: MARGIN + accentW + pad,
-      y: ly,
-      size: 9,
-      font,
-      color: rgb(0.22, 0.2, 0.12),
-    })
+    if (line) {
+      page.drawText(line, {
+        x: MARGIN + accentW + pad,
+        y: ly,
+        size: fontSize,
+        font,
+        color: rgb(0.22, 0.2, 0.12),
+      })
+    }
     ly -= lineH
   }
   return boxBottom - 14
@@ -1201,6 +1211,10 @@ export async function generateMaintenanceReportPdf(options: MaintenancePdfOption
 
   // ----- Door sections -----
   const photoBytesByDoor = doorPhotoBytes ?? form.doors.map(() => [])
+  const checklistItemsForPdf =
+    Number(form.report_schema_version ?? 1) >= 2
+      ? MAINTENANCE_CHECKLIST_ITEMS_NEW
+      : MAINTENANCE_CHECKLIST_ITEMS
 
   let y = contentStartY
   for (let doorIndex = 0; doorIndex < form.doors.length; doorIndex++) {
@@ -1272,7 +1286,7 @@ export async function generateMaintenanceReportPdf(options: MaintenancePdfOption
       bold,
       contentTop,
     }
-    const checklistResult = drawChecklistTable(checklistCtx, door, y)
+    const checklistResult = drawChecklistTable(checklistCtx, door, checklistItemsForPdf, y)
     page = checklistResult.page
     y = checklistResult.y
 

@@ -140,15 +140,20 @@ function SessionLifecycle() {
   }, [scheduleIdleTimers])
 
   useEffect(() => {
+    let cancelled = false
     const supabase = createSupabaseClient()
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (cancelled) return
       if (event === 'SIGNED_IN' && newSession) {
         setLoginAtNow()
       }
     })
-    return () => subscription.unsubscribe()
+    return () => {
+      cancelled = true
+      subscription.unsubscribe()
+    }
   }, [])
 
   useEffect(() => {
@@ -332,6 +337,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [isError, setIsError] = useState(false)
 
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason as { name?: string; message?: string } | null
+      if (
+        String(reason?.name ?? '') === 'AbortError' ||
+        String(reason?.message ?? '').includes('signal is aborted')
+      ) {
+        event.preventDefault()
+      }
+    }
+    window.addEventListener('unhandledrejection', onUnhandledRejection)
+    return () => {
+      window.removeEventListener('unhandledrejection', onUnhandledRejection)
+    }
+  }, [])
+
   // Load profile from profiles table when user changes (single source of truth for role)
   useEffect(() => {
     if (!user?.id) {
@@ -344,9 +366,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (cancelled) return
       if (p && p.is_active === false) {
         await supabase.auth.signOut()
+        if (cancelled) return
         setProfile(null)
         return
       }
+      if (cancelled) return
       setProfile(p)
     })
     return () => { cancelled = true }
@@ -354,24 +378,32 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Initialize auth state on mount
   useEffect(() => {
+    let cancelled = false
     const initializeAuth = async () => {
       try {
         const supabase = createSupabaseClient()
 
         await enforceAppSessionEpochSignOut(() => supabase.auth.signOut())
+        if (cancelled) return
 
         const {
           data: { session: initialSession },
           error,
         } = await supabase.auth.getSession()
+        if (cancelled) return
 
         if (error) {
+          if (String((error as { name?: string } | null)?.name ?? '') === 'AbortError') {
+            setIsError(false)
+            return
+          }
           if (isInvalidOrMissingRefreshTokenError(error)) {
             try {
               await supabase.auth.signOut()
             } catch {
               /* ignore */
             }
+            if (cancelled) return
             setSession(null)
             setUser(null)
             setIsError(false)
@@ -384,6 +416,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
           setUser(initialSession?.user || null)
         }
       } catch (err) {
+        if (cancelled) return
+        if (String((err as { name?: string } | null)?.name ?? '') === 'AbortError') {
+          setIsError(false)
+          return
+        }
         if (isInvalidOrMissingRefreshTokenError(err)) {
           try {
             const supabase = createSupabaseClient()
@@ -391,6 +428,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           } catch {
             /* ignore */
           }
+          if (cancelled) return
           setSession(null)
           setUser(null)
           setIsError(false)
@@ -399,20 +437,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
           setIsError(true)
         }
       } finally {
-        setIsLoading(false)
+        if (!cancelled) setIsLoading(false)
       }
     }
 
-    initializeAuth()
+    void initializeAuth()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   // Subscribe to auth state changes
   useEffect(() => {
+    let cancelled = false
     const supabase = createSupabaseClient()
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (cancelled) return
       setSession(newSession)
       setUser(newSession?.user || null)
       setIsLoading(false)
@@ -423,6 +466,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     })
 
     return () => {
+      cancelled = true
       subscription?.unsubscribe()
     }
   }, [])

@@ -55,10 +55,15 @@ export function PhotoUploader({ reportId, doorId, photos, disabled = false, isOf
   const supabase = useMemo(() => createSupabaseClient(), [])
   const cameraInputRef = useRef<HTMLInputElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const photosRef = useRef<MaintenanceDoorPhoto[]>(photos)
   const [isDragging, setIsDragging] = useState(false)
   const [uploads, setUploads] = useState<UploadItem[]>([])
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const [photoPreview, setPhotoPreview] = useState<PhotoPreviewState>(null)
+
+  useEffect(() => {
+    photosRef.current = photos
+  }, [photos])
 
   const isUploading = uploads.some(item => item.status === 'compressing' || item.status === 'uploading')
 
@@ -99,6 +104,12 @@ export function PhotoUploader({ reportId, doorId, photos, disabled = false, isOf
   const handleUploadClick = () => {
     if (disabled || isUploading) return
     fileInputRef.current?.click()
+  }
+
+  const appendPhoto = (photo: MaintenanceDoorPhoto) => {
+    const next = [...photosRef.current, photo]
+    photosRef.current = next
+    onChange(next)
   }
 
   const uploadOneFile = async (file: File) => {
@@ -146,7 +157,7 @@ export function PhotoUploader({ reportId, doorId, photos, disabled = false, isOf
           offline_filename: compressedFile.name || file.name || 'photo.jpg',
         }
 
-        onChange([...photos, offlinePhoto])
+        appendPhoto(offlinePhoto)
         updateUpload(id, { progress: 100, status: 'done' })
         showToast('success', `${file.name} saved offline.`)
         window.setTimeout(() => {
@@ -169,7 +180,7 @@ export function PhotoUploader({ reportId, doorId, photos, disabled = false, isOf
         },
       })
 
-      onChange([...photos, uploaded])
+      appendPhoto(uploaded)
 
       updateUpload(id, { progress: 100, status: 'done' })
       showToast('success', `${file.name} uploaded successfully.`)
@@ -185,15 +196,39 @@ export function PhotoUploader({ reportId, doorId, photos, disabled = false, isOf
     }
   }
 
+  const uploadManyFiles = async (files: File[]) => {
+    const list = files.filter(Boolean)
+    if (list.length === 0) return
+
+    if (isOffline || !navigator.onLine) {
+      for (const file of list) {
+        await uploadOneFile(file)
+      }
+      return
+    }
+
+    const concurrency = 3
+    let index = 0
+
+    const worker = async () => {
+      while (true) {
+        const current = list[index]
+        if (!current) return
+        index += 1
+        await uploadOneFile(current)
+      }
+    }
+
+    await Promise.all(Array.from({ length: Math.min(concurrency, list.length) }, () => worker()))
+  }
+
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? [])
     event.target.value = ''
 
     if (files.length === 0 || disabled) return
 
-    for (const file of files) {
-      await uploadOneFile(file)
-    }
+    await uploadManyFiles(files)
   }
 
   const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
@@ -209,9 +244,7 @@ export function PhotoUploader({ reportId, doorId, photos, disabled = false, isOf
       return
     }
 
-    for (const file of files) {
-      await uploadOneFile(file)
-    }
+    await uploadManyFiles(files)
   }
 
   const removePhoto = async (photo: MaintenanceDoorPhoto) => {
@@ -379,7 +412,7 @@ export function PhotoUploader({ reportId, doorId, photos, disabled = false, isOf
 
           <p className="text-sm font-semibold text-slate-800">📷 Upload Photos</p>
           <p className="text-xs text-slate-500">Drag and drop images</p>
-          <p className="text-xs text-slate-500">or choose camera / files</p>
+          <p className="text-xs text-slate-500">or choose camera / files (multi-select supported)</p>
 
           <div className="mt-2 flex w-full flex-col gap-2 md:w-auto md:flex-row">
             <button

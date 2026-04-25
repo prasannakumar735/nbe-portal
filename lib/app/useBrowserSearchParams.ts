@@ -11,10 +11,19 @@ import { useMemo, useSyncExternalStore } from 'react'
  */
 function subscribe(callback: () => void) {
   if (typeof window === 'undefined') return () => {}
-  window.addEventListener('popstate', callback)
-  const interval = setInterval(callback, 200)
+  let last = window.location.search
+  const check = () => {
+    const s = window.location.search
+    if (s !== last) {
+      last = s
+      callback()
+    }
+  }
+  window.addEventListener('popstate', check)
+  // App Router navigations don't fire popstate; poll for actual change only.
+  const interval = setInterval(check, 250)
   return () => {
-    window.removeEventListener('popstate', callback)
+    window.removeEventListener('popstate', check)
     clearInterval(interval)
   }
 }

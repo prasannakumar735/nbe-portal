@@ -94,7 +94,7 @@ export function ChecklistRadioGroup({
       onValueChange={handleValueChange}
       name={name}
       disabled={disabled}
-      className="grid grid-cols-[60px_75px_60px_50px] gap-0"
+      className="grid w-full grid-cols-4 gap-0"
       aria-label={name}
       orientation="horizontal"
     >
@@ -103,7 +103,7 @@ export function ChecklistRadioGroup({
           key={option.value}
           value={option.value}
           className={`
-            flex h-6 items-center justify-center rounded border-2 border bg-white px-1.5 text-center text-[10px] font-medium outline-none
+            flex h-6 w-full items-center justify-center rounded border-2 border bg-white px-1.5 text-center text-[10px] font-medium outline-none
             focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-slate-500
             disabled:opacity-50 disabled:pointer-events-none
             ${option.unselectedClasses} ${option.selectedClasses}

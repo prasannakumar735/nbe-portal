@@ -4,6 +4,7 @@ export type MaintenanceChecklistItem = {
   code: string
   section: string
   label: string
+  floating_note?: string
 }
 
 export const MAINTENANCE_CHECKLIST_ITEMS: MaintenanceChecklistItem[] = [
@@ -33,6 +34,166 @@ export const MAINTENANCE_CHECKLIST_ITEMS: MaintenanceChecklistItem[] = [
   { code: 'e24', section: 'E. DRIVE SYSTEM & MOTOR', label: 'Bearings free of rust or wear?' },
   { code: 'e25', section: 'E. DRIVE SYSTEM & MOTOR', label: 'Limit switch or encoder function correctly?' },
   { code: 'e26', section: 'E. DRIVE SYSTEM & MOTOR', label: 'Chain or belt properly adjusted and lubricated?' },
+]
+
+export const MAINTENANCE_CHECKLIST_ITEMS_NEW: MaintenanceChecklistItem[] = [
+  {
+    code: 'a01',
+    section: 'A. CURTAIN',
+    label: 'Movement – Runs smooth, aligned, parallel?',
+    floating_note: 'Ensure the curtain runs smoothly, symmetrically, and parallel to the door frame.',
+  },
+  {
+    code: 'a02',
+    section: 'A. CURTAIN',
+    label: 'Fabric – Any cuts, holes, or wear?',
+    floating_note: 'Check for any cuts, holes, or heavily worn areas (inside / outside).',
+  },
+  {
+    code: 'a03',
+    section: 'A. CURTAIN',
+    label: 'Stiffener – Any bends, cracks, or damage?',
+    floating_note: 'Inspect for bends, cracks, or any damage to the stiffeners and end clamps.',
+  },
+  {
+    code: 'a04',
+    section: 'A. CURTAIN',
+    label: 'View Window – Clear and free of damage?',
+    floating_note: 'Check the welding and assess the percentage of visibility.',
+  },
+  {
+    code: 'a05',
+    section: 'A. CURTAIN',
+    label: 'Straps/Buckles (CAD/FR) – Any wear or damage?',
+    floating_note: 'Ensure there are no cuts or wear on the straps and no damage to the buckles.',
+  },
+  {
+    code: 'b06',
+    section: 'B. DOOR FRAME',
+    label: 'Frame and Cover – Any dent, rust or damage?',
+    floating_note: 'Inspect for dent or damage to purlins, side sheets.',
+  },
+  {
+    code: 'b07',
+    section: 'B. DOOR FRAME',
+    label: 'PE Guides – Any damage, wear or bend?',
+    floating_note: 'Inspect for any bent or damage for PE sheet.',
+  },
+  {
+    code: 'b08',
+    section: 'B. DOOR FRAME',
+    label: 'Fixings – All secure and tight?',
+    floating_note: 'Ensure all bolts are tight and inspect for any damage to the wall or floor fixings.',
+  },
+  {
+    code: 'b09',
+    section: 'B. DOOR FRAME',
+    label: 'Cables – Undamaged and properly secured?',
+    floating_note:
+      'Make sure cables are properly secured, free from obstructions, and clear of the motor, drive drum, and curtains.',
+  },
+  {
+    code: 'c10',
+    section: 'C. OPEN / CLOSE FUNCTION',
+    label: 'Floor Seal – Curtain sealing properly to the floor?',
+    floating_note: 'Verify that the bottom of the curtain seals properly to the floor.',
+  },
+  {
+    code: 'c11',
+    section: 'C. OPEN / CLOSE FUNCTION',
+    label: 'Lights – Hazard/traffic lights working?',
+    floating_note: 'Ensure they are functioning correctly, with one on the door frame and one on the control box.',
+  },
+  {
+    code: 'c12',
+    section: 'C. OPEN / CLOSE FUNCTION',
+    label: 'Manual Mode – Fully open and close?',
+    floating_note: 'Confirm that the doors can fully open and close manually.',
+  },
+  {
+    code: 'c13',
+    section: 'C. OPEN / CLOSE FUNCTION',
+    label: 'Auto Mode – Fully open and close?',
+    floating_note: 'Confirm that the doors can fully open and close automatically.',
+  },
+  {
+    code: 'c14',
+    section: 'C. OPEN / CLOSE FUNCTION',
+    label: 'Interlock – Functioning correctly (if applicable)?',
+    floating_note: 'If applicable, test whether the interlock is functioning properly.',
+  },
+  {
+    code: 'c15',
+    section: 'C. OPEN / CLOSE FUNCTION',
+    label: 'Push Button – Working properly?',
+    floating_note: 'Check if the push button is working properly',
+  },
+  {
+    code: 'c16',
+    section: 'C. OPEN / CLOSE FUNCTION',
+    label: 'Sensors – Remote, loop, radar working?',
+    floating_note: 'Test the remote control, induction loop, and radar sensors',
+  },
+  {
+    code: 'd17',
+    section: 'D. SAFETY & CONTROL BOX',
+    label: 'Photo Cells / Light Curtain – Operating correctly?',
+    floating_note: 'Ensure the sensors are functioning properly.',
+  },
+  {
+    code: 'd18',
+    section: 'D. SAFETY & CONTROL BOX',
+    label: 'Safety Edge – Functioning properly?',
+    floating_note: 'Verify the proper functionality of the sensor.',
+  },
+  {
+    code: 'd19',
+    section: 'D. SAFETY & CONTROL BOX',
+    label: 'Emergency Stop – Operating correctly?',
+    floating_note: 'Check that the emergency switch is operating correctly.',
+  },
+  {
+    code: 'd20',
+    section: 'D. SAFETY & CONTROL BOX',
+    label: 'Control Box – Door and lock working?',
+    floating_note: 'Inspect for dents or fixture damage; ensure the door closes properly and the lock functions correctly.',
+  },
+  {
+    code: 'd21',
+    section: 'D. SAFETY & CONTROL BOX',
+    label: 'Wiring – Secured and protected?',
+    floating_note: 'Confirm that all cables are secured in place with no visible wear.',
+  },
+  {
+    code: 'e22',
+    section: 'E. DRIVE SYSTEM & MOTOR',
+    label: 'Gearbox – Free of leaks and abnormal wear?',
+    floating_note: 'Check for oil leaks and measure wear between the drive drums and gearbox.',
+  },
+  {
+    code: 'e23',
+    section: 'E. DRIVE SYSTEM & MOTOR',
+    label: 'Drive System – Any signs of wear?',
+    floating_note: 'Measure wear between the drive drums and gearbox.',
+  },
+  {
+    code: 'e24',
+    section: 'E. DRIVE SYSTEM & MOTOR',
+    label: 'Bearings – Free of rust or wear?',
+    floating_note: 'Inspect the visual condition for signs of rust or wear.',
+  },
+  {
+    code: 'e25',
+    section: 'E. DRIVE SYSTEM & MOTOR',
+    label: 'Limit System – Switch/encoder working?',
+    floating_note: 'Check chain adjustment and lubricate as needed.',
+  },
+  {
+    code: 'e26',
+    section: 'E. DRIVE SYSTEM & MOTOR',
+    label: 'Chain/Belt – Adjusted and lubricated?',
+    floating_note: 'Adjust, lubricate, and inspect contacts.',
+  },
 ]
 
 export type MaintenanceDoorPhoto = {
@@ -76,6 +237,7 @@ export type MaintenanceFormValues = {
   /**
    * `1` = legacy reports (no door master UI / PDF blocks).
    * `2` = new reports with optional door master snapshot + technician door details.
+   * `3` = new checklist question text and PDF export wording.
    */
   report_schema_version?: number
   /** Client-generated UUID to make offline sync idempotent. */

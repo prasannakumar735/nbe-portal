@@ -32,6 +32,13 @@ function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))
 }
 
+function isReportPdfApiPath(pathname: string): boolean {
+  return (
+    (pathname.startsWith('/api/client/merged-report/') && pathname.endsWith('/file')) ||
+    (pathname.startsWith('/api/client/maintenance-report/') && pathname.endsWith('/file'))
+  )
+}
+
 function setCsp(response: NextResponse, csp: string) {
   response.headers.set('Content-Security-Policy', csp)
   return response
@@ -40,7 +47,11 @@ function setCsp(response: NextResponse, csp: string) {
 export async function middleware(request: NextRequest) {
   // Fresh nonce + CSP per request — must match `headers().get('x-nonce')` in RSC and Turnstile `<Script nonce>`.
   const nonce = generateCspNonce()
-  const csp = buildContentSecurityPolicy(nonce)
+  // Default is clickjacking-safe (`frame-ancestors 'none'`), but embedded PDF viewer needs
+  // the PDF response to allow same-origin framing.
+  const csp = buildContentSecurityPolicy(nonce, {
+    frameAncestors: isReportPdfApiPath(request.nextUrl.pathname) ? "'self'" : "'none'",
+  })
   const requestHeaders = new Headers(request.headers)
   const incomingRequestId = request.headers.get(NBE_REQUEST_ID_HEADER)?.trim()
   const requestId = incomingRequestId || crypto.randomUUID()
@@ -99,7 +110,9 @@ export async function middleware(request: NextRequest) {
     const tier = getApiRateLimitTier(pathname)
     const rl = await enforceDistributedRateLimit(clientIp, pathname, tier)
     if (!rl.ok) {
-      await recordFailure(clientIp)
+      if (tier === 'auth') {
+        await recordFailure(clientIp)
+      }
       logSecurityEvent(
         'rate_limit_exceeded',
         {

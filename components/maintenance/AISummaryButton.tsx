@@ -59,7 +59,10 @@ export function AISummaryButton({
       }
 
       if (!response.ok) {
-        throw new Error(data.error || `Failed to generate AI summary (${response.status})`)
+        const retryAfter = response.headers.get('Retry-After')
+        const hint =
+          response.status === 429 && retryAfter ? ` Try again in ${retryAfter}s.` : ''
+        throw new Error((data.error || `Failed to generate AI summary (${response.status})`) + hint)
       }
 
       if (!data.summary) {
@@ -69,7 +72,7 @@ export function AISummaryButton({
       onApplySummary(data.summary)
     } catch (error) {
       console.error('AI Summary Button Error:', error)
-      onError?.('Unable to improve notes. Please check internet connection.')
+      onError?.(error instanceof Error ? error.message : 'Unable to improve notes.')
     } finally {
       setIsGenerating(false)
     }

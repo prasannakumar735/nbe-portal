@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { MaintenanceInspectionForm } from '@/app/(portal)/maintenance/new/page'
+import { MaintenanceInspectionForm } from '@/components/maintenance/MaintenanceInspectionForm'
 
 export default function AdminReportEditPage() {
   const params = useParams()

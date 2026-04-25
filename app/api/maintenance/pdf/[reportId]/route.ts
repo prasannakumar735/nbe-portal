@@ -11,6 +11,14 @@ import type { MaintenanceFormValues } from '@/lib/types/maintenance.types'
 
 export const runtime = 'nodejs'
 
+function doorOrderKey(value: unknown): { n: number; raw: string } {
+  const raw = String(value ?? '').trim()
+  // Prefer the first integer found anywhere in the label (e.g. "Door 4", "4", "Door Door 4_P123").
+  const m = raw.match(/\d+/)
+  const n = m ? Number.parseInt(m[0]!, 10) : Number.NaN
+  return { n: Number.isFinite(n) ? n : Number.POSITIVE_INFINITY, raw }
+}
+
 function createServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -77,6 +85,16 @@ export async function GET(
         ? (report.doors as MaintenanceFormValues['doors'])
         : [],
     }
+
+    // Ensure deterministic door ordering in the generated PDF (matches UI "Door 1, Door 2, ...").
+    // The draft API does not guarantee the door array order.
+    form.doors = [...(form.doors ?? [])].sort((a, b) => {
+      const ak = doorOrderKey((a as { door_number?: unknown } | null)?.door_number)
+      const bk = doorOrderKey((b as { door_number?: unknown } | null)?.door_number)
+      if (ak.n !== bk.n) return ak.n - bk.n
+      // Tie-break: stable-ish alpha on the raw label.
+      return ak.raw.localeCompare(bk.raw, undefined, { numeric: true, sensitivity: 'base' })
+    })
 
     const supabase = createServiceClient()
     const pdfOptions = await buildMaintenancePdfOptions({ form, reportId, supabase })
