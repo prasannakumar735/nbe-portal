@@ -210,6 +210,10 @@ export async function loadMaintenanceReportDraftPayload(
       }
     })
 
+    const rawOverrides = (report as { repair_summary_overrides?: unknown }).repair_summary_overrides
+    const repair_summary_overrides = Array.isArray(rawOverrides) ? rawOverrides : undefined
+    const repair_summary_text = String((report as { repair_summary_text?: unknown }).repair_summary_text ?? '').trim()
+
     return {
       report_id: report.id,
       report_schema_version: reportSchemaVersion,
@@ -231,6 +235,8 @@ export async function loadMaintenanceReportDraftPayload(
       ai_summary: (report as { ai_summary?: string | null }).ai_summary ?? null,
       signature_data_url: '',
       signature_storage_url: report.signature_url ?? '',
+      repair_summary_text,
+      repair_summary_overrides,
       doors: hydratedDoors,
     }
   } catch {

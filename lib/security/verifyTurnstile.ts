@@ -9,7 +9,7 @@ type SiteverifyResponse = {
  */
 export async function verifyTurnstileToken(
   token: string | undefined,
-  remoteip: string | undefined,
+  _remoteip: string | undefined,
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
   const secret = process.env.TURNSTILE_SECRET_KEY?.trim()
   if (!secret) {
@@ -23,9 +23,9 @@ export async function verifyTurnstileToken(
   const body = new URLSearchParams()
   body.set('secret', secret)
   body.set('response', t)
-  if (remoteip && remoteip !== 'unknown') {
-    body.set('remoteip', remoteip)
-  }
+  // Do not send `remoteip`: if it does not match the IP Cloudflare tied to the token
+  // (common with X-Forwarded-For ordering / proxies), siteverify returns success: false
+  // while the widget still shows Success. Optional per Cloudflare docs.
 
   try {
     const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
@@ -37,6 +37,10 @@ export async function verifyTurnstileToken(
     const data = (await res.json()) as SiteverifyResponse
     if (data.success) {
       return { ok: true }
+    }
+    const codes = data['error-codes']
+    if (codes?.length) {
+      console.warn('[verifyTurnstile] siteverify failed:', codes.join(', '))
     }
     return { ok: false, reason: 'captcha_failed' }
   } catch {

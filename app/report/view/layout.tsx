@@ -1,13 +1,10 @@
-import type { Metadata } from 'next'
-import type { ReactNode } from 'react'
-
+import type { Metadata } from 'next';
+import type { ReactNode } from 'react';
 export const metadata: Metadata = {
-  robots: { index: false, follow: false },
-}
-
-/**
- * No header/sidebar here — client report UI is fully controlled by page components.
- */
-export default function ReportViewLayout({ children }: { children: ReactNode }) {
-  return children
+    robots: { index: false, follow: false },
+};
+export default function ReportViewLayout({ children }: {
+    children: ReactNode;
+}) {
+    return children;
 }

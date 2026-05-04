@@ -5,6 +5,7 @@ import type {
   MaintenanceDoorForm,
   MaintenanceChecklistItem,
   MaintenanceChecklistStatus,
+  RepairSummaryItem,
 } from '@/lib/types/maintenance.types'
 import { wrapPdfTextLines } from '@/lib/pdf/pdfTextWrap'
 import { savePdfBytes } from '@/lib/pdf/savePdf'
@@ -139,6 +140,132 @@ function countDoorChecklist(door: MaintenanceDoorForm): { good: number; caution:
     else if (s === 'fault') fault += 1
   }
   return { good, caution, fault }
+}
+
+const REPAIR_SUMMARY_BUCKETS: Array<{
+  key: string
+  label: string
+  checklistCodes: string[]
+}> = [
+  // Item-level mapping: each Fault checkbox increments that line by 1 for the door.
+  { key: 'stiffener', label: 'Stiffener', checklistCodes: ['a03'] },
+  { key: 'view_window', label: 'View Window', checklistCodes: ['a04'] },
+  { key: 'straps_buckles', label: 'Straps/Buckles (CAD/FR)', checklistCodes: ['a05'] },
+  { key: 'frame_cover', label: 'Frame and Cover', checklistCodes: ['b06'] },
+  { key: 'pe_guides', label: 'PE Guides', checklistCodes: ['b07'] },
+  { key: 'lights', label: 'Lights (hazard/traffic)', checklistCodes: ['c11'] },
+  { key: 'push_button', label: 'Push Button', checklistCodes: ['c15'] },
+  { key: 'sensors', label: 'Sensors (remote/loop/radar)', checklistCodes: ['c16'] },
+  { key: 'photo_cells', label: 'Photo Cells / Light Curtain', checklistCodes: ['d17'] },
+  { key: 'safety_edge', label: 'Safety Edge', checklistCodes: ['d18'] },
+  { key: 'emergency_stop', label: 'Emergency Stop', checklistCodes: ['d19'] },
+  { key: 'gearbox', label: 'Gear Motor / Gearbox', checklistCodes: ['e22'] },
+  { key: 'drive_system', label: 'Drive system', checklistCodes: ['e23'] },
+  { key: 'limit_system', label: 'Limit System', checklistCodes: ['e25'] },
+  { key: 'chain_belt', label: 'Chain/Belt', checklistCodes: ['e26'] },
+]
+
+function computeAutoRepairSummaryItems(doors: MaintenanceDoorForm[]): RepairSummaryItem[] {
+  const counts = new Map<string, number>()
+  for (const bucket of REPAIR_SUMMARY_BUCKETS) {
+    counts.set(bucket.key, 0)
+  }
+
+  for (const door of doors) {
+    for (const bucket of REPAIR_SUMMARY_BUCKETS) {
+      const hasFault = bucket.checklistCodes.some(code => door.checklist?.[code] === 'fault')
+      if (hasFault) {
+        counts.set(bucket.key, (counts.get(bucket.key) ?? 0) + 1)
+      }
+    }
+  }
+
+  return REPAIR_SUMMARY_BUCKETS
+    .map(bucket => ({
+      key: bucket.key,
+      label: bucket.label,
+      quantity: counts.get(bucket.key) ?? 0,
+    }))
+    .filter(item => item.quantity > 0)
+}
+
+function resolveFinalRepairSummaryItems(form: MaintenanceFormValues): RepairSummaryItem[] {
+  const raw = (form as { repair_summary_overrides?: unknown }).repair_summary_overrides
+  const overrides = Array.isArray(raw) ? (raw as RepairSummaryItem[]) : []
+  if (overrides.length > 0) {
+    return overrides
+      .map(item => ({
+        key: String(item?.key ?? '').trim(),
+        label: String(item?.label ?? '').trim(),
+        quantity: Number(item?.quantity ?? 0) || 0,
+      }))
+      .filter(item => item.label && item.quantity > 0)
+  }
+  return computeAutoRepairSummaryItems(form.doors ?? [])
+}
+
+function resolveFinalRepairSummaryText(form: MaintenanceFormValues): string {
+  const t = String((form as { repair_summary_text?: unknown }).repair_summary_text ?? '').trim()
+  if (t) return t
+  const items = resolveFinalRepairSummaryItems(form)
+  if (!items.length) return ''
+  return items.map(i => `${Math.floor(Number(i.quantity) || 0)}x ${String(i.label ?? '').trim()}`.trim()).join('\n')
+}
+
+function hasAnyChecklistFault(form: MaintenanceFormValues): boolean {
+  const doors = form.doors ?? []
+  for (const door of doors) {
+    const checklist = door?.checklist ?? {}
+    for (const val of Object.values(checklist)) {
+      if (val === 'fault') return true
+    }
+  }
+  return false
+}
+
+function drawRepairSummaryPage(
+  page: PDFPage,
+  items: RepairSummaryItem[],
+  font: PDFFontType,
+  bold: PDFFontType,
+): void {
+  const title = 'Repair Summary'
+  page.drawText(title, { x: MARGIN, y: PAGE_HEIGHT - HEADER_HEIGHT - 10, size: 14, font: bold, color: SECTION_COLOR })
+
+  let y = PAGE_HEIGHT - HEADER_HEIGHT - 32
+  const note =
+    'Auto-generated from checklist Fault items. If technician overrides were provided, those values are shown here.'
+  const noteLines = wrapPdfTextLines(note, font, 9, PAGE_WIDTH - MARGIN * 2)
+  for (const line of noteLines) {
+    page.drawText(line, { x: MARGIN, y, size: 9, font, color: rgb(0.42, 0.44, 0.5) })
+    y -= 12
+  }
+  y -= 6
+
+  if (!items.length) {
+    page.drawText('No repair items recorded.', { x: MARGIN, y, size: 10, font, color: rgb(0.25, 0.26, 0.3) })
+    return
+  }
+
+  const qtyColW = 48
+  const gap = 10
+  const labelMaxW = PAGE_WIDTH - MARGIN * 2 - qtyColW - gap
+  const rowH = 14
+
+  for (const item of items) {
+    if (y < FOOTER_MARGIN + 28) break
+    const qty = `${Math.floor(Number(item.quantity) || 0)}x`
+    page.drawText(qty, { x: MARGIN, y, size: 11, font: bold, color: rgb(0.15, 0.16, 0.18) })
+
+    const label = String(item.label ?? '').trim() || '-'
+    const labelLines = wrapPdfTextLines(label, font, 11, labelMaxW, { emptyPlaceholder: '-' })
+    let ly = y
+    for (const line of labelLines) {
+      page.drawText(line, { x: MARGIN + qtyColW + gap, y: ly, size: 11, font, color: rgb(0.15, 0.16, 0.18) })
+      ly -= rowH
+    }
+    y = ly - 2
+  }
 }
 
 /** Page 1: logo + title + QR, client & inspection grid, door diagram, divider (no inspection/executive summary pages). */
@@ -1054,6 +1181,65 @@ type PhotoGridLayout = {
   contentTop: number
 }
 
+function drawRepairSummaryBlock(
+  ctx: {
+    page: PDFPage
+    pdf: PDFDocument
+    reportNumber: string
+    reportDate: string
+    logoImage: PDFImageType | null
+    font: PDFFontType
+    bold: PDFFontType
+    contentTop: number
+  },
+  startY: number,
+  summaryText: string,
+): { page: PDFPage; y: number } {
+  let { page } = ctx
+  let y = startY
+
+  const ensureSpace = (needed: number) => {
+    if (y < PAGE_BREAK_Y + needed) {
+      page = ctx.pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT])
+      drawHeader(page, ctx.reportNumber, ctx.reportDate, ctx.logoImage, ctx.font, ctx.bold)
+      y = ctx.contentTop - 8
+    }
+  }
+
+  ensureSpace(90)
+  page.drawText('Repair Summary', { x: MARGIN, y, size: 12, font: ctx.bold, color: SECTION_COLOR })
+  y -= 16
+
+  const raw = String(summaryText ?? '').trim()
+  if (!raw) {
+    page.drawText('No repair items recorded.', { x: MARGIN, y, size: 9, font: ctx.font, color: rgb(0.25, 0.26, 0.3) })
+    return { page, y: y - 6 }
+  }
+
+  const maxW = PAGE_WIDTH - MARGIN * 2
+  const paragraphs = raw.split(/\r?\n/)
+  const lines: string[] = []
+  for (const p of paragraphs) {
+    if (!p.trim()) {
+      lines.push('')
+      continue
+    }
+    lines.push(...wrapPdfTextLines(p, ctx.font, 10, maxW, { emptyPlaceholder: '' }))
+  }
+  if (lines.length === 0) lines.push('-')
+
+  const lineH = 12
+  for (const line of lines) {
+    ensureSpace(14)
+    if (line) {
+      page.drawText(line, { x: MARGIN, y, size: 10, font: ctx.font, color: rgb(0.15, 0.16, 0.18) })
+    }
+    y -= lineH
+  }
+
+  return { page, y: y - 4 }
+}
+
 /**
  * Photo grid: capped thumbnails, never splits a row across pages; continues on new pages with header.
  */
@@ -1316,7 +1502,7 @@ export async function generateMaintenanceReportPdf(options: MaintenancePdfOption
       y -= 14
       page.drawText('Uploaded Photos', { x: MARGIN, y, size: 12, font: bold, color: SECTION_COLOR })
       y -= 16
-      const grid = drawImageGrid(page, y, imageRefs, 3, {
+      const grid = drawImageGrid(page, y, imageRefs, 2, {
         pdf,
         reportNumber,
         reportDate,
@@ -1329,6 +1515,22 @@ export async function generateMaintenanceReportPdf(options: MaintenancePdfOption
       y = grid.y
     }
     y -= 20
+  }
+
+  // ----- Repair Summary: append as a block when small; only create a new page if needed -----
+  const finalRepairText = resolveFinalRepairSummaryText(form)
+  const shouldRenderRepairSummary = Boolean(finalRepairText.trim()) || hasAnyChecklistFault(form)
+  if (shouldRenderRepairSummary) {
+    const textToRender =
+      finalRepairText.trim() ||
+      'Faults were detected in the checklist, but no repair items were mapped. Use “Repair summary” in the form to add details.'
+    const block = drawRepairSummaryBlock(
+      { page, pdf, reportNumber, reportDate, logoImage, font, bold, contentTop },
+      y,
+      textToRender,
+    )
+    page = block.page
+    y = block.y
   }
 
   // ----- Last page: same "Approval & Sign-off" layout as merged reports -----

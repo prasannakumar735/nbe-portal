@@ -370,6 +370,16 @@ export async function POST(request: NextRequest) {
       offline_id: (payload.form as { offline_id?: string | null }).offline_id ?? null,
       status: persistedStatus,
     }
+
+    // Optional: technician overrides for the final repairs summary page.
+    if (Object.prototype.hasOwnProperty.call(payload.form, 'repair_summary_overrides')) {
+      reportInsert.repair_summary_overrides =
+        (payload.form as { repair_summary_overrides?: unknown }).repair_summary_overrides ?? null
+    }
+    if (Object.prototype.hasOwnProperty.call(payload.form, 'repair_summary_text')) {
+      const t = String((payload.form as { repair_summary_text?: unknown }).repair_summary_text ?? '').trim()
+      reportInsert.repair_summary_text = t || null
+    }
     const rawIncomingSchema = (payload.form as { report_schema_version?: unknown }).report_schema_version
     const incomingSchemaNum = Number(rawIncomingSchema)
     const incomingSchema = Number.isFinite(incomingSchemaNum) && incomingSchemaNum > 0 ? Math.trunc(incomingSchemaNum) : null

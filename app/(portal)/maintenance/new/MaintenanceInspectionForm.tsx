@@ -117,8 +117,57 @@ function getDefaultFormValues(): MaintenanceFormValues {
     notes: '',
     signature_data_url: '',
     signature_storage_url: '',
+    repair_summary_overrides: [],
     doors: [createDoor(0)],
   }
+}
+
+const REPAIR_SUMMARY_ITEMS: Array<{
+  key: string
+  label: string
+  code: string
+}> = [
+  { key: 'stiffener', label: 'Stiffener', code: 'a03' },
+  { key: 'view_window', label: 'View Window', code: 'a04' },
+  { key: 'straps_buckles', label: 'Straps/Buckles (CAD/FR)', code: 'a05' },
+  { key: 'frame_cover', label: 'Frame and Cover', code: 'b06' },
+  { key: 'pe_guides', label: 'PE Guides', code: 'b07' },
+  { key: 'lights', label: 'Lights (hazard/traffic)', code: 'c11' },
+  { key: 'push_button', label: 'Push Button', code: 'c15' },
+  { key: 'sensors', label: 'Sensors (remote/loop/radar)', code: 'c16' },
+  { key: 'photo_cells', label: 'Photo Cells / Light Curtain', code: 'd17' },
+  { key: 'safety_edge', label: 'Safety Edge', code: 'd18' },
+  { key: 'emergency_stop', label: 'Emergency Stop', code: 'd19' },
+  { key: 'gearbox', label: 'Gear Motor / Gearbox', code: 'e22' },
+  { key: 'drive_system', label: 'Drive system', code: 'e23' },
+  { key: 'limit_system', label: 'Limit System', code: 'e25' },
+  { key: 'chain_belt', label: 'Chain/Belt', code: 'e26' },
+]
+
+function computeAutoRepairSummaryText(doors: MaintenanceDoorForm[]): string {
+  const counts = new Map<string, number>()
+  for (const item of REPAIR_SUMMARY_ITEMS) {
+    counts.set(item.key, 0)
+  }
+
+  doors.forEach(door => {
+    REPAIR_SUMMARY_ITEMS.forEach(item => {
+      if (door.checklist?.[item.code] === 'fault') {
+        counts.set(item.key, (counts.get(item.key) ?? 0) + 1)
+      }
+    })
+  })
+
+  const lines = REPAIR_SUMMARY_ITEMS
+    .map(item => ({
+      key: item.key,
+      label: item.label,
+      quantity: counts.get(item.key) ?? 0,
+    }))
+    .filter(item => item.quantity > 0)
+    .map(item => `${Math.floor(Number(item.quantity) || 0)}x ${item.label}`.trim())
+
+  return lines.join('\n')
 }
 
 function normalizeLoadedDoor(rawDoor: unknown, index: number): MaintenanceDoorForm {
@@ -568,6 +617,8 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   const watchedSignatureStorageUrl = useWatch({ control, name: 'signature_storage_url', defaultValue: '' })
   const watchedDoors = useWatch({ control, name: 'doors', defaultValue: [] }) as MaintenanceDoorForm[]
   const watchedReportSchemaVersion = useWatch({ control, name: 'report_schema_version', defaultValue: 2 })
+  const watchedRepairSummaryText = useWatch({ control, name: 'repair_summary_text', defaultValue: '' }) as string
+  useWatch({ control, name: 'repair_summary_overrides', defaultValue: [] })
 
   /** Stable primitive for location→doors effect (avoids object/function identity in deps). */
   const selectedLocationId = useMemo(
@@ -2161,7 +2212,114 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">8. Save / Submit</h2>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">8. Repair Summary (optional)</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Auto-generated from checklist <span className="font-semibold">Fault</span> items. Overrides are saved with Draft/Autosave and
+                rendered in the PDF when non-empty.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => {
+                  const text = computeAutoRepairSummaryText(watchedDoors)
+                  if (!text.trim()) {
+                    if (faultDetection.hasAnyFault) {
+                      toast.message('Fault items are detected, but none map to repair parts yet. You can add a manual summary.')
+                    } else {
+                      toast.message('No checklist Fault items detected yet. Mark Fault items in the checklist to auto-generate repairs.')
+                    }
+                    setValue('repair_summary_text', '', { shouldDirty: true, shouldValidate: false })
+                    return
+                  }
+                  setValue('repair_summary_text', text, { shouldDirty: true, shouldValidate: false })
+                  toast.success('Repair summary auto-generated from checklist Fault items.')
+                }}
+                className="h-10 w-full rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 sm:w-auto"
+              >
+                Auto-generate
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const current = String(getValues('repair_summary_text') ?? '')
+                  const next = current.trim() ? `${current.replace(/\s+$/,'')}\n\n` : ''
+                  setValue('repair_summary_text', next, { shouldDirty: true, shouldValidate: false })
+                  toast.message('You can now type a manual repair summary.')
+                }}
+                className="h-10 w-full rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 sm:w-auto"
+              >
+                Add manual summary
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setValue('repair_summary_text', '', { shouldDirty: true, shouldValidate: false })
+                  toast.message('Repair summary cleared.')
+                }}
+                className="h-10 w-full rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 sm:w-auto"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await handleSaveDraft()
+                }}
+                disabled={isSavingDraft || isSubmitting || (isLocked && !isAdminMode)}
+                className="h-10 w-full rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
+              >
+                {isSavingDraft ? 'Saving…' : 'Save now'}
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="text-xs font-bold uppercase tracking-wide text-slate-600">Auto-suggested (from Fault checklist)</div>
+              <div className="mt-2 space-y-1 text-sm text-slate-800">
+                {(() => {
+                  const text = computeAutoRepairSummaryText(watchedDoors)
+                  if (!text.trim()) {
+                    if (faultDetection.hasAnyFault) {
+                      return (
+                        <div className="text-sm text-slate-500">
+                          Faults detected ({faultDetection.totalFaultItems}), but none map to repair parts. Use overrides.
+                        </div>
+                      )
+                    }
+                    return <div className="text-sm text-slate-500">No repair items detected from Fault checklist items.</div>
+                  }
+                  return (
+                    <pre className="whitespace-pre-wrap font-sans text-sm text-slate-800">
+                      {text}
+                    </pre>
+                  )
+                })()}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <div className="text-xs font-bold uppercase tracking-wide text-slate-600">Repair summary</div>
+              <textarea
+                value={watchedRepairSummaryText || ''}
+                onChange={e => setValue('repair_summary_text', e.target.value, { shouldDirty: true, shouldValidate: false })}
+                rows={5}
+                className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2 text-base"
+                placeholder="Auto-generate to populate from checklist faults, then add any manual notes here…"
+                disabled={isLocked && !isAdminMode}
+              />
+              <p className="mt-2 text-xs text-slate-500">
+                This text is what will be saved and rendered in the PDF.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">9. Save / Submit</h2>
           {isAdminMode ? (
             <p className="mt-2 text-xs text-slate-500">
               Flow: save draft → submit report → review / edit doors if needed → save changes → approve or download.

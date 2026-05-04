@@ -1,12 +1,6 @@
-import Link from 'next/link'
-
-/**
- * Placeholder landing for client users (future: merged reports list, downloads).
- * Auth-gated flows can redirect here after sign-in.
- */
+import Link from 'next/link';
 export default function ClientDashboardPage() {
-  return (
-    <div className="mx-auto max-w-lg rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
+    return (<div className="mx-auto max-w-lg rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
       <h1 className="text-lg font-bold text-slate-900">Client dashboard</h1>
       <p className="mt-2 text-sm text-slate-600">
         Report links are shared by email or QR. Use the client home page to open a secure link when you have one.
@@ -19,6 +13,5 @@ export default function ClientDashboardPage() {
           Sign in
         </Link>
       </div>
-    </div>
-  )
+    </div>);
 }

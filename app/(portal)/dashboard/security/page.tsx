@@ -1,6 +1,4 @@
-import { redirect } from 'next/navigation'
-
-/** Legacy alias — canonical route is `/dashboard/change-password`. */
+import { redirect } from 'next/navigation';
 export default function DashboardSecurityRedirectPage() {
-  redirect('/dashboard/change-password')
+    redirect('/dashboard/change-password');
 }

@@ -40,8 +40,14 @@ export function checkSlidingWindow(
   return true
 }
 
-/** Prefer first hop in X-Forwarded-For (Vercel / proxies). */
+/**
+ * Best-effort client IP for rate limits / optional CAPTCHA hints.
+ * Prefer `CF-Connecting-IP` when the site is behind Cloudflare (single client IP);
+ * then first hop in `X-Forwarded-For` (Vercel / generic proxies).
+ */
 export function getClientIp(request: { headers: Headers }): string {
+  const cf = request.headers.get('cf-connecting-ip')?.trim()
+  if (cf) return cf
   const xff = request.headers.get('x-forwarded-for')
   if (xff) {
     const first = xff.split(',')[0]?.trim()

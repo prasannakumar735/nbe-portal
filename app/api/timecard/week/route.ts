@@ -6,6 +6,7 @@ import {
   NOMINATIM_MIN_INTERVAL_MS,
   sleep,
 } from '@/lib/timecard/reverseGeocode'
+import { compareEntryChronological } from '@/lib/timecard/compareEntryChronological'
 import { weekEndFromStart } from '@/lib/timecard/weekDates'
 import {
   latLngColumnsFromPoints,
@@ -110,7 +111,7 @@ export async function GET(request: NextRequest) {
     const merged = dedupeTimesheetEntriesById(
       (rows ?? []).map(r => mapRowToEntry(r as Record<string, unknown>)),
     )
-    merged.sort((a, b) => a.entry_date.localeCompare(b.entry_date) || a.sort_order - b.sort_order)
+    merged.sort(compareEntryChronological)
     return NextResponse.json({ timesheet: sheet, entries: merged })
   } catch (e) {
     console.error('[GET /api/timecard/week]', e)

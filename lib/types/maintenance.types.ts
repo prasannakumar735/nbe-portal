@@ -232,6 +232,15 @@ export type MaintenanceDoorForm = {
   isCollapsed?: boolean
 }
 
+export type RepairSummaryItem = {
+  /** Stable identifier for grouping/merging (e.g. 'stiffener', 'safety_edge'). */
+  key: string
+  /** User-facing label rendered in PDFs/UI (e.g. 'Stiffener'). */
+  label: string
+  /** Count of items/repairs. */
+  quantity: number
+}
+
 export type MaintenanceFormValues = {
   report_id?: string
   /**
@@ -255,6 +264,15 @@ export type MaintenanceFormValues = {
   notes: string
   signature_data_url: string
   signature_storage_url: string
+  /**
+   * Technician-friendly freeform repair summary. When non-empty, this is rendered in the PDF.
+   * Auto-generate fills this from checklist Fault items; technicians can append manual notes.
+   */
+  repair_summary_text?: string
+  /**
+   * Optional technician-edited list. When present and non-empty, it overrides the auto-generated repair summary.
+   */
+  repair_summary_overrides?: RepairSummaryItem[]
   doors: MaintenanceDoorForm[]
 }
 

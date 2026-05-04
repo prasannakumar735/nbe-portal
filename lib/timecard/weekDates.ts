@@ -8,8 +8,12 @@ export function startOfIsoWeekMonday(d: Date): Date {
   return x
 }
 
+/** YYYY-MM-DD for the date in the user's local calendar (not UTC — avoids AU/EU off-by-one near midnight). */
 export function toIsoDateString(d: Date): string {
-  return d.toISOString().slice(0, 10)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 export function addDays(d: Date, n: number): Date {

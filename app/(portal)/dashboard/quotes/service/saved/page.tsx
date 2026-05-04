@@ -1,6 +1,4 @@
-import { redirect } from 'next/navigation'
-
-/** Old URL; list now lives at /dashboard/quotes/service */
+import { redirect } from 'next/navigation';
 export default function SavedQuotesRedirectPage() {
-  redirect('/dashboard/quotes/service')
+    redirect('/dashboard/quotes/service');
 }

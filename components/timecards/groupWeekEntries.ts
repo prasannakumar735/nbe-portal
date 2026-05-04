@@ -1,4 +1,5 @@
 import type { EmployeeTimesheetEntry } from '@/lib/types/employee-timesheet.types'
+import { compareEntryChronological } from '@/lib/timecard/compareEntryChronological'
 import { dedupeTimesheetEntriesById } from '@/lib/timecard/dedupeTimesheetEntries'
 import { weekDayLabels } from '@/lib/timecard/weekDates'
 import type { DayEntry, TimeEntryRow } from '@/components/timecard/timecardTableTypes'
@@ -42,7 +43,7 @@ export function buildDayEntries(
     byDate.set(e.entry_date, list)
   }
   for (const [, list] of byDate) {
-    list.sort((a, b) => a.sort_order - b.sort_order)
+    list.sort(compareEntryChronological)
   }
 
   return days.map(d => {

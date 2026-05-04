@@ -1,4 +1,5 @@
 import type { EmployeeTimesheetEntry } from '@/lib/types/employee-timesheet.types'
+import { formatTaskLabel } from '@/lib/timecard/formatTaskLabel'
 import { formatLocationForExport } from '@/lib/timecard/formatLocation'
 import { withCsvUtf8Bom } from '@/lib/reports/exportCsv'
 
@@ -38,7 +39,7 @@ export function buildTimesheetCsv(
       lookups.clientName(e.client_id),
       lookups.locationName(e.location_id),
       lookups.workTypeLabel(e.work_type_level1_id, e.work_type_level2_id),
-      e.task,
+      formatTaskLabel(e.task),
       e.start_time,
       e.end_time,
       String(e.break_minutes),

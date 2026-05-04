@@ -1,10 +1,11 @@
 import type { TimeEntryRow } from '@/components/timecard/timecardTableTypes'
+import { formatTaskLabel } from '@/lib/timecard/formatTaskLabel'
 
 const EMPTY_MARKERS = new Set(['', '—', '-', '–'])
 
-function segment(raw: string | null | undefined, fallback: string): string {
+function segment(raw: string | null | undefined, emptyDisplay: string): string {
   const t = String(raw ?? '').trim()
-  if (!t || EMPTY_MARKERS.has(t)) return fallback
+  if (!t || EMPTY_MARKERS.has(t)) return emptyDisplay
   return t
 }
 
@@ -13,7 +14,7 @@ export function taskDetailSegments(row: Pick<TimeEntryRow, 'locationName' | 'wor
   return {
     location: segment(row.locationName, 'No location'),
     workType: segment(row.workType, 'No type'),
-    task: segment(row.task, 'No task'),
+    task: formatTaskLabel(row.task),
   }
 }
 

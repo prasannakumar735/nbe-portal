@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ClipboardPaste, Copy, X } from 'lucide-react'
 import type { EmployeeTimesheetEntry } from '@/lib/types/employee-timesheet.types'
+import { defaultBillableFromLevel1Code } from '@/lib/timecard/billableDefaults'
 import { computeEntryTotalHours } from '@/lib/timecard/computeHours'
 import { getCurrentLocation } from '@/lib/timecard/getCurrentLocation'
 
@@ -132,11 +133,11 @@ export function TimecardModal({
     [level2Options],
   )
 
-  const level2BillableById = useMemo(() => {
-    const m = new Map<string, boolean>()
-    for (const l of level2Options) m.set(l.id, l.billable)
+  const level1CodeById = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const l of level1Options) m.set(l.id, l.code ?? '')
     return m
-  }, [level2Options])
+  }, [level1Options])
 
   const handleClientSelectChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -155,28 +156,27 @@ export function TimecardModal({
   const handleWorkTypeSelectChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       const v = e.target.value || null
-      setDraft(prev => (prev ? { ...prev, work_type_level1_id: v, work_type_level2_id: null } : prev))
-      void onLevel1Change(v ?? '')
-    },
-    [onLevel1Change],
-  )
-
-  const handleTaskSelectChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const id = e.target.value || null
-      const billable = id ? level2BillableById.get(id) : undefined
+      const code = v ? level1CodeById.get(v) : undefined
+      const billable = defaultBillableFromLevel1Code(code)
       setDraft(prev =>
         prev
           ? {
               ...prev,
-              work_type_level2_id: id,
-              billable: billable !== undefined ? billable : prev.billable,
+              work_type_level1_id: v,
+              work_type_level2_id: null,
+              billable: v ? billable : false,
             }
           : prev,
       )
+      void onLevel1Change(v ?? '')
     },
-    [level2BillableById],
+    [onLevel1Change, level1CodeById],
   )
+
+  const handleTaskSelectChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    const id = e.target.value || null
+    setDraft(prev => (prev ? { ...prev, work_type_level2_id: id } : prev))
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -488,7 +488,9 @@ export function TimecardModal({
               <label className="flex min-w-0 cursor-pointer items-center justify-between gap-4 rounded-xl border border-slate-100 bg-gray-50 px-4 py-3">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-slate-900">Billable</p>
-                  <p className="text-xs text-slate-500">Include in client-billable totals</p>
+                  <p className="text-xs text-slate-500">
+                    Defaults on when work type is FAB or OPS; you can override anytime.
+                  </p>
                 </div>
                 <input
                   type="checkbox"

@@ -1,49 +1,44 @@
-'use client'
-
-import { useEffect, useState } from 'react'
-
+'use client';
+import { useEffect, useState } from 'react';
 type BomRow = {
-  id: string
-  product_id: string
-  product_name: string | null
-  quantity_per_unit: number
-  wastage_percentage: number
-  component?: {
-    sku: string
-    name: string
-    unit: string
-  }
-}
-
+    id: string;
+    product_id: string;
+    product_name: string | null;
+    quantity_per_unit: number;
+    wastage_percentage: number;
+    component?: {
+        sku: string;
+        name: string;
+        unit: string;
+    };
+};
 export default function InventoryBomPage() {
-  const [rows, setRows] = useState<BomRow[]>([])
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function load() {
-      try {
-        const response = await fetch('/api/inventory/bom', { cache: 'no-store' })
-        if (!response.ok) {
-          const payload = await response.json().catch(() => ({}))
-          throw new Error(payload.error || 'Failed to load BOM')
+    const [rows, setRows] = useState<BomRow[]>([]);
+    const [error, setError] = useState<string | null>(null);
+    useEffect(() => {
+        let cancelled = false;
+        async function load() {
+            try {
+                const response = await fetch('/api/inventory/bom', { cache: 'no-store' });
+                if (!response.ok) {
+                    const payload = await response.json().catch(() => ({}));
+                    throw new Error(payload.error || 'Failed to load BOM');
+                }
+                const payload = await response.json();
+                if (!cancelled)
+                    setRows(payload.bom ?? []);
+            }
+            catch (err) {
+                if (!cancelled)
+                    setError(err instanceof Error ? err.message : 'Failed to load BOM');
+            }
         }
-        const payload = await response.json()
-        if (!cancelled) setRows(payload.bom ?? [])
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load BOM')
-      }
-    }
-
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  return (
-    <div className="w-full">
+        void load();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+    return (<div className="w-full">
       <h1 className="text-xl font-bold text-slate-900">Bill of Materials</h1>
       {error && <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-red-700">{error}</div>}
       <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white">
@@ -57,19 +52,16 @@ export default function InventoryBomPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.id} className="border-b border-slate-100">
+            {rows.map((row) => (<tr key={row.id} className="border-b border-slate-100">
                 <td className="px-3 py-2 text-slate-800">{row.product_name || row.product_id}</td>
                 <td className="px-3 py-2 text-slate-700">{row.component?.name || row.component?.sku || '-'}</td>
                 <td className="px-3 py-2 text-slate-700">
                   {Number(row.quantity_per_unit).toFixed(3)} {row.component?.unit || ''}
                 </td>
                 <td className="px-3 py-2 text-slate-700">{Number(row.wastage_percentage).toFixed(2)}</td>
-              </tr>
-            ))}
+              </tr>))}
           </tbody>
         </table>
       </div>
-    </div>
-  )
+    </div>);
 }

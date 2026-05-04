@@ -81,6 +81,10 @@ export async function GET(
       notes: String(report.notes ?? ''),
       signature_data_url: '',
       signature_storage_url: String(report.signature_storage_url ?? ''),
+      repair_summary_text: String((report as { repair_summary_text?: unknown }).repair_summary_text ?? ''),
+      repair_summary_overrides: Array.isArray((report as { repair_summary_overrides?: unknown }).repair_summary_overrides)
+        ? ((report as { repair_summary_overrides: unknown[] }).repair_summary_overrides as MaintenanceFormValues['repair_summary_overrides'])
+        : [],
       doors: Array.isArray(report.doors)
         ? (report.doors as MaintenanceFormValues['doors'])
         : [],

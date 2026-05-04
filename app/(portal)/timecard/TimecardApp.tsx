@@ -7,6 +7,7 @@ import { ClipboardPaste } from 'lucide-react'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import { useAuth } from '@/app/providers/AuthProvider'
 import { canApproveTimesheet } from '@/lib/auth/roles'
+import { compareEntryChronological } from '@/lib/timecard/compareEntryChronological'
 import { addDays, startOfIsoWeekMonday, toIsoDateString } from '@/lib/timecard/weekDates'
 import { createEmptyEntry, useTimecard } from '@/hooks/useTimecard'
 import type { EmployeeTimesheetEntry } from '@/lib/types/employee-timesheet.types'
@@ -235,10 +236,7 @@ export default function TimecardApp() {
   }, [weekStart])
 
   const sortedEntries = useMemo(
-    () =>
-      [...filteredEntries].sort(
-        (a, b) => a.entry_date.localeCompare(b.entry_date) || a.sort_order - b.sort_order,
-      ),
+    () => [...filteredEntries].sort(compareEntryChronological),
     [filteredEntries],
   )
 

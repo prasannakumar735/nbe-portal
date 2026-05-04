@@ -1,6 +1,4 @@
-import { redirect } from 'next/navigation'
-
-/** Alias URL for marketing/docs — same as `/client/login`. */
+import { redirect } from 'next/navigation';
 export default function ClientLoginAliasPage() {
-  redirect('/client/login')
+    redirect('/client/login');
 }

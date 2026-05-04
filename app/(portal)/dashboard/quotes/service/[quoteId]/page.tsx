@@ -1,113 +1,95 @@
-'use client'
-
-import Link from 'next/link'
-import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
-import { downloadServiceQuotePdf } from '@/components/quotes/downloadServiceQuotePdf'
-import type { ServiceQuoteFormValues } from '@/components/quotes/types'
-import { computeServiceQuoteTotals } from '@/lib/quotes/serviceQuoteSnapshot'
-
-const currency = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
-
+'use client';
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { downloadServiceQuotePdf } from '@/components/quotes/downloadServiceQuotePdf';
+import type { ServiceQuoteFormValues } from '@/components/quotes/types';
+import { computeServiceQuoteTotals } from '@/lib/quotes/serviceQuoteSnapshot';
+const currency = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' });
 export default function ViewServiceQuotePage() {
-  const params = useParams()
-  const router = useRouter()
-  const quoteId = String(params.quoteId ?? '')
-  const [values, setValues] = useState<ServiceQuoteFormValues | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-  const [pdfBusy, setPdfBusy] = useState(false)
-
-  useEffect(() => {
-    let cancel = false
-    ;(async () => {
-      try {
-        const r = await fetch(`/api/quotes/service/${quoteId}`)
-        const data = await r.json()
-        if (!r.ok) {
-          setErr(data.error || 'Failed to load quote.')
-          return
+    const params = useParams();
+    const router = useRouter();
+    const quoteId = String(params.quoteId ?? '');
+    const [values, setValues] = useState<ServiceQuoteFormValues | null>(null);
+    const [err, setErr] = useState<string | null>(null);
+    const [pdfBusy, setPdfBusy] = useState(false);
+    useEffect(() => {
+        let cancel = false;
+        (async () => {
+            try {
+                const r = await fetch(`/api/quotes/service/${quoteId}`);
+                const data = await r.json();
+                if (!r.ok) {
+                    setErr(data.error || 'Failed to load quote.');
+                    return;
+                }
+                if (!cancel)
+                    setValues(data.formValues as ServiceQuoteFormValues);
+            }
+            catch {
+                if (!cancel)
+                    setErr('Failed to load quote.');
+            }
+        })();
+        return () => {
+            cancel = true;
+        };
+    }, [quoteId]);
+    const handleDelete = async () => {
+        if (!window.confirm('Delete this quote? This cannot be undone.'))
+            return;
+        try {
+            const res = await fetch(`/api/quotes/service/${quoteId}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (!res.ok)
+                throw new Error(data.error || 'Delete failed.');
+            router.push('/dashboard/quotes/service');
         }
-        if (!cancel) setValues(data.formValues as ServiceQuoteFormValues)
-      } catch {
-        if (!cancel) setErr('Failed to load quote.')
-      }
-    })()
-    return () => {
-      cancel = true
-    }
-  }, [quoteId])
-
-  const handleDelete = async () => {
-    if (!window.confirm('Delete this quote? This cannot be undone.')) return
-    try {
-      const res = await fetch(`/api/quotes/service/${quoteId}`, { method: 'DELETE' })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Delete failed.')
-      router.push('/dashboard/quotes/service')
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Delete failed.')
-    }
-  }
-
-  const handlePdf = async () => {
-    if (!values) return
-    setPdfBusy(true)
-    try {
-      await downloadServiceQuotePdf(values, `service-quote-${values.quoteNumber}.pdf`)
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'PDF failed.')
-    } finally {
-      setPdfBusy(false)
-    }
-  }
-
-  if (err) {
-    return (
-      <div className="mx-auto max-w-2xl px-4 py-10">
+        catch (e) {
+            alert(e instanceof Error ? e.message : 'Delete failed.');
+        }
+    };
+    const handlePdf = async () => {
+        if (!values)
+            return;
+        setPdfBusy(true);
+        try {
+            await downloadServiceQuotePdf(values, `service-quote-${values.quoteNumber}.pdf`);
+        }
+        catch (e) {
+            alert(e instanceof Error ? e.message : 'PDF failed.');
+        }
+        finally {
+            setPdfBusy(false);
+        }
+    };
+    if (err) {
+        return (<div className="mx-auto max-w-2xl px-4 py-10">
         <p className="text-red-600">{err}</p>
         <Link href="/dashboard/quotes/service" className="mt-4 inline-block text-sm text-slate-700 underline">
           Back to Service Quote
         </Link>
-      </div>
-    )
-  }
-
-  if (!values) {
-    return (
-      <div className="mx-auto max-w-2xl px-4 py-10">
+      </div>);
+    }
+    if (!values) {
+        return (<div className="mx-auto max-w-2xl px-4 py-10">
         <p className="text-slate-600">Loading…</p>
-      </div>
-    )
-  }
-
-  const { subtotal, gst, grandTotal } = computeServiceQuoteTotals(values)
-
-  return (
-    <div className="mx-auto w-full max-w-[210mm] space-y-6 px-4 py-8">
+      </div>);
+    }
+    const { subtotal, gst, grandTotal } = computeServiceQuoteTotals(values);
+    return (<div className="mx-auto w-full max-w-[210mm] space-y-6 px-4 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link href="/dashboard/quotes/service" className="text-sm font-medium text-slate-700 underline">
           ← Service Quote
         </Link>
         <div className="flex flex-wrap gap-2">
-          <Link
-            href={`/dashboard/quotes/service/${quoteId}/edit`}
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
-          >
+          <Link href={`/dashboard/quotes/service/${quoteId}/edit`} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50">
             Edit
           </Link>
-          <button
-            type="button"
-            onClick={handlePdf}
-            disabled={pdfBusy}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
+          <button type="button" onClick={handlePdf} disabled={pdfBusy} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
             {pdfBusy ? 'Preparing PDF…' : 'Download PDF'}
           </button>
-          <button
-            type="button"
-            onClick={handleDelete}
-            className="rounded-md border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
-          >
+          <button type="button" onClick={handleDelete} className="rounded-md border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50">
             Delete
           </button>
         </div>
@@ -184,8 +166,7 @@ export default function ViewServiceQuotePage() {
               </tr>
             </thead>
             <tbody>
-              {values.items.map((item, i) => (
-                <tr key={i}>
+              {values.items.map((item, i) => (<tr key={i}>
                   <td className="border border-slate-200 px-2 py-2">{i + 1}</td>
                   <td className="border border-slate-200 px-2 py-2 whitespace-pre-wrap">{item.description}</td>
                   <td className="border border-slate-200 px-2 py-2">{item.qty}</td>
@@ -193,8 +174,7 @@ export default function ViewServiceQuotePage() {
                   <td className="border border-slate-200 px-2 py-2">
                     {currency.format(Number(item.qty || 0) * Number(item.unitPrice || 0))}
                   </td>
-                </tr>
-              ))}
+                </tr>))}
             </tbody>
           </table>
         </div>
@@ -224,6 +204,5 @@ export default function ViewServiceQuotePage() {
         <p className="mt-2 text-sm text-slate-700">Name: {values.printedName || '—'}</p>
         <p className="text-sm text-slate-700">Date: {values.signatureDate || '—'}</p>
       </section>
-    </div>
-  )
+    </div>);
 }

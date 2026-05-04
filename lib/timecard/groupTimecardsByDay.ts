@@ -1,4 +1,5 @@
 import type { EmployeeTimesheetEntry } from '@/lib/types/employee-timesheet.types'
+import { compareEntryChronological } from '@/lib/timecard/compareEntryChronological'
 import { dedupeTimesheetEntriesById } from '@/lib/timecard/dedupeTimesheetEntries'
 
 export type TimecardDayGroup = {
@@ -10,7 +11,7 @@ export type TimecardDayGroup = {
 
 /**
  * Deduplicate by entry id, then group by `entry_date` (calendar day).
- * Days are sorted ascending. Lines within a day follow `sort_order`.
+ * Days are sorted ascending. Lines within a day follow start time, then `sort_order`.
  */
 export function groupTimecardsByDay(rows: EmployeeTimesheetEntry[]): TimecardDayGroup[] {
   const unique = dedupeTimesheetEntriesById(rows)
@@ -22,7 +23,7 @@ export function groupTimecardsByDay(rows: EmployeeTimesheetEntry[]): TimecardDay
     grouped.set(key, list)
   }
   for (const [, list] of grouped) {
-    list.sort((a, b) => a.sort_order - b.sort_order)
+    list.sort(compareEntryChronological)
   }
   const dates = [...grouped.keys()].sort()
   return dates.map(date => {

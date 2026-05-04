@@ -20,6 +20,7 @@ import {
   dedupeTimesheetEntriesById,
   findDuplicateEntryIds,
 } from '@/lib/timecard/dedupeTimesheetEntries'
+import { compareEntryChronological } from '@/lib/timecard/compareEntryChronological'
 
 const SYNC_DEBOUNCE_MS = 500
 const SYNC_QUEUE_ID = (wk: string) => `sync::${wk}`
@@ -41,7 +42,7 @@ export function createEmptyEntry(entryDateIso: string): EmployeeTimesheetEntry {
     end_time,
     break_minutes,
     total_hours: hours,
-    billable: true,
+    billable: false,
     notes: '',
     gps_start: null,
     gps_end: null,
@@ -65,7 +66,7 @@ function recalcEntry(e: EmployeeTimesheetEntry): EmployeeTimesheetEntry {
   }
 }
 
-/** Dedupe ids, sort by day + order, renumber `sort_order` — single source of truth for week state. */
+/** Dedupe ids, sort by day + start time + legacy order, renumber `sort_order` — single source of truth for week state. */
 function normalizeWeekEntries(ent: EmployeeTimesheetEntry[]): EmployeeTimesheetEntry[] {
   if (ent.length === 0) return []
   const dupIds = findDuplicateEntryIds(ent)
@@ -75,9 +76,7 @@ function normalizeWeekEntries(ent: EmployeeTimesheetEntry[]): EmployeeTimesheetE
     }
   }
   const unique = dedupeTimesheetEntriesById(ent)
-  const sorted = [...unique].sort(
-    (a, b) => a.entry_date.localeCompare(b.entry_date) || a.sort_order - b.sort_order,
-  )
+  const sorted = [...unique].sort(compareEntryChronological)
   return sorted.map((e, i) => recalcEntry({ ...e, sort_order: i }))
 }
 

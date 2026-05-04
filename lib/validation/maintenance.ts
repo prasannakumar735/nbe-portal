@@ -101,12 +101,27 @@ const formHeaderDraft = {
   signature_storage_url: z.string().optional().default(''),
 }
 
+const repairSummaryItemDraftSchema = z.object({
+  // Draft saves should never block if the technician added a row but hasn't filled it in yet.
+  key: z.string().optional().default(''),
+  label: z.string().optional().default(''),
+  quantity: z.coerce.number().int().min(0).optional().default(0),
+})
+
+const repairSummaryItemSubmitSchema = z.object({
+  key: z.string().min(1),
+  label: z.string().min(1),
+  quantity: z.coerce.number().int().min(0),
+})
+
 /**
  * Lenient validation for the maintenance form in the portal and for draft saves.
  * Incomplete doors, checklist, and identifiers are allowed so partial data is never discarded.
  */
 export const maintenanceFormDraftSchema = z.object({
   ...formHeaderDraft,
+  repair_summary_text: z.string().optional().default(''),
+  repair_summary_overrides: z.array(repairSummaryItemDraftSchema).optional(),
   doors: z.array(doorDraftSchema),
 })
 
@@ -167,6 +182,8 @@ export const maintenanceFormSubmitSchema = z
     notes: z.string().optional().default(''),
     signature_data_url: z.string().optional().default(''),
     signature_storage_url: z.string().optional().default(''),
+    repair_summary_text: z.string().optional().default(''),
+    repair_summary_overrides: z.array(repairSummaryItemSubmitSchema).optional(),
     doors: z.array(doorSchema),
   })
   .superRefine(submitFormRefinements)

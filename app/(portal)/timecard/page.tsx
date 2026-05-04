@@ -1,5 +1,4 @@
-import { redirect } from 'next/navigation'
-
+import { redirect } from 'next/navigation';
 export default function TimecardRedirectPage() {
-  redirect('/dashboard/timecards?tab=my')
+    redirect('/dashboard/timecards?tab=my');
 }
