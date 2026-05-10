@@ -9,7 +9,9 @@ export default async function LoginPage({ searchParams }: {
     const inactiveNotice = pickSearchParam(sp.inactive) === '1';
     const noProfileNotice = pickSearchParam(sp.error) === 'no_profile';
     const nextRedirect = safeInternalRedirectPath(pickSearchParam(sp.next));
+    const clientPortalBranding =
+        Boolean(nextRedirect?.startsWith('/client') || nextRedirect?.startsWith('/report/view/'));
     const h = await headers();
     const cspNonce = (typeof h?.get === 'function' ? h.get('x-nonce') : null) ?? '';
-    return (<LoginClient inactiveNotice={inactiveNotice} noProfileNotice={noProfileNotice} cspNonce={cspNonce} nextRedirect={nextRedirect}/>);
+    return (<LoginClient inactiveNotice={inactiveNotice} noProfileNotice={noProfileNotice} cspNonce={cspNonce} nextRedirect={nextRedirect} clientPortalBranding={clientPortalBranding}/>);
 }

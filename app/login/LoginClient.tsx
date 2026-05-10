@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { TurnstileWidget, type TurnstileWidgetHandle } from '@/components/security/TurnstileWidget'
+import { AuthScreenLogo } from '@/components/common/AuthScreenLogo'
 import { createSupabaseClient } from '@/lib/supabase/client'
 
 type LoginClientProps = {
@@ -12,9 +13,34 @@ type LoginClientProps = {
   cspNonce?: string
   /** Safe internal path from `?next=` — resolved on the server (no `useSearchParams`). */
   nextRedirect: string | null
+  /** Classic logo + client-oriented footer when arriving from client/report flows. */
+  clientPortalBranding?: boolean
 }
 
-export function LoginClient({ inactiveNotice, noProfileNotice, cspNonce, nextRedirect }: LoginClientProps) {
+function resolvePostLoginDestination(
+  role: string | null | undefined,
+  next: string | null,
+): string {
+  const n = next && next.startsWith('/') ? next : null
+  if (role === 'client') {
+    if (n && (n.startsWith('/client') || n.startsWith('/report/view/'))) {
+      return n
+    }
+    return '/client'
+  }
+  if (n?.startsWith('/client')) {
+    return '/dashboard'
+  }
+  return n ?? '/dashboard'
+}
+
+export function LoginClient({
+  inactiveNotice,
+  noProfileNotice,
+  cspNonce,
+  nextRedirect,
+  clientPortalBranding = false,
+}: LoginClientProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -106,29 +132,28 @@ export function LoginClient({ inactiveNotice, noProfileNotice, cspNonce, nextRed
         data: { session },
       } = await supabase.auth.getSession()
 
-      if (session?.user) {
-        const { data: staffProfile } = await supabase
-          .from('profiles')
-          .select('role, is_active')
-          .eq('id', session.user.id)
-          .maybeSingle()
-
-        if (staffProfile?.role === 'client') {
-          window.location.assign('/client')
-          return
-        }
-
-        if (staffProfile && staffProfile.is_active === false) {
-          await supabase.auth.signOut()
-          setError('Your account has been deactivated. Contact an administrator.')
-          setLoading(false)
-          return
-        }
+      if (!session?.user) {
+        setError('Sign in failed — session not established. Please try again.')
+        setLoading(false)
+        return
       }
 
-      const nextPath = nextRedirect ?? '/dashboard'
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, is_active')
+        .eq('id', session.user.id)
+        .maybeSingle()
+
+      if (profile && profile.is_active === false) {
+        await supabase.auth.signOut()
+        setError('Your account has been deactivated. Contact an administrator.')
+        setLoading(false)
+        return
+      }
+
+      const dest = resolvePostLoginDestination(profile?.role ?? null, nextRedirect)
       // Hard navigation: full reload picks up Set-Cookie from login without relying on App Router.
-      window.location.assign(nextPath.startsWith('/') ? nextPath : '/dashboard')
+      window.location.assign(dest.startsWith('/') ? dest : '/dashboard')
     } catch (err) {
       console.error('Login error:', err)
 
@@ -169,17 +194,20 @@ export function LoginClient({ inactiveNotice, noProfileNotice, cspNonce, nextRed
     <div className="flex items-center justify-center min-h-screen bg-slate-50 px-4">
       <div className="w-full max-w-md">
         <div className="bg-white p-8 rounded-lg shadow-md border border-slate-200">
-          <div className="flex justify-center mb-6">
-            <img
-              src="/Logo_black.png"
-              alt="NBE Australia"
-              className="h-12 w-auto object-contain"
-            />
+          <div className="mb-6 flex justify-center overflow-hidden">
+            <AuthScreenLogo variant={clientPortalBranding ? 'legacy' : 'default'} />
           </div>
 
-          <h1 className="text-2xl font-bold text-slate-900 mb-6 text-center">
-            Portal Login
-          </h1>
+          <div className="mb-6 text-center">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+              {clientPortalBranding ? 'Client portal' : 'Portal login'}
+            </h1>
+            {clientPortalBranding ? (
+              <p className="mt-2 text-sm font-medium text-slate-600">
+                Secure access to your organisation&rsquo;s maintenance records
+              </p>
+            ) : null}
+          </div>
 
           {(inactiveNotice || noProfileNotice) && !error && (
             <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
@@ -251,8 +279,41 @@ export function LoginClient({ inactiveNotice, noProfileNotice, cspNonce, nextRed
             </Link>
           </p>
 
-          <p className="text-center text-xs text-slate-500 mt-6">
-            Use your portal credentials to access the dashboard
+          <div
+            className={`mt-6 space-y-3 text-center ${clientPortalBranding ? 'rounded-lg border border-slate-100 bg-slate-50/80 px-4 py-4' : ''}`}
+          >
+            <p className="text-sm leading-relaxed text-slate-600">
+              {clientPortalBranding
+                ? 'Use the email address provided by your organisation to securely access maintenance reports, inspection records, and shared documents.'
+                : 'Use your portal credentials to access the dashboard.'}
+            </p>
+            {clientPortalBranding ? (
+              <p className="text-xs leading-relaxed text-slate-500">
+                Links shared via email or QR code may open directly without requiring sign-in.
+              </p>
+            ) : null}
+          </div>
+
+          <p className="text-center text-xs text-slate-500 mt-5">
+            {clientPortalBranding ? (
+              <>
+                NBE staff should use the{' '}
+                <Link href="/login" className="font-medium text-indigo-600 hover:text-indigo-500">
+                  internal portal sign-in
+                </Link>
+                .
+              </>
+            ) : (
+              <>
+                Maintenance client?{' '}
+                <Link
+                  href="/login?next=/client"
+                  className="font-medium text-indigo-600 hover:text-indigo-500"
+                >
+                  Client portal sign-in
+                </Link>
+              </>
+            )}
           </p>
         </div>
       </div>

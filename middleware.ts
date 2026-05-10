@@ -8,8 +8,11 @@ import { getClientIp } from '@/lib/security/rateLimitEdge'
 import { isSuspiciousApiRequest } from '@/lib/security/botDefense'
 import { NBE_REQUEST_ID_HEADER, truncateUserAgent } from '@/lib/security/requestIdentity'
 import { logSecurityEvent, securityLog, securityLogIpBlocked } from '@/lib/security/securityLogger'
+import { isTechnicianRole } from '@/lib/auth/roles'
+import { isTechnicianPortalPathAllowed } from '@/lib/portal/technicianPortal'
 
 const PROTECTED_PREFIXES = [
+  '/office',
   '/dashboard',
   '/timecard',
   '/timecard-enhanced',
@@ -183,7 +186,8 @@ export async function middleware(request: NextRequest) {
       )
     }
     const login = new URL('/login', request.url)
-    login.searchParams.set('next', pathname)
+    const nextPath = `${pathname}${request.nextUrl.search}`
+    login.searchParams.set('next', nextPath)
     return setCsp(NextResponse.redirect(login), csp)
   }
 
@@ -228,6 +232,10 @@ export async function middleware(request: NextRequest) {
         return setCsp(NextResponse.redirect(url), csp)
       }
     }
+  }
+
+  if (isTechnicianRole(profile.role) && !isTechnicianPortalPathAllowed(pathname)) {
+    return setCsp(NextResponse.redirect(new URL('/dashboard', request.url)), csp)
   }
 
   return setCsp(response, csp)

@@ -5,7 +5,7 @@ export default async function ClientChangePasswordPage() {
     const supabase = await createServerClient();
     const { data: { user }, } = await supabase.auth.getUser();
     if (!user) {
-        redirect('/client/login?redirect=/client/change-password');
+        redirect('/login?next=/client/change-password');
     }
     const { data: profile } = await supabase
         .from('profiles')
@@ -17,7 +17,7 @@ export default async function ClientChangePasswordPage() {
     }
     if (profile.is_active === false) {
         await supabase.auth.signOut();
-        redirect('/client/login?redirect=/client/change-password');
+        redirect('/login?next=/client/change-password');
     }
     const email = user.email ?? '';
     return (<div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -26,6 +26,6 @@ export default async function ClientChangePasswordPage() {
         <p className="text-xs text-slate-500">Update your account password securely.</p>
       </div>
 
-      <ChangePasswordForm userEmail={email} signInRedirect="/client/login"/>
+      <ChangePasswordForm userEmail={email} signInRedirect="/login?next=/client"/>
     </div>);
 }

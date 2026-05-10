@@ -5,7 +5,7 @@ export default async function ClientProfilePage() {
     const supabase = await createServerClient();
     const { data: { user }, } = await supabase.auth.getUser();
     if (!user) {
-        redirect('/client/login?redirect=/client/profile');
+        redirect('/login?next=/client/profile');
     }
     const { data: profile } = await supabase
         .from('profiles')
@@ -17,7 +17,7 @@ export default async function ClientProfilePage() {
     }
     if (profile.is_active === false) {
         await supabase.auth.signOut();
-        redirect('/client/login?redirect=/client/profile');
+        redirect('/login?next=/client/profile');
     }
     const email = user.email ?? '';
     return (<div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
