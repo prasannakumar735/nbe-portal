@@ -34,6 +34,7 @@ export function createEmptyEntry(entryDateIso: string): EmployeeTimesheetEntry {
     id: crypto.randomUUID(),
     entry_date: entryDateIso,
     client_id: null,
+    client_sub_project_id: null,
     location_id: null,
     work_type_level1_id: null,
     work_type_level2_id: null,

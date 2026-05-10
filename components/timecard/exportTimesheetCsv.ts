@@ -13,7 +13,8 @@ function csvEscape(value: string): string {
 export function buildTimesheetCsv(
   entries: EmployeeTimesheetEntry[],
   lookups: {
-    clientName: (id: string | null) => string
+    /** Full client column per line (may include sub-project). */
+    clientLine: (e: EmployeeTimesheetEntry) => string
     locationName: (id: string | null) => string
     workTypeLabel: (l1: string | null, l2: string | null) => string
   },
@@ -36,7 +37,7 @@ export function buildTimesheetCsv(
   for (const e of entries) {
     const row = [
       e.entry_date,
-      lookups.clientName(e.client_id),
+      lookups.clientLine(e),
       lookups.locationName(e.location_id),
       lookups.workTypeLabel(e.work_type_level1_id, e.work_type_level2_id),
       formatTaskLabel(e.task),

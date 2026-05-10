@@ -4,6 +4,8 @@ const STORAGE_KEY = 'nbe-timecard:last-entry-prefs'
 
 export type LastUsedEntryPrefs = {
   client_id: string | null
+  /** Absent in legacy cached prefs — treated as “keep entry default”. */
+  client_sub_project_id?: string | null
   location_id: string | null
   work_type_level1_id: string | null
   work_type_level2_id: string | null
@@ -28,6 +30,7 @@ export function writeLastUsedEntryPrefs(entry: EmployeeTimesheetEntry): void {
   try {
     const prefs: LastUsedEntryPrefs = {
       client_id: entry.client_id,
+      client_sub_project_id: entry.client_sub_project_id ?? null,
       location_id: entry.location_id,
       work_type_level1_id: entry.work_type_level1_id,
       work_type_level2_id: entry.work_type_level2_id,
@@ -45,6 +48,8 @@ export function mergeLastUsedIntoEntry(base: EmployeeTimesheetEntry): EmployeeTi
   return {
     ...base,
     client_id: last.client_id ?? base.client_id,
+    client_sub_project_id:
+      last.client_sub_project_id !== undefined ? last.client_sub_project_id : base.client_sub_project_id,
     location_id: last.location_id ?? base.location_id,
     work_type_level1_id: last.work_type_level1_id ?? base.work_type_level1_id,
     work_type_level2_id: last.work_type_level2_id ?? base.work_type_level2_id,

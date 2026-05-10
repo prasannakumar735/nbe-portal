@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Play } from 'lucide-react'
+import { SearchableSelect } from '@/components/ui/SearchableSelect'
 
 interface DropdownOption {
   id: string
@@ -116,21 +117,18 @@ export function TimeEntryForm({
           
           {/* Client */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              Client <span className="text-red-500">*</span>
-            </label>
-            <select
+            <SearchableSelect
+              id="time-entry-form-client"
+              label="Client *"
+              labelClassName="block text-sm font-medium text-slate-700 mb-2"
               value={selectedClient}
-              onChange={(e) => setSelectedClient(e.target.value)}
-              className={`block w-full h-11 rounded-lg border px-3 text-sm bg-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 ${
-                errors.client ? 'border-red-300' : 'border-slate-300'
-              }`}
-            >
-              <option value="">Select a client...</option>
-              {clients.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+              onChange={setSelectedClient}
+              options={clients.map(c => ({ value: c.id, label: c.name }))}
+              allowEmpty
+              emptyLabel="Select a client..."
+              placeholder="Search clients…"
+              className={`[&_button]:h-11 ${errors.client ? '[&_button]:border-red-300' : ''}`}
+            />
             {errors.client && <p className="mt-1 text-xs text-red-600">{errors.client}</p>}
           </div>
 

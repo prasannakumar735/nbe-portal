@@ -8,6 +8,7 @@ import {
   AlertCircle,
   CheckCircle
 } from 'lucide-react'
+import { SearchableSelect } from '@/components/ui/SearchableSelect'
 
 // ==========================================
 // TYPES
@@ -526,17 +527,18 @@ export default function TimeCardPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Client */}
               <div className="space-y-2">
-                <label className="text-xs uppercase tracking-wider text-[#94A3B8]">Client</label>
-                <select
-                  className="block w-full h-11 rounded-md border border-[#D1D5DB] px-3 text-sm text-[#0F172A] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B21B6]/20 focus:border-[#5B21B6] transition-all duration-200"
+                <SearchableSelect
+                  id="page-old-work-client"
+                  label="Client"
+                  labelClassName="text-xs uppercase tracking-wider text-[#94A3B8]"
                   value={selectedClient}
-                  onChange={(e) => handleClientChange(e.target.value)}
-                >
-                  <option value="">Select a client...</option>
-                  {clients.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                  onChange={handleClientChange}
+                  options={clients.map(c => ({ value: c.id, label: c.name }))}
+                  allowEmpty
+                  emptyLabel="Select a client..."
+                  placeholder="Search clients…"
+                  className="[&_button]:h-11 [&_button]:rounded-md [&_button]:border-[#D1D5DB]"
+                />
               </div>
 
               {/* Location */}

@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { CalendarRange } from 'lucide-react'
 import type { EmployeeTimesheetEntry } from '@/lib/types/employee-timesheet.types'
 import { TimecardTable } from '@/components/timecard/TimecardTable'
@@ -30,7 +31,11 @@ export function WeekView(props: Props) {
           <span className="font-medium text-slate-800">Tip:</span> use{' '}
           <span className="font-medium text-slate-700">Add entry</span> per day or{' '}
           <span className="font-medium text-slate-700">Copy previous entry</span>. Edit lines with{' '}
-          <span className="font-medium text-slate-700">Edit</span> on each card.
+          <span className="font-medium text-slate-700">Edit</span> on each card.{' '}
+          <Link href="/office/clock?site=hq" className="font-medium text-indigo-600 hover:text-indigo-700">
+            Office QR clock
+          </Link>{' '}
+          (sign in/out) adds an office line when you leave.
         </p>
       </div>
 

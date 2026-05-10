@@ -19,6 +19,7 @@ import {
   dedupeTimesheetEntriesById,
   findDuplicateEntryIds,
 } from '@/lib/timecard/dedupeTimesheetEntries'
+import { assertSubProjectSelection, SubProjectValidationError } from '@/lib/clients/subProjectGate'
 
 export const runtime = 'nodejs'
 
@@ -35,6 +36,7 @@ function mapRowToEntry(row: Record<string, unknown>): EmployeeTimesheetEntry {
     timesheet_id: row.timesheet_id ? String(row.timesheet_id) : null,
     entry_date: String(row.entry_date ?? '').slice(0, 10),
     client_id: row.client_id ? String(row.client_id) : null,
+    client_sub_project_id: row.client_sub_project_id ? String(row.client_sub_project_id) : null,
     location_id: row.location_id ? String(row.location_id) : null,
     work_type_level1_id: row.work_type_level1_id ? String(row.work_type_level1_id) : null,
     work_type_level2_id: row.work_type_level2_id ? String(row.work_type_level2_id) : null,
@@ -112,11 +114,37 @@ export async function GET(request: NextRequest) {
       (rows ?? []).map(r => mapRowToEntry(r as Record<string, unknown>)),
     )
     merged.sort(compareEntryChronological)
-    return NextResponse.json({ timesheet: sheet, entries: merged })
+    const withSubNames = await attachSubProjectDisplayNames(supabase, merged)
+    return NextResponse.json({ timesheet: sheet, entries: withSubNames })
   } catch (e) {
     console.error('[GET /api/timecard/week]', e)
     return NextResponse.json({ error: 'Failed to load timesheet' }, { status: 500 })
   }
+}
+
+async function attachSubProjectDisplayNames(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+  entries: EmployeeTimesheetEntry[],
+): Promise<EmployeeTimesheetEntry[]> {
+  const ids = [...new Set(entries.map(e => e.client_sub_project_id).filter(Boolean))] as string[]
+  if (ids.length === 0) {
+    return entries.map(e => ({ ...e, client_sub_project_name: null }))
+  }
+  const { data, error } = await supabase.from('client_sub_projects').select('id, name').in('id', ids)
+  if (error || !data) {
+    return entries.map(e => ({ ...e, client_sub_project_name: null }))
+  }
+  const m = new Map<string, string>()
+  for (const row of data) {
+    m.set(String(row.id), String(row.name ?? '').trim())
+  }
+  return entries.map(e => {
+    const sid = e.client_sub_project_id?.trim()
+    return {
+      ...e,
+      client_sub_project_name: sid ? m.get(sid) ?? null : null,
+    }
+  })
 }
 
 type SaveBody = {
@@ -246,6 +274,18 @@ export async function POST(request: NextRequest) {
     for (let i = 0; i < entries.length; i += 1) {
       let e = entries[i]
 
+      try {
+        await assertSubProjectSelection(supabase, {
+          clientId: e.client_id,
+          subProjectId: e.client_sub_project_id,
+        })
+      } catch (err) {
+        if (err instanceof SubProjectValidationError) {
+          return NextResponse.json({ error: err.message }, { status: 400 })
+        }
+        throw err
+      }
+
       if (!e.client_id && e.location_id) {
         const cid = locationIdToClientId.get(String(e.location_id))
         if (cid) {
@@ -283,6 +323,7 @@ export async function POST(request: NextRequest) {
         user_id: user.id,
         entry_date: e.entry_date,
         client_id: e.client_id || null,
+        client_sub_project_id: e.client_sub_project_id || null,
         location_id: e.location_id || null,
         work_type_level1_id: e.work_type_level1_id || null,
         work_type_level2_id: e.work_type_level2_id || null,
@@ -346,9 +387,11 @@ export async function POST(request: NextRequest) {
       .order('entry_date', { ascending: true })
       .order('sort_order', { ascending: true })
 
+    const rawOut = (outRows ?? []).map(r => mapRowToEntry(r as Record<string, unknown>))
+    const entriesOut = await attachSubProjectDisplayNames(supabase, rawOut)
     return NextResponse.json({
       timesheet: updatedSheet,
-      entries: (outRows ?? []).map(r => mapRowToEntry(r as Record<string, unknown>)),
+      entries: entriesOut,
     })
   } catch (e) {
     console.error('[POST /api/timecard/week]', e)

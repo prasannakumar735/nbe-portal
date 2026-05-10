@@ -1,6 +1,7 @@
 'use client'
 
 import { Filter } from 'lucide-react'
+import { SearchableSelect } from '@/components/ui/SearchableSelect'
 
 export type BillableFilterValue = 'all' | 'yes' | 'no'
 
@@ -45,17 +46,20 @@ export function TimecardFilters({
         <span className="text-sm font-semibold tracking-tight">Filters</span>
       </div>
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
-        <label className="min-w-0">
-          <span className={label}>Client</span>
-          <select value={clientId} onChange={e => onClientIdChange(e.target.value)} className={field}>
-            <option value="">All clients</option>
-            {clients.map(c => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="min-w-0">
+          <SearchableSelect
+            id="timecard-filter-client"
+            label="Client"
+            labelClassName={label}
+            value={clientId}
+            onChange={onClientIdChange}
+            options={clients.map(c => ({ value: c.id, label: c.name }))}
+            allowEmpty
+            emptyLabel="All clients"
+            placeholder="Search clients…"
+            className="[&_button]:h-9 [&_button]:rounded-lg"
+          />
+        </div>
         <label className="min-w-0">
           <span className={label}>Billable</span>
           <select

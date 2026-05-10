@@ -12,11 +12,19 @@ import {
   FileText,
   Timer
 } from 'lucide-react'
+import { SearchableSelect } from '@/components/ui/SearchableSelect'
+
+const DEMO_CLIENT_OPTIONS = [
+  { value: 'acme', label: 'Acme Corp' },
+  { value: 'nbe', label: 'NBE Internal' },
+  { value: 'global', label: 'Global Industries' },
+]
 
 export default function TimecardPage() {
   const [isClockedIn, setIsClockedIn] = useState(false)
   const [startTime, setStartTime] = useState<Date | null>(null)
   const [elapsedTime, setElapsedTime] = useState(0)
+  const [demoClientId, setDemoClientId] = useState('')
 
   // Timer effect
   useEffect(() => {
@@ -172,22 +180,21 @@ export default function TimecardPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-8">
               <div className="space-y-6">
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                  <label htmlFor="demo-timecard-client" className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
                     <Briefcase className="w-3.5 h-3.5" /> Client
                   </label>
-                  <div className="relative">
-                    <select className="w-full pl-4 pr-10 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-700 font-medium focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all appearance-none cursor-pointer hover:bg-gray-100/50">
-                      <option>Select Client...</option>
-                      <option>Acme Corp</option>
-                      <option>NBE Internal</option>
-                      <option>Global Industries</option>
-                    </select>
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                      <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                  </div>
+                  <SearchableSelect
+                    id="demo-timecard-client"
+                    label="Client"
+                    labelClassName="sr-only"
+                    value={demoClientId}
+                    onChange={setDemoClientId}
+                    options={DEMO_CLIENT_OPTIONS}
+                    allowEmpty
+                    emptyLabel="Select Client..."
+                    placeholder="Search clients…"
+                    className="[&_button]:w-full [&_button]:bg-gray-50 [&_button]:py-3.5 [&_button]:pl-4 [&_button]:pr-10 [&_button]:rounded-xl [&_button]:border-gray-200 [&_button]:font-medium [&_button]:text-gray-700 [&_button]:hover:bg-gray-100/50"
+                  />
                 </div>
 
                 <div className="space-y-2">

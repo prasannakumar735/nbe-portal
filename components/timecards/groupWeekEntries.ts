@@ -10,9 +10,11 @@ export function toTimeEntryRow(
   locationLabel: (id: string | null) => string,
   workTypeLabel: (l1: string | null, l2: string | null) => string,
 ): TimeEntryRow {
+  const baseClient = clientLabel(e.client_id)
+  const sub = (e.client_sub_project_name ?? '').trim()
   return {
     id: e.id,
-    clientName: clientLabel(e.client_id),
+    clientName: sub ? `${baseClient} · ${sub}` : baseClient,
     locationName: locationLabel(e.location_id),
     workType: workTypeLabel(e.work_type_level1_id, e.work_type_level2_id),
     task: e.task ?? '',
