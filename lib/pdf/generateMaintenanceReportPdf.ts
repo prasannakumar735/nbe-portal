@@ -59,6 +59,11 @@ import { formatMaintenancePdfTime as formatTime } from '@/lib/pdf/utils/formatMa
 import { aggregateSignOffDisplayMetrics, buildSignOffFindingGroups } from '@/lib/maintenance/reportMetrics'
 import { generateMergedReportSignaturePdf } from '@/lib/pdf/mergedReportSignaturePagePdf'
 import { loadNbeLogoBytes } from '@/lib/pdf/loadNbeLogo'
+import {
+  buildDoorMetaSummaryLine,
+  formatMaintenanceInteger,
+  formatMaintenanceNumericField,
+} from '@/lib/maintenance/maintenanceDisplayFormat'
 
 export type MaintenancePdfOptions = {
   form: MaintenanceFormValues
@@ -254,7 +259,7 @@ function drawRepairSummaryPage(
 
   for (const item of items) {
     if (y < FOOTER_MARGIN + 28) break
-    const qty = `${Math.floor(Number(item.quantity) || 0)}x`
+    const qty = `${formatMaintenanceInteger(Math.floor(Number(item.quantity) || 0))}x`
     page.drawText(qty, { x: MARGIN, y, size: 11, font: bold, color: rgb(0.15, 0.16, 0.18) })
 
     const label = String(item.label ?? '').trim() || '-'
@@ -513,19 +518,14 @@ function drawCustomerInfo(
   drawRow('Inspection End', formatTime(form.inspection_end))
   drawRow('Technician', form.technician_name)
   if (mergedTotalDoors?.omitLine !== true) {
-    const doorsStr =
+    const n =
       mergedTotalDoors?.displayValue != null && Number.isFinite(mergedTotalDoors.displayValue)
-        ? String(Math.floor(mergedTotalDoors.displayValue))
-        : String(form.total_doors)
-    drawRow('Total Doors Inspected', doorsStr)
+        ? Math.floor(mergedTotalDoors.displayValue)
+        : Math.floor(Number(form.total_doors) || 0)
+    drawRow('Total Doors Inspected', formatMaintenanceInteger(n))
   }
 
   return y - 10
-}
-
-function formatDoorCyclesPdf(cycles: number | undefined | null): string {
-  const n = Number(cycles)
-  return n > 0 && !Number.isNaN(n) ? String(Math.floor(n)) : 'N/A'
 }
 
 /** Legend metrics — must stay in sync between measure and draw. */
@@ -1012,9 +1012,8 @@ function drawDoorNotes(page: PDFPage, notes: string, startY: number, font: PDFFo
   page.drawText('Door Notes', { x: MARGIN, y, size: 12, font: bold, color: SECTION_COLOR })
   y -= 18
   const raw = (notes || '').trim()
-  const text = raw || '-'
   const prefix = raw ? 'Attention: ' : ''
-  const full = prefix + text
+  const full = raw ? prefix + raw : ''
 
   const pad = 10
   const accentW = 3.5
@@ -1035,9 +1034,8 @@ function drawDoorNotes(page: PDFPage, notes: string, startY: number, font: PDFFo
     }
     lines.push(...wrapPdfTextLines(p, font, fontSize, innerW, { emptyPlaceholder: '' }))
   }
-  if (lines.length === 0) lines.push('-')
 
-  const boxLines = lines.length
+  const boxLines = Math.max(lines.length, 1)
   const boxH = pad * 2 + boxLines * lineH + 6
 
   const boxBottom = y - boxH
@@ -1133,8 +1131,8 @@ function drawDoorSnapshotPdfBlock(
     const rows: Array<[string, string]> = []
     if (String(m?.door_description ?? '').trim()) rows.push(['Description', String(m?.door_description)])
     if (String(m?.door_type_alt ?? '').trim()) rows.push(['Alternate type', String(m?.door_type_alt)])
-    if (String(m?.cw ?? '').trim()) rows.push(['CW', String(m?.cw)])
-    if (String(m?.ch ?? '').trim()) rows.push(['CH', String(m?.ch)])
+    if (String(m?.cw ?? '').trim()) rows.push(['CW', formatMaintenanceNumericField(String(m?.cw))])
+    if (String(m?.ch ?? '').trim()) rows.push(['CH', formatMaintenanceNumericField(String(m?.ch))])
 
     for (const [label, val] of rows) {
       const text = `${label}: ${val}`
@@ -1424,15 +1422,16 @@ export async function generateMaintenanceReportPdf(options: MaintenancePdfOption
     })
     drawDoorStatusBadge(page, doorTitleBaseline, door, bold)
     y -= DOOR_TITLE_GAP
-    const cyclesPdf = formatDoorCyclesPdf(door.door_cycles)
-    const metaLine = `Door Type: ${door.door_type || '-'}  |  Cycles: ${cyclesPdf}  |  View Window Visibility: ${door.view_window_visibility}%`
-    page.drawText(metaLine, {
-      x: MARGIN,
-      y,
-      size: DOOR_META_SIZE,
-      font,
-      color: rgb(0.42, 0.44, 0.48),
-    })
+    const metaLine = buildDoorMetaSummaryLine(door)
+    if (metaLine) {
+      page.drawText(metaLine, {
+        x: MARGIN,
+        y,
+        size: DOOR_META_SIZE,
+        font,
+        color: rgb(0.42, 0.44, 0.48),
+      })
+    }
     y -= DOOR_META_SIZE + 4
     page.drawLine({
       start: { x: MARGIN, y },

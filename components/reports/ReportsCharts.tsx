@@ -77,17 +77,18 @@ export function ReportsCharts({ summary }: { summary: ReportsSummary | null }) {
         <div className="mt-3 h-56 w-full min-w-0 sm:h-64">
           {hasPie ? (
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
+              <PieChart margin={{ top: 4, right: 8, bottom: 8, left: 8 }}>
                 <Pie
                   data={pieData}
                   dataKey="value"
                   nameKey="name"
                   cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
+                  cy="46%"
+                  innerRadius={58}
+                  outerRadius={78}
                   paddingAngle={2}
-                  label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                  label={false}
+                  isAnimationActive={false}
                 >
                   {pieData.map(entry => (
                     <Cell key={entry.name} fill={entry.name === 'Billable' ? COL_BILL : COL_NON} />
@@ -97,7 +98,14 @@ export function ReportsCharts({ summary }: { summary: ReportsSummary | null }) {
                   formatter={(v: number | undefined) => [`${Number(v ?? 0).toLocaleString()} h`, 'Hours']}
                   contentStyle={{ fontSize: 12, borderRadius: 10, border: '1px solid #e2e8f0' }}
                 />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Legend
+                  verticalAlign="bottom"
+                  align="center"
+                  layout="horizontal"
+                  wrapperStyle={{ fontSize: 12, paddingTop: 12, width: '100%' }}
+                  iconType="circle"
+                  formatter={value => <span className="text-slate-700">{value}</span>}
+                />
               </PieChart>
             </ResponsiveContainer>
           ) : (

@@ -311,6 +311,21 @@ export async function buildMaintenancePdfOptions(params: {
     }
   }
 
+  const subProjectId = String(
+    (report as { client_sub_project_id?: string | null } | null)?.client_sub_project_id ?? '',
+  ).trim()
+  if (subProjectId && clientName && clientName !== '-') {
+    const { data: spRow } = await supabase
+      .from('client_sub_projects')
+      .select('name')
+      .eq('id', subProjectId)
+      .maybeSingle()
+    const subName = String(spRow?.name ?? '').trim()
+    if (subName) {
+      clientName = `${clientName} — ${subName}`
+    }
+  }
+
   clientName = clientName || '-'
   locationName = locationName || '-'
 

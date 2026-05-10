@@ -13,6 +13,7 @@ import { MAINTENANCE_CHECKLIST_ITEMS } from '@/lib/types/maintenance.types'
 import { loadMaintenanceReportDraftPayload } from '@/lib/maintenance/loadMaintenanceReportDraftPayload'
 import { maintenanceReportClientViewUrl } from '@/lib/app/publicAppBaseUrl'
 import { uploadSignatureDataUrlToStorage } from '@/lib/maintenance/signatureDataUrlUpload'
+import { assertSubProjectSelection, SubProjectValidationError } from '@/lib/clients/subProjectGate'
 
 export const runtime = 'nodejs'
 
@@ -292,6 +293,14 @@ export async function POST(request: NextRequest) {
 
     const supabase = createWriteClient()
 
+    if (payload.status === 'submitted') {
+      await assertSubProjectSelection(supabase, {
+        clientId: uuidOrEmpty(payload.form.client_id),
+        subProjectId:
+          uuidOrEmpty((payload.form as { client_sub_project_id?: unknown }).client_sub_project_id) || null,
+      })
+    }
+
     let adminUserId: string | null = null
     if (payload.report_id && (payload.admin_edit === true)) {
       const serverSupabase = await createServerClient()
@@ -359,6 +368,8 @@ export async function POST(request: NextRequest) {
       technician_name: String(payload.form.technician_name ?? '').trim() || 'Technician',
       submission_date: payload.form.submission_date ?? new Date().toISOString().slice(0, 10),
       source_app: String(payload.form.source_app ?? 'Portal').trim() || 'Portal',
+      client_sub_project_id:
+        uuidOrEmpty((payload.form as { client_sub_project_id?: unknown }).client_sub_project_id) || null,
       client_location_id: uuidOrEmpty(payload.form.client_location_id) || null,
       address: String(payload.form.address ?? '').trim(),
       inspection_date: payload.form.inspection_date ?? new Date().toISOString().slice(0, 10),
@@ -457,6 +468,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ report_id: reportId, status: persistedStatus, updated_at: updatedAt })
   } catch (error) {
+    if (error instanceof SubProjectValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
     if (error instanceof ZodError) {
       const summary = formatMaintenanceZodIssues(error)
       return NextResponse.json(

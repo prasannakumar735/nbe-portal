@@ -223,6 +223,7 @@ export async function loadMaintenanceReportDraftPayload(
       submission_date: report.submission_date,
       source_app: report.source_app,
       client_id: clientId,
+      client_sub_project_id: String((report as { client_sub_project_id?: unknown }).client_sub_project_id ?? '').trim(),
       client_name: clientName,
       client_location_id: resolvedClientLocationId,
       client_location_name: locationName,

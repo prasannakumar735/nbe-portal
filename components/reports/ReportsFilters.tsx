@@ -2,6 +2,7 @@
 
 import type { BillableFilter, FilterOptions, ReportsFilters } from '@/lib/reports/types'
 import { presetLastMonth, presetThisWeek } from '@/lib/reports/parseFilters'
+import { SearchableSelect } from '@/components/ui/SearchableSelect'
 
 type Props = {
   filters: ReportsFilters
@@ -90,21 +91,20 @@ export function ReportsFilters({
               required
             />
           </label>
-          <label className="block min-w-0">
-            <span className="mb-1 block text-xs font-medium text-slate-600">Client</span>
-            <select
-              className={selectClass}
+          <div className="block min-w-0">
+            <SearchableSelect
+              id="reports-filter-client"
+              label="Client"
+              labelClassName="mb-1 block text-xs font-medium text-slate-600"
               value={filters.clientId ?? ''}
-              onChange={e => set('clientId', e.target.value || null)}
-            >
-              <option value="">All clients</option>
-              {(options?.clients ?? []).map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              onChange={v => set('clientId', v || null)}
+              options={(options?.clients ?? []).map(c => ({ value: c.id, label: c.name }))}
+              allowEmpty
+              emptyLabel="All clients"
+              placeholder="Search clients…"
+              className="[&_button]:h-9 [&_button]:rounded-xl [&_button]:border-slate-200/90 [&_button]:px-2.5 [&_button]:text-sm [&_button]:shadow-sm [&_button]:ring-slate-900/[0.04]"
+            />
+          </div>
           <label className="block min-w-0">
             <span className="mb-1 block text-xs font-medium text-slate-600">Location</span>
             <select

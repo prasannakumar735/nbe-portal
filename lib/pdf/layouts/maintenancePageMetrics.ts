@@ -9,7 +9,7 @@ export const FOOTER_MARGIN = 40
 /** Minimum baseline Y before starting a new content row/block (room above footer). */
 export const PAGE_BREAK_Y = FOOTER_MARGIN + 82
 /** Max thumbnail box edge (points); larger for technician readability. */
-export const PHOTO_THUMB_MAX_PT = 120
+export const PHOTO_THUMB_MAX_PT = 240
 
 export const SECTION_COLOR = rgb(0.08, 0.14, 0.38)
 /** Table header — gray-100 */

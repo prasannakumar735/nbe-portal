@@ -24,17 +24,15 @@ import type {
 import type { MaintenanceDoorPhoto } from '@/lib/types/maintenance.types'
 import type { MaintenanceFormValues } from '@/lib/types/maintenance.types'
 import { doorMasterSnapshotFromRegistry } from '@/lib/maintenance/doorMasterFromRegistry'
+import {
+  buildDoorMetaSummaryLine,
+  formatMaintenanceInteger,
+  formatMaintenanceNumericField,
+} from '@/lib/maintenance/maintenanceDisplayFormat'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 
 /** Select value when technician adds a door not listed in the site registry. */
 const OPTION_ADD_DOOR_MANUALLY = '__adhoc_manual__'
-
-/** Server / legacy default stored when door_type was empty — show as empty/— in the UI, not a fake user value. */
-function formatInspectorDoorType(raw: unknown): string {
-  const s = String(raw ?? '').trim()
-  if (!s || s.toLowerCase() === 'unspecified') return '—'
-  return s
-}
 
 function extractDoorSerial(label: string): string | null {
   const raw = String(label ?? '')
@@ -235,9 +233,7 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
 
   const doorNumberLabel = String(door.door_number ?? '').trim() || String(index + 1)
   const serialForHeader = compactLabels ? extractDoorSerial(doorNumberLabel) : null
-  const cyclesNum = Number(door.door_cycles)
-  const cyclesDisplay = cyclesNum > 0 && !Number.isNaN(cyclesNum) ? cyclesNum : 'N/A'
-  const visibilityPct = door.view_window_visibility
+  const doorMetaSummary = buildDoorMetaSummaryLine(door)
   const hasMeaningfulHistory = history.some(item => String(item.technician_notes ?? '').trim().length > 0)
 
   const formatHistoryDate = (item: DoorInspectionHistoryItem) => {
@@ -270,10 +266,7 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
               </span>
             )}
           </div>
-          <p className="mt-1 text-sm">
-            Door Type: {formatInspectorDoorType(door.door_type)} &nbsp; | &nbsp; Cycles: {cyclesDisplay} &nbsp; | &nbsp; View Window
-            Visibility: {visibilityPct}%
-          </p>
+          <p className="mt-1 text-sm">{doorMetaSummary}</p>
           <hr className="my-3 border-t border-dashed border-gray-400" />
           <p className="text-xs text-slate-500">{completionLabel}</p>
         </div>
@@ -472,23 +465,32 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
 
               <label className="text-sm font-medium text-slate-700">
                 Door Cycles
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  placeholder="Enter door cycle count"
-                  {...register(`doors.${index}.door_cycles`, {
-                    required: true,
-                    setValueAs: value => {
-                      const digits = toDigitsOnly(String(value ?? ''))
-                      return digits === '' ? 0 : Number(digits)
-                    },
-                  })}
-                  onInput={event => {
-                    const input = event.currentTarget
-                    input.value = toDigitsOnly(input.value)
+                <Controller
+                  control={control}
+                  name={`${doorBasePath}.door_cycles` as FieldPath<MaintenanceFormValues>}
+                  rules={{ required: true }}
+                  render={({ field }) => {
+                    const n = Number(field.value)
+                    const display =
+                      Number.isFinite(n) && n > 0 ? formatMaintenanceInteger(Math.floor(n)) : ''
+                    return (
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        placeholder="Enter door cycle count"
+                        value={display}
+                        onChange={e => {
+                          const d = toDigitsOnly(e.target.value)
+                          field.onChange(d === '' ? 0 : Number(d))
+                        }}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
+                        className="mt-1 h-12 w-full rounded-xl border border-slate-300 px-3 pb-2 text-base"
+                      />
+                    )
                   }}
-                  className="mt-1 h-12 w-full rounded-xl border border-slate-300 px-3 pb-2 text-base"
                 />
                 <p className="mt-1 text-xs text-slate-500">Enter the door cycle count from the control panel.</p>
               </label>
@@ -499,10 +501,12 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
                     CW
                     <input
                       type="text"
-                      value={String(door.door_master?.cw ?? '')}
+                      inputMode="numeric"
+                      autoComplete="off"
+                      value={formatMaintenanceNumericField(String(door.door_master?.cw ?? ''))}
                       onChange={e => {
-                        const v = e.target.value
-                        setMasterField('cw', v === '' ? null : v)
+                        const d = toDigitsOnly(e.target.value)
+                        setMasterField('cw', d === '' ? null : d)
                       }}
                       disabled={disabled}
                       placeholder="Curtain width (optional)"
@@ -513,10 +517,12 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
                     CH
                     <input
                       type="text"
-                      value={String(door.door_master?.ch ?? '')}
+                      inputMode="numeric"
+                      autoComplete="off"
+                      value={formatMaintenanceNumericField(String(door.door_master?.ch ?? ''))}
                       onChange={e => {
-                        const v = e.target.value
-                        setMasterField('ch', v === '' ? null : v)
+                        const d = toDigitsOnly(e.target.value)
+                        setMasterField('ch', d === '' ? null : d)
                       }}
                       disabled={disabled}
                       placeholder="Curtain height (optional)"
@@ -528,25 +534,38 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
 
               <label className="text-sm font-medium text-slate-700 md:col-span-2">
                 View Window Visibility (%)
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  placeholder="0 - 100"
-                  {...register(`doors.${index}.view_window_visibility`, {
-                    required: true,
-                    min: 0,
-                    max: 100,
-                    setValueAs: value => {
-                      const digits = toDigitsOnly(String(value ?? ''))
-                      return digits === '' ? 0 : Number(digits)
-                    },
-                  })}
-                  onInput={event => {
-                    const input = event.currentTarget
-                    input.value = toDigitsOnly(input.value)
+                <Controller
+                  control={control}
+                  name={`${doorBasePath}.view_window_visibility` as FieldPath<MaintenanceFormValues>}
+                  rules={{ required: true, min: 0, max: 100 }}
+                  render={({ field }) => {
+                    const n = Number(field.value)
+                    const display = Number.isFinite(n)
+                      ? formatMaintenanceInteger(Math.min(100, Math.max(0, Math.floor(n))))
+                      : ''
+                    return (
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        placeholder="0 - 100"
+                        value={display}
+                        onChange={e => {
+                          const d = toDigitsOnly(e.target.value)
+                          if (d === '') {
+                            field.onChange(0)
+                            return
+                          }
+                          const raw = Number(d)
+                          field.onChange(Number.isFinite(raw) ? Math.min(100, Math.max(0, raw)) : 0)
+                        }}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
+                        className="mt-1 h-12 w-full rounded-xl border border-slate-300 px-3 pb-2 text-base"
+                      />
+                    )
                   }}
-                  className="mt-1 h-12 w-full rounded-xl border border-slate-300 px-3 pb-2 text-base"
                 />
                 <p className="mt-1 text-xs text-slate-500">Enter percentage visibility of door viewing panel.</p>
               </label>

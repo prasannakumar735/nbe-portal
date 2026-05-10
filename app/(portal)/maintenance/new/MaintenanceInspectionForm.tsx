@@ -47,6 +47,7 @@ import {
   maintenanceFormDraftSchema,
   maintenanceFormSubmitSchema,
 } from '@/lib/validation/maintenance'
+import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { downloadFile, type DownloadProgress } from '@/lib/browser/downloadFile'
 
 const STORAGE_KEY = 'nbe-maintenance-draft'
@@ -108,6 +109,7 @@ function getDefaultFormValues(): MaintenanceFormValues {
     submission_date: todayIsoDate(),
     source_app: 'Portal',
     client_id: '',
+    client_sub_project_id: '',
     client_location_id: '',
     address: '',
     inspection_date: todayIsoDate(),
@@ -416,6 +418,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   const offlineEditId = searchParams.get('offline_id') ?? searchParams.get('offlineId')
   const [clients, setClients] = useState<ClientOption[]>([])
   const [locations, setLocations] = useState<ClientLocationOption[]>([])
+  const [subProjectOptions, setSubProjectOptions] = useState<Array<{ id: string; name: string }>>([])
   const [savedClientName, setSavedClientName] = useState('')
   const [savedLocationName, setSavedLocationName] = useState('')
   const [availableDoors, setAvailableDoors] = useState<MaintenanceAvailableDoor[]>([])
@@ -610,6 +613,32 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
 
   const watchedClientLocationId = useWatch({ control, name: 'client_location_id', defaultValue: '' })
   const watchedClientId = useWatch({ control, name: 'client_id', defaultValue: '' })
+
+  useEffect(() => {
+    const id = String(watchedClientId ?? '').trim()
+    if (!id) {
+      setSubProjectOptions([])
+      setValue('client_sub_project_id', '', { shouldDirty: false })
+      return
+    }
+    let cancelled = false
+    void fetch(`/api/clients/sub-projects?clientId=${encodeURIComponent(id)}`)
+      .then(res => res.json() as Promise<{ subProjects?: Array<{ id: string; name: string }> }>)
+      .then(data => {
+        if (cancelled) return
+        const list = data.subProjects ?? []
+        setSubProjectOptions(list)
+        if (list.length === 0) {
+          setValue('client_sub_project_id', '', { shouldDirty: true })
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSubProjectOptions([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [watchedClientId, setValue])
   const watchedTotalDoors = useWatch({ control, name: 'total_doors', defaultValue: 1 })
   const watchedReportId = useWatch({ control, name: 'report_id', defaultValue: undefined })
   const watchedNotes = useWatch({ control, name: 'notes', defaultValue: '' })
@@ -666,6 +695,16 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     if (clients.some(client => client.id === watchedClientId)) return clients
     return [{ id: watchedClientId, name: savedClientName || 'Saved client' }, ...clients]
   }, [clients, watchedClientId, savedClientName])
+
+  const clientSearchSelectOptions = useMemo(
+    () => clientOptions.map(c => ({ value: c.id, label: c.name })),
+    [clientOptions],
+  )
+
+  const subProjectSearchSelectOptions = useMemo(
+    () => subProjectOptions.map(p => ({ value: p.id, label: p.name })),
+    [subProjectOptions],
+  )
 
   const locationOptions = useMemo(() => {
     if (!watchedClientLocationId) return locations
@@ -1978,38 +2017,71 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">2. Client & Location</h2>
           <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <label className="text-sm font-medium text-slate-700">
-              Client
+            <div className="min-w-0">
               <Controller
                 name="client_id"
                 control={control}
                 render={({ field }) => (
-                  <select
-                    ref={field.ref}
-                    name={field.name}
+                  <SearchableSelect
+                    id="maintenance-report-client"
+                    label="Client"
+                    labelClassName="block text-sm font-medium text-slate-700"
                     value={field.value ?? ''}
-                    onBlur={field.onBlur}
-                    className="mt-1 h-12 w-full rounded-xl border border-slate-300 px-3 text-base"
-                    onChange={async event => {
-                      const selectedId = event.target.value
+                    disabled={isLocked && !isAdminMode}
+                    options={clientSearchSelectOptions}
+                    allowEmpty
+                    emptyLabel="Select client"
+                    placeholder="Search clients…"
+                    className="mt-1"
+                    onChange={async next => {
+                      const selectedId = next ?? ''
                       field.onChange(selectedId)
+                      field.onBlur()
+                      setValue('client_sub_project_id', '', { shouldDirty: true, shouldValidate: true })
                       setValue('client_location_id', '', { shouldDirty: true, shouldValidate: true })
                       setValue('address', '', { shouldDirty: true, shouldValidate: true })
                       void offlineSetLastSelection({ client_id: selectedId, client_location_id: '' })
                       await loadLocationsForClient(selectedId)
                     }}
-                  >
-                    <option value="">Select client</option>
-                    {clientOptions.map(client => (
-                      <option key={client.id} value={client.id}>
-                        {client.name}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 )}
               />
-              {errors.client_id && <span className="text-xs text-red-600">{errors.client_id.message}</span>}
-            </label>
+              {errors.client_id ? (
+                <span className="mt-1 block text-xs text-red-600">{errors.client_id.message}</span>
+              ) : null}
+            </div>
+
+            {subProjectOptions.length > 0 ? (
+              <div className="min-w-0">
+                <Controller
+                  name="client_sub_project_id"
+                  control={control}
+                  render={({ field }) => (
+                    <SearchableSelect
+                      id="maintenance-report-sub-project"
+                      label="Sub-project (optional)"
+                      labelClassName="block text-sm font-medium text-slate-700"
+                      value={field.value ?? ''}
+                      disabled={isLocked && !isAdminMode}
+                      options={subProjectSearchSelectOptions}
+                      allowEmpty
+                      emptyLabel="No sub-project"
+                      placeholder="Search sub-projects…"
+                      className="mt-1"
+                      onChange={next => {
+                        field.onChange(next)
+                        field.onBlur()
+                      }}
+                    />
+                  )}
+                />
+                {errors.client_sub_project_id ? (
+                  <span className="mt-1 block text-xs text-red-600">
+                    {errors.client_sub_project_id.message}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
 
             <label className="text-sm font-medium text-slate-700">
               Location
@@ -2032,6 +2104,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                       const currentClientId = String(getValues('client_id') ?? '').trim()
                       if (locationClientId && locationClientId !== currentClientId) {
                         setValue('client_id', locationClientId, { shouldDirty: true, shouldValidate: true })
+                        setValue('client_sub_project_id', '', { shouldDirty: true, shouldValidate: true })
                       }
                       void offlineSetLastSelection({
                         client_id: locationClientId || currentClientId,
