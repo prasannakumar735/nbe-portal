@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/office-clock/auto-close-forgotten",
+      "schedule": "*/10 * * * *"
+    }
+  ]
+}

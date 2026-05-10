@@ -86,6 +86,7 @@ const formHeaderDraft = {
   source_app: z.string().default('Portal'),
   /** Accept any string; invalid UUIDs are normalized to '' server-side / before submit. */
   client_id: z.string().optional().default(''),
+  client_sub_project_id: z.string().optional().default(''),
   client_location_id: z.string().optional().default(''),
   address: z.string().max(255).optional().default(''),
   inspection_date: z.string().optional().default(''),
@@ -169,6 +170,10 @@ export const maintenanceFormSubmitSchema = z
     submission_date: z.string().min(1),
     source_app: z.string().default('Portal'),
     client_id: z.string().uuid('Client is required'),
+    client_sub_project_id: z.preprocess(
+      v => (v === '' || v == null ? undefined : v),
+      z.string().uuid().optional(),
+    ),
     client_location_id: z.string().uuid('Location is required'),
     address: z.string().max(255).optional(),
     inspection_date: z.string().min(1, 'Inspection date is required'),

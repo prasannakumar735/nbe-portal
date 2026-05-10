@@ -5,6 +5,7 @@ import {
   fetchMaintenanceReportByShareToken,
 } from '@/lib/maintenance-reports/clientAccess'
 import { createPdfBinaryResponse } from '@/lib/http/pdfBinaryResponse'
+import { loadClientPortalPdfScope } from '@/lib/client-portal/loadClientPortalPdfScope'
 
 export const runtime = 'nodejs'
 
@@ -27,23 +28,17 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { data: profile } = await serverSupabase
-      .from('profiles')
-      .select('role, client_id')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    if (profile?.role !== 'client') {
+    const scope = await loadClientPortalPdfScope(user.id)
+    if (!scope.ok) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const userClientId = profile.client_id ? String(profile.client_id) : null
     const row = await fetchMaintenanceReportByShareToken(accessToken)
     if (!row) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
-    const gate = checkMaintenanceReportClientGate(row, userClientId)
+    const gate = checkMaintenanceReportClientGate(row, scope.clientId, scope.portalLocationId)
     if (gate === 'not_approved') {
       return NextResponse.json({ error: 'Report is not approved for sharing' }, { status: 403 })
     }

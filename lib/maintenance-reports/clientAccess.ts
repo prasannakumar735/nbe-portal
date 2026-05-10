@@ -9,6 +9,8 @@ export type MaintenanceReportClientAccessRow = {
   pdf_url: string | null
   client_id: string | null
   client_name: string | null
+  /** Site row on the maintenance report (for location-scoped portal users). */
+  client_location_id: string | null
 }
 
 /**
@@ -65,6 +67,8 @@ export async function fetchMaintenanceReportByShareToken(
     }
   }
 
+  const resolvedLocId = locId || null
+
   return {
     id: r.id,
     status: r.status,
@@ -73,16 +77,23 @@ export async function fetchMaintenanceReportByShareToken(
     pdf_url: r.pdf_url,
     client_id: clientId,
     client_name: clientName,
+    client_location_id: resolvedLocId,
   }
 }
 
 export function checkMaintenanceReportClientGate(
   row: MaintenanceReportClientAccessRow,
   userClientId: string | null | undefined,
+  portalLocationId?: string | null,
 ): 'ok' | 'wrong_client' | 'not_approved' | 'no_client_profile' | 'no_pdf' {
   if (!row.pdf_url?.trim()) return 'no_pdf'
   if (row.status !== 'approved' || !row.approved) return 'not_approved'
   if (!userClientId) return 'no_client_profile'
   if (!row.client_id || row.client_id !== userClientId) return 'wrong_client'
+  const scope = String(portalLocationId ?? '').trim()
+  if (scope) {
+    const rowLoc = String(row.client_location_id ?? '').trim()
+    if (!rowLoc || rowLoc !== scope) return 'wrong_client'
+  }
   return 'ok'
 }

@@ -9,7 +9,7 @@ export default function ClientDashboardPage() {
         <Link href="/client" className="font-semibold text-slate-900 underline">
           Client home
         </Link>
-        <Link href="/client/login" className="text-slate-600 underline">
+        <Link href="/login?next=/client" className="text-slate-600 underline">
           Sign in
         </Link>
       </div>

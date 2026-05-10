@@ -71,8 +71,11 @@ export function setLoginAtNow(): void {
 }
 
 export function loginRedirectPath(pathname: string): string {
-  if (pathname.startsWith('/client') && !pathname.startsWith('/client/login')) {
-    return '/client/login'
+  if (pathname.startsWith('/client/login')) {
+    return '/login?next=/client'
+  }
+  if (pathname.startsWith('/client')) {
+    return `/login?next=${encodeURIComponent(pathname)}`
   }
   return '/login'
 }

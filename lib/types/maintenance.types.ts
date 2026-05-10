@@ -255,6 +255,8 @@ export type MaintenanceFormValues = {
   submission_date: string
   source_app: string
   client_id: string
+  /** Sub-project under client when configured in client_sub_projects. */
+  client_sub_project_id?: string
   client_location_id: string
   address: string
   inspection_date: string

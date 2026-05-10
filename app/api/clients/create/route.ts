@@ -58,7 +58,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: result.error }, { status: 400 })
   }
 
-  const loginUrl = new URL('/client/login', request.nextUrl.origin).toString()
+  const loginUrlObj = new URL('/login', request.nextUrl.origin)
+  loginUrlObj.searchParams.set('next', '/client')
+  const loginUrl = loginUrlObj.toString()
   let emailSent = false
   let emailError: string | undefined
 

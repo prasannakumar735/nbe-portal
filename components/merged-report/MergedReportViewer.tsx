@@ -48,31 +48,34 @@ export function MergedReportViewer({
 
   return (
     <ClientReportChrome>
-      <div className="mx-auto max-w-5xl px-6 py-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{title}</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          This document summarises the inspection findings for your facility.
-        </p>
-        <div className="mt-3 text-sm text-gray-600">
-          Prepared for{' '}
-          <span className="font-medium text-gray-900">{preparedFor}</span>
+      <div className="mx-auto w-full max-w-6xl space-y-6 px-0 py-6">
+        <div className="rounded-xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>
+          <p className="mt-1 text-sm leading-relaxed text-slate-600">
+            This document summarises the inspection findings for your facility.
+          </p>
+          <div className="mt-3 text-sm text-slate-600">
+            Prepared for <span className="font-medium text-slate-900">{preparedFor}</span>
+          </div>
+          <div className="mt-4">
+            <a
+              href={pdfSrc}
+              download="maintenance-inspection-report.pdf"
+              className="inline-flex items-center gap-2 rounded-lg bg-black px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-800"
+            >
+              <span aria-hidden>⬇</span>
+              Download PDF
+            </a>
+          </div>
         </div>
-        <div className="mt-4">
-          <a
-            href={pdfSrc}
-            download="maintenance-inspection-report.pdf"
-            className="inline-flex items-center gap-2 rounded-lg bg-black px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-800"
-          >
-            <span aria-hidden>⬇</span>
-            Download PDF
-          </a>
-        </div>
-      </div>
 
-      <div className="flex min-h-0 flex-1 flex-col bg-gray-100 py-6">
-        <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col px-6">
-          <div className="relative w-full min-h-[31.25rem] h-[min(85vh,56rem)] overflow-hidden rounded-xl bg-gray-100 shadow-sm">
-            {mounted ? <PdfViewer fileUrl={pdfSrc} title={title} /> : <LoadingPlaceholder />}
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="relative min-h-[31.25rem] h-[min(85vh,56rem)] overflow-hidden rounded-xl bg-slate-100">
+            {mounted ? (
+              <PdfViewer fileUrl={pdfSrc} title={title} />
+            ) : (
+              <LoadingPlaceholder />
+            )}
           </div>
         </div>
       </div>

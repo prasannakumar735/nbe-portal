@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/app/providers/AuthProvider';
 import type { ClientLocationRecord, ClientOption, ClientRecord, ClientLocationOption, DoorRecord } from '@/lib/types/maintenance.types';
 import { createClientSchema, csvDoorRowSchema, } from '@/lib/validation/admin-clients';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 type TabKey = 'clients' | 'locations' | 'doors';
 type ApiResult<T> = {
     ok: true;
@@ -571,22 +572,35 @@ export default function AdminClientsPage() {
 
       {activeTab === 'locations' && (<section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-3 grid gap-2 md:grid-cols-2">
-            <select value={selectedClientId} onChange={event => {
-                const value = event.target.value;
+            <SearchableSelect
+              id="admin-locations-filter-client"
+              label="Filter by client"
+              value={selectedClientId}
+              onChange={value => {
                 setSelectedClientId(value);
                 locationForm.setValue('client_id', value);
-            }} className="h-10 rounded-lg border border-slate-300 px-3 text-sm">
-              <option value="">Select client</option>
-              {clientOptions.map(client => (<option key={client.id} value={client.id}>{client.name}</option>))}
-            </select>
+              }}
+              options={clientOptions.map(c => ({ value: c.id, label: c.name }))}
+              allowEmpty
+              emptyLabel="Select client"
+              placeholder="Search clients…"
+              className="[&_button]:h-10"
+            />
             <input value={locationSearch} onChange={event => setLocationSearch(event.target.value)} placeholder="Search locations..." className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
           </div>
 
           <form className="mb-4 grid gap-2 md:grid-cols-5" onSubmit={locationForm.handleSubmit(onSubmitLocation)}>
-            <select {...locationForm.register('client_id')} className="h-10 rounded-lg border border-slate-300 px-3 text-sm">
-              <option value="">Select client</option>
-              {clientOptions.map(client => (<option key={client.id} value={client.id}>{client.name}</option>))}
-            </select>
+            <SearchableSelect
+              id="admin-location-form-client"
+              label="Client"
+              value={locationForm.watch('client_id')}
+              onChange={v => locationForm.setValue('client_id', v, { shouldValidate: true, shouldDirty: true })}
+              options={clientOptions.map(c => ({ value: c.id, label: c.name }))}
+              allowEmpty
+              emptyLabel="Select client"
+              placeholder="Search clients…"
+              className="[&_button]:h-10"
+            />
             <input {...locationForm.register('location_name')} placeholder="Location name" className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
             <input {...locationForm.register('Company_address')} placeholder="Address" className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
             <input {...locationForm.register('suburb')} placeholder="Suburb (optional)" className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
@@ -635,10 +649,17 @@ export default function AdminClientsPage() {
 
       {activeTab === 'doors' && (<section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-3 grid gap-2 md:grid-cols-4">
-            <select value={selectedClientId} onChange={event => setSelectedClientId(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm">
-              <option value="">Select client</option>
-              {clientOptions.map(client => (<option key={client.id} value={client.id}>{client.name}</option>))}
-            </select>
+            <SearchableSelect
+              id="admin-doors-filter-client"
+              label="Client"
+              value={selectedClientId}
+              onChange={setSelectedClientId}
+              options={clientOptions.map(c => ({ value: c.id, label: c.name }))}
+              allowEmpty
+              emptyLabel="Select client"
+              placeholder="Search clients…"
+              className="[&_button]:h-10"
+            />
             <select value={selectedLocationId} onChange={event => setSelectedLocationId(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm">
               <option value="">Select location</option>
               {filteredLocationsForClient.map(location => (<option key={location.id} value={location.id}>{location.name}</option>))}

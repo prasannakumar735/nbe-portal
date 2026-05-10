@@ -46,11 +46,11 @@ export function ApprovalSignOffSummary({
     <div className="mx-auto max-w-3xl px-4 py-6">
       <header className="mb-6 flex items-center gap-6">
         <Image
-          src="/Logo_black.png"
+          src="/NBE_LOGO_2026_BG.svg"
           alt="NBE Australia"
-          width={120}
-          height={40}
-          className="h-12 w-auto object-contain"
+          width={170}
+          height={56}
+          className="h-14 w-auto object-contain"
           priority
         />
         <h1 className="text-2xl font-semibold text-blue-900">Approval &amp; Sign-off</h1>

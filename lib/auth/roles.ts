@@ -17,6 +17,8 @@ export type ProfileFromTable = {
   is_active?: boolean | null
   /** Set when role is client — must match merged_reports.client_id */
   client_id?: string | null
+  /** When set, client portal lists/PDFs/gallery are limited to this client_locations row (same client_id). */
+  client_portal_location_id?: string | null
 }
 
 /** True for manager or admin (maintenance approvals, timecard approvals, /manager routes). */
@@ -38,12 +40,16 @@ export function isManager(profile: ProfileFromTable | null | undefined): boolean
   return profile?.role === 'manager'
 }
 
+/** Raw profiles.role value — technician or legacy employee alias. */
+export function isTechnicianRole(role: string | null | undefined): boolean {
+  return role === 'technician' || role === 'employee'
+}
+
 /**
  * Technician (or legacy "employee" role stored in DB).
  */
 export function isTechnician(profile: ProfileFromTable | null | undefined): boolean {
-  const r = profile?.role
-  return r === 'technician' || r === 'employee'
+  return isTechnicianRole(profile?.role)
 }
 
 /** External client org user — merged report viewer only. */

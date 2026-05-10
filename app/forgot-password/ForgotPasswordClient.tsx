@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from 'react'
 import Link from 'next/link'
 import { TurnstileWidget, type TurnstileWidgetHandle } from '@/components/security/TurnstileWidget'
+import { AuthScreenLogo } from '@/components/common/AuthScreenLogo'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { sanitizePlainText } from '@/lib/validation/safeText'
@@ -71,8 +72,8 @@ export function ForgotPasswordClient({ cspNonce }: ForgotPasswordClientProps) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <div className="mb-6 flex justify-center">
-          <img src="/Logo_black.png" alt="NBE Australia" className="h-10 w-auto object-contain" />
+        <div className="mb-6 flex justify-center overflow-hidden">
+          <AuthScreenLogo />
         </div>
         <h1 className="text-center text-xl font-semibold text-slate-900">Forgot password</h1>
         <p className="mt-2 text-center text-sm text-slate-500">

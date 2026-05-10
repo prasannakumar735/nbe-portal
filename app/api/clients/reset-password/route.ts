@@ -58,7 +58,9 @@ export async function POST(request: Request) {
   const name = String(row?.name ?? '')
   const companyName = String(row?.company_name ?? '')
 
-  const loginUrl = new URL('/client/login', new URL(request.url).origin).toString()
+  const loginUrlObj = new URL('/login', new URL(request.url).origin)
+  loginUrlObj.searchParams.set('next', '/client')
+  const loginUrl = loginUrlObj.toString()
   let emailSent = false
   let emailError: string | undefined
 

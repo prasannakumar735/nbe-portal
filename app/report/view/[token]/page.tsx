@@ -5,6 +5,9 @@ import { ClientReportMessage } from '@/components/merged-report/ClientReportMess
 import { checkMergedReportClientGate, fetchMergedReportByAccessToken, } from '@/lib/merged-reports/serverAccess';
 import { recordMergedReportView } from '@/lib/merged-reports/recordView';
 import { checkMaintenanceReportClientGate, fetchMaintenanceReportByShareToken, } from '@/lib/maintenance-reports/clientAccess';
+import { resolveValidatedPortalLocationId } from '@/lib/client-portal/getClientPortalSession';
+import { safeProfilePortalLocationId } from '@/lib/client-portal/safeProfilePortalLocationId';
+import { mergedReportAllowedForClientPortal } from '@/lib/client-portal/clientMaintenancePortal';
 type PageProps = {
     params: Promise<{
         token: string;
@@ -20,7 +23,7 @@ export default async function ReportViewPage({ params }: PageProps) {
     const { data: { user }, } = await supabase.auth.getUser();
     const viewPath = `/report/view/${encodeURIComponent(accessToken)}`;
     if (!user) {
-        redirect(`/client/login?redirect=${encodeURIComponent(viewPath)}`);
+        redirect(`/login?next=${encodeURIComponent(viewPath)}`);
     }
     const { data: profile } = await supabase
         .from('profiles')
@@ -31,6 +34,8 @@ export default async function ReportViewPage({ params }: PageProps) {
         return (<ClientReportMessage title="Access restricted" description="This secure link is only for client accounts. Please sign in with your client portal credentials."/>);
     }
     const userClientId = profile.client_id ? String(profile.client_id) : null;
+    const portalRaw = await safeProfilePortalLocationId(user.id);
+    const portalLocationId = userClientId ? await resolveValidatedPortalLocationId(userClientId, portalRaw) : null;
     const mergedRow = await fetchMergedReportByAccessToken(accessToken);
     if (mergedRow) {
         const gate = checkMergedReportClientGate(mergedRow, userClientId);
@@ -39,6 +44,12 @@ export default async function ReportViewPage({ params }: PageProps) {
         }
         if (gate === 'wrong_client' || gate === 'no_client_profile') {
             return (<ClientReportMessage title="Access denied" description="You do not have access to this report. If you believe this is an error, contact NBE support."/>);
+        }
+        if (portalLocationId && userClientId) {
+            const locOk = await mergedReportAllowedForClientPortal(mergedRow.id, userClientId, portalLocationId);
+            if (!locOk) {
+                return (<ClientReportMessage title="Access denied" description="This summary includes sites outside your portal access. Contact NBE support if you need the full organisation report."/>);
+            }
         }
         if (!mergedRow.pdf_storage_path) {
             return (<ClientReportMessage title="Report not ready" description="Unable to load report. Please contact support."/>);
@@ -52,7 +63,7 @@ export default async function ReportViewPage({ params }: PageProps) {
     if (!singleRow) {
         return (<ClientReportMessage title="Report unavailable" description="This link is not valid or the report is no longer available."/>);
     }
-    const singleGate = checkMaintenanceReportClientGate(singleRow, userClientId);
+    const singleGate = checkMaintenanceReportClientGate(singleRow, userClientId, portalLocationId);
     if (singleGate === 'not_approved') {
         return (<ClientReportMessage title="Report not shared" description="This report is not yet approved for client viewing."/>);
     }

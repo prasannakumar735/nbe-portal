@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import type { ClientUserRow, ClientUserStatus } from '@/lib/types/client-users.types'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { SearchableSelect } from '@/components/ui/SearchableSelect'
 
 function formatDate(iso: string): string {
   try {
@@ -361,29 +362,23 @@ function CreateClientModal({
       <form onSubmit={submit} className="space-y-3">
         <Field label="Client name" value={name} onChange={setName} required autoComplete="name" />
         <div>
-          <label htmlFor="create-client-org" className="block text-sm font-medium text-slate-800">
-            Organisation (reports access) <span className="text-red-600">*</span>
-          </label>
-          <select
+          <SearchableSelect
             id="create-client-org"
-            required
+            label="Organisation (reports access) *"
+            labelClassName="block text-sm font-medium text-slate-800"
             value={clientOrgId}
             disabled={orgLoading}
-            onChange={(e) => {
-              const v = e.target.value
+            onChange={(v) => {
               setClientOrgId(v)
               const opt = orgOptions.find((o) => o.id === v)
               if (opt && !companyName.trim()) setCompanyName(opt.name)
             }}
-            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-          >
-            <option value="">{orgLoading ? 'Loading organisations…' : 'Select maintenance client…'}</option>
-            {orgOptions.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
+            options={orgOptions.map((o) => ({ value: o.id, label: o.name }))}
+            allowEmpty
+            emptyLabel={orgLoading ? 'Loading organisations…' : 'Select maintenance client…'}
+            placeholder="Search organisations…"
+            className="[&_button]:mt-1 [&_button]:py-2"
+          />
           <p className="mt-1 text-xs text-slate-500">
             Must match the client on merged reports — required for /report/view access.
           </p>
@@ -544,29 +539,23 @@ function EditClientModal({
       <form onSubmit={submit} className="space-y-3">
         <Field label="Client name" value={name} onChange={setName} required />
         <div>
-          <label htmlFor="edit-client-org" className="block text-sm font-medium text-slate-800">
-            Organisation (reports access) <span className="text-red-600">*</span>
-          </label>
-          <select
+          <SearchableSelect
             id="edit-client-org"
-            required
+            label="Organisation (reports access) *"
+            labelClassName="block text-sm font-medium text-slate-800"
             value={clientOrgId}
             disabled={orgLoading}
-            onChange={(e) => {
-              const v = e.target.value
+            onChange={(v) => {
               setClientOrgId(v)
               const opt = orgOptions.find((o) => o.id === v)
               if (opt && !companyName.trim()) setCompanyName(opt.name)
             }}
-            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-          >
-            <option value="">{orgLoading ? 'Loading…' : 'Select maintenance client…'}</option>
-            {orgOptions.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
+            options={orgOptions.map((o) => ({ value: o.id, label: o.name }))}
+            allowEmpty
+            emptyLabel={orgLoading ? 'Loading…' : 'Select maintenance client…'}
+            placeholder="Search organisations…"
+            className="[&_button]:mt-1 [&_button]:py-2"
+          />
         </div>
         <Field label="Company name" value={companyName} onChange={setCompanyName} />
         <Field label="Email (login)" type="email" value={email} onChange={setEmail} required />

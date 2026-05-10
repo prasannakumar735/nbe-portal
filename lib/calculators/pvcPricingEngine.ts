@@ -9,6 +9,20 @@ import type {
 
 export const PVC_CALCULATOR_VERSION = '1.0.0'
 
+/**
+ * Item labels used in `calculatePVCQuote` line items and the PVC quote PDF (Material & Cost table).
+ * Use for service-quote checklists so they stay aligned with the PVC Strip Calculator output.
+ * Labour is only added in the calculator when installation type is supply & install — keep or delete that row for supply-only quotes.
+ */
+export const PVC_STRIP_QUOTE_LINE_MATERIAL_LABELS = [
+  'PVC Strip Material',
+  'Headrail',
+  'Hanger / Brackets',
+  'Rivets / Fittings',
+  'Packaging Tube',
+  'Labour',
+] as const
+
 const DOOR_COVER_MM = 50
 const HEADRAIL_ALLOWANCE_MM = 50
 const ROLL_LENGTH_M = 50

@@ -1,4 +1,5 @@
-import { redirect } from 'next/navigation';
+import { redirect } from 'next/navigation'
+
 export default function ClientLoginAliasPage() {
-    redirect('/client/login');
+  redirect('/login?next=/client')
 }

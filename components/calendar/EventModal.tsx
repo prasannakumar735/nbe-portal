@@ -22,6 +22,7 @@ import {
   validateTimedEventWindow,
 } from '@/lib/calendar/workingHours'
 import { splitRoundTripLegs } from '@/lib/calendar/eventDisplay'
+import { SearchableSelect } from '@/components/ui/SearchableSelect'
 
 /** Teams-style form controls: readable contrast, visible focus rings. */
 const INPUT =
@@ -860,33 +861,29 @@ export function EventModal({
 
                 {form.location_mode === 'client' ? (
                   <div className="mt-2 space-y-3">
-                    <label className="block">
-                      <span className={LABEL}>Client</span>
-                      <select
-                        disabled={readOnly || loadingClients}
-                        value={form.client_id}
-                        onChange={e => {
-                          const id = e.target.value
-                          setForm(f => ({
-                            ...f,
-                            client_id: id,
-                            location_id: '',
-                            location_text: '',
-                          }))
-                          setLatLng(null)
-                          setTravelMinutes(0)
-                          setTravelError(null)
-                        }}
-                        className={INPUT}
-                      >
-                        <option value="">{loadingClients ? 'Loading clients…' : 'Select a client'}</option>
-                        {clients.map(c => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <SearchableSelect
+                      id="calendar-event-client"
+                      label="Client"
+                      labelClassName={`block ${LABEL}`}
+                      value={form.client_id}
+                      disabled={readOnly || loadingClients}
+                      onChange={id => {
+                        setForm(f => ({
+                          ...f,
+                          client_id: id,
+                          location_id: '',
+                          location_text: '',
+                        }))
+                        setLatLng(null)
+                        setTravelMinutes(0)
+                        setTravelError(null)
+                      }}
+                      options={clients.map(c => ({ value: c.id, label: c.name }))}
+                      allowEmpty
+                      emptyLabel={loadingClients ? 'Loading clients…' : 'Select a client'}
+                      placeholder="Search clients…"
+                      className="[&_button]:mt-1 [&_button]:rounded-lg [&_button]:border-gray-300 [&_button]:bg-white [&_button]:px-3 [&_button]:py-2 [&_button]:text-sm [&_button]:text-gray-900 [&_button]:shadow-sm [&_button]:outline-none [&_button]:transition [&_button]:focus:border-blue-500 [&_button]:focus:ring-2 [&_button]:focus:ring-blue-500/30 [&_button]:disabled:cursor-not-allowed [&_button]:disabled:bg-gray-50 [&_button]:disabled:text-gray-500"
+                    />
                     <label className="block">
                       <span className={LABEL}>Site</span>
                       <select

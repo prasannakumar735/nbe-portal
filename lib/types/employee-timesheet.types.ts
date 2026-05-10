@@ -21,6 +21,10 @@ export type EmployeeTimesheetEntry = {
   timesheet_id?: string | null
   entry_date: string
   client_id: string | null
+  /** Optional sub-project under client (FK) when the client has sub-projects configured. */
+  client_sub_project_id: string | null
+  /** Resolved on GET /api/timecard/week for display/export only. */
+  client_sub_project_name?: string | null
   location_id: string | null
   work_type_level1_id: string | null
   work_type_level2_id: string | null

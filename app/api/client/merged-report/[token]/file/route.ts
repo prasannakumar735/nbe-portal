@@ -9,6 +9,8 @@ import {
 } from '@/lib/merged-reports/serverAccess'
 import { MERGED_MAINTENANCE_REPORTS_BUCKET } from '@/lib/merged-reports/storage'
 import { createPdfBinaryResponse } from '@/lib/http/pdfBinaryResponse'
+import { loadClientPortalPdfScope } from '@/lib/client-portal/loadClientPortalPdfScope'
+import { mergedReportAllowedForClientPortal } from '@/lib/client-portal/clientMaintenancePortal'
 
 export const runtime = 'nodejs'
 
@@ -26,23 +28,17 @@ export async function GET(
     const serverSupabase = await createServerClient()
     const user = await requireUser(serverSupabase)
 
-    const { data: profile } = await serverSupabase
-      .from('profiles')
-      .select('role, client_id')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    if (profile?.role !== 'client') {
+    const scope = await loadClientPortalPdfScope(user.id)
+    if (!scope.ok) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const userClientId = profile.client_id ? String(profile.client_id) : null
     const row = await fetchMergedReportByAccessToken(accessToken)
     if (!row) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
-    const gate = checkMergedReportClientGate(row, userClientId)
+    const gate = checkMergedReportClientGate(row, scope.clientId)
     if (gate === 'expired') {
       return NextResponse.json({ error: 'This link has expired' }, { status: 410 })
     }
@@ -52,6 +48,13 @@ export async function GET(
 
     if (!row.pdf_storage_path) {
       return NextResponse.json({ error: 'PDF not available' }, { status: 503 })
+    }
+
+    if (scope.portalLocationId) {
+      const locOk = await mergedReportAllowedForClientPortal(row.id, scope.clientId, scope.portalLocationId)
+      if (!locOk) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
     }
 
     const service = createServiceRoleClient()
