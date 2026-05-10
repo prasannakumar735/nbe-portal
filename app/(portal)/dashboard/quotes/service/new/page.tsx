@@ -1,4 +1,5 @@
-import { ServiceQuoteForm } from '@/components/quotes/ServiceQuoteForm';
-export default function NewServiceQuotePage() {
-    return <ServiceQuoteForm />;
+import { QuoteCreateClient } from '@/components/quotes/QuoteCreateClient'
+
+export default function NewQuotePage() {
+  return <QuoteCreateClient />
 }

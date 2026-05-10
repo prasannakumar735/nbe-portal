@@ -7,7 +7,7 @@ type QuoteHeaderProps = {
 
 export function QuoteHeader({ register }: QuoteHeaderProps) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <h2 className="text-base font-semibold text-slate-900">Quote Header</h2>
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm text-slate-700">

@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { unauthorizedOrForbiddenResponse } from '@/lib/security/httpAuthErrors'
 import { requirePortalStaff } from '@/lib/security/requirePortalStaff'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
-import { quoteRowsToFormValues } from '@/lib/quotes/serviceQuoteSnapshot'
+import { lineItemHasContent, quoteRowsToFormValues } from '@/lib/quotes/serviceQuoteSnapshot'
+import { resolveQuoteTaxonomyForPersist } from '@/lib/quotes/quoteTaxonomy'
 
 type ServiceQuoteItemPayload = {
+  itemTitle?: string
   description: string
   width: string
   height: string
@@ -23,6 +25,10 @@ type ServiceQuotePayload = {
   total: number
   items: ServiceQuoteItemPayload[]
   form_snapshot?: unknown
+  quote_kind?: string
+  valid_until?: string | null
+  quote_type?: string | null
+  quote_sub_category?: string | null
 }
 
 function toNumber(value: unknown): number {
@@ -34,9 +40,14 @@ function normalizeItems(items: ServiceQuotePayload['items']): ServiceQuoteItemPa
   return items
     .map(item => ({
       ...item,
+      itemTitle: typeof item.itemTitle === 'string' ? item.itemTitle.trim() : undefined,
       description: String(item.description ?? '').trim(),
     }))
-    .filter(item => item.description.length > 0)
+    .filter(item => lineItemHasContent(item))
+    .map(item => ({
+      ...item,
+      description: item.description || (item.itemTitle ? item.itemTitle : '—'),
+    }))
 }
 
 function validatePayload(payload: ServiceQuotePayload, items: ServiceQuoteItemPayload[]) {
@@ -61,7 +72,7 @@ function validatePayload(payload: ServiceQuotePayload, items: ServiceQuoteItemPa
   })
 
   if (items.length === 0) {
-    throw new Error('At least one line item with a description is required (empty rows are ignored).')
+    throw new Error('At least one line item with a description or item title is required (empty rows are ignored).')
   }
 
   items.forEach((item, index) => {
@@ -106,7 +117,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ qu
 
     const { data: items, error: iErr } = await supabase
       .from('quote_items')
-      .select('description, width, height, qty, unit_price, total')
+      .select('description, item_title, width, height, qty, unit_price, total')
       .eq('quote_id', quoteId)
       .order('id', { ascending: true })
 
@@ -126,6 +137,10 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ qu
         total: quote.total,
         created_at: quote.created_at,
         form_snapshot: quote.form_snapshot,
+        quote_kind: quote.quote_kind ?? 'service',
+        valid_until: quote.valid_until ?? null,
+        quote_type: quote.quote_type ?? null,
+        quote_sub_category: quote.quote_sub_category ?? null,
       },
       items: items ?? [],
       formValues,
@@ -152,6 +167,19 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ q
 
     const supabase = createServiceRoleClient()
 
+    const quoteKind =
+      payload.quote_kind === 'rapid_door' ? 'rapid_door' : 'service'
+    const validUntil =
+      quoteKind === 'rapid_door' && payload.valid_until?.trim()
+        ? payload.valid_until.trim().slice(0, 10)
+        : null
+
+    const taxonomy = resolveQuoteTaxonomyForPersist({
+      quote_kind: quoteKind,
+      quote_type: payload.quote_type,
+      quote_sub_category: payload.quote_sub_category,
+    })
+
     const { error: upErr } = await supabase
       .from('quotes')
       .update({
@@ -163,6 +191,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ q
         gst: payload.gst,
         total: payload.total,
         form_snapshot: payload.form_snapshot ?? null,
+        quote_kind: quoteKind,
+        valid_until: validUntil,
+        quote_type: taxonomy.quote_type,
+        quote_sub_category: taxonomy.quote_sub_category,
       })
       .eq('id', quoteId)
 
@@ -173,6 +205,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ q
 
     const quoteItems = items.map(item => ({
       quote_id: quoteId,
+      item_title: item.itemTitle?.trim() ? item.itemTitle.trim() : null,
       description: item.description,
       width: item.width || null,
       height: item.height || null,

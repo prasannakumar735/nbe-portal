@@ -2,77 +2,42 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useFieldArray, useForm, useWatch } from 'react-hook-form'
+import { PDFDownloadLink } from '@react-pdf/renderer'
 import { QuoteHeader } from './QuoteHeader'
 import { CustomerDetails } from './CustomerDetails'
-import { LineItemsTable } from './LineItemsTable'
 import { QuoteSummary } from './QuoteSummary'
-import { PDFDownloadLink } from '@react-pdf/renderer'
-import { QuotePDF } from './QuotePDF'
-import type { ServiceQuoteFormValues } from './types'
+import { RapidDoorLineItemsTable } from './RapidDoorLineItemsTable'
+import { RapidDoorQuotePDF } from './RapidDoorQuotePDF'
 import { QuoteTaxonomyFields } from './QuoteTaxonomyFields'
-import NBELogo from '@/components/common/NBELogo'
-import { defaultSubCategoryForType, subCategoryAllowed } from '@/lib/quotes/quoteTaxonomy'
+import type { UseFormRegister } from 'react-hook-form'
+import type { RapidDoorQuoteFormValues, ServiceQuoteFormValues } from './types'
 import type { QuoteTypeSlug } from '@/lib/quotes/quoteTaxonomy'
-import { lineItemsForTaxonomy } from '@/lib/quotes/serviceQuoteTemplates'
+import NBELogo from '@/components/common/NBELogo'
+import { emptyRapidDoorFormValues } from '@/lib/quotes/rapidDoorDefaults'
 import { fetchNextQuoteNumberClient } from '@/lib/quotes/fetchNextQuoteNumberClient'
-import { localDateKeyYmd, quoteNumberPrefixForServiceTaxonomy } from '@/lib/quotes/quoteNumberPolicy'
+import { localDateKeyYmd } from '@/lib/quotes/quoteNumberPolicy'
 
 const currency = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
 
-const emptyDefaults = (): ServiceQuoteFormValues => {
-  const defaultServiceSub = defaultSubCategoryForType('service')
-  return {
-  quoteNumber: '',
-  serviceDate: new Date().toISOString().split('T')[0],
-  quoteType: 'service',
-  quoteSubCategory: defaultServiceSub,
-  companyName: 'NBE Australia Pty Ltd',
-  abn: '17 007 048 008',
-  companyAddress: '22a Humeside Drive, Campbellfield Victoria 3061 Australia',
-  companyEmail: 'accountsreceivable@nbeaustralia.com.au',
-  customerCompany: '',
-  contactPerson: '',
-  phone: '',
-  customerEmail: '',
-  siteAddress: '',
-  items:
-    lineItemsForTaxonomy('service', defaultServiceSub) ?? [
-    {
-      description: 'Conducted scheduled service on rapid roller doors',
-      width: '',
-      height: '',
-      qty: 1,
-      unitPrice: 0,
-    },
-  ],
-  notes:
-    'Should you require any further information or clarification about this quotation, please do not hesitate to contact us.',
-  printedName: '',
-  signatureDate: new Date().toISOString().split('T')[0],
-  }
-}
-
-export type ServiceQuoteFormProps = {
+export type RapidDoorQuoteFormProps = {
   mode?: 'create' | 'edit'
   quoteId?: string | null
-  initialValues?: ServiceQuoteFormValues | null
-  /** Use `external` when classification is chosen outside this form (e.g. unified new-quote flow). */
-  classificationMode?: 'internal' | 'external'
-  externalClassification?: { quoteType: QuoteTypeSlug; quoteSubCategory: string }
-  /** Rendered as first block inside the form (below logo header), e.g. unified new-quote classification picks. */
+  initialValues?: RapidDoorQuoteFormValues | null
+  /** Hide fixed taxonomy block (use when `classificationSlot` supplies editable picks). */
+  hideQuoteClassification?: boolean
+  /** Rendered first inside the form below logo header (unified new-quote flow). */
   classificationSlot?: ReactNode
 }
 
-export function ServiceQuoteForm({
+export function RapidDoorQuoteForm({
   mode = 'create',
   quoteId = null,
   initialValues = null,
-  classificationMode = 'internal',
-  externalClassification,
+  hideQuoteClassification = false,
   classificationSlot,
-}: ServiceQuoteFormProps) {
+}: RapidDoorQuoteFormProps) {
   const router = useRouter()
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -87,8 +52,8 @@ export function ServiceQuoteForm({
     getValues,
     reset,
     formState: { isDirty },
-  } = useForm<ServiceQuoteFormValues>({
-    defaultValues: initialValues ?? emptyDefaults(),
+  } = useForm<RapidDoorQuoteFormValues>({
+    defaultValues: initialValues ?? emptyRapidDoorFormValues(),
   })
 
   useEffect(() => {
@@ -97,52 +62,13 @@ export function ServiceQuoteForm({
     }
   }, [initialValues, reset])
 
-  const quoteType = watch('quoteType')
-  const quoteSubCategory = watch('quoteSubCategory')
-  const taxonomyTemplatePrevRef = useRef<{ type: string; sub: string } | null>(null)
-
-  useEffect(() => {
-    if (classificationMode !== 'external' || !externalClassification) return
-    setValue('quoteType', externalClassification.quoteType)
-    setValue('quoteSubCategory', externalClassification.quoteSubCategory)
-  }, [
-    classificationMode,
-    externalClassification?.quoteType,
-    externalClassification?.quoteSubCategory,
-    setValue,
-  ])
-
-  useEffect(() => {
-    if (classificationMode === 'external') return
-    const t = quoteType as QuoteTypeSlug
-    if (!subCategoryAllowed(t, String(quoteSubCategory ?? ''))) {
-      setValue('quoteSubCategory', defaultSubCategoryForType(t), { shouldDirty: true })
-    }
-  }, [classificationMode, quoteType, quoteSubCategory, setValue])
-
-  /** When classification matches a preset (e.g. Service → 6 Month Service), use the same line items as the template picker. */
-  useEffect(() => {
-    if (mode === 'edit') return
-    const t = quoteType as QuoteTypeSlug
-    const sub = String(quoteSubCategory ?? '').trim()
-    if (!subCategoryAllowed(t, sub)) return
-    const nextItems = lineItemsForTaxonomy(t, sub)
-    if (!nextItems) return
-    const prev = taxonomyTemplatePrevRef.current
-    const isUserTaxonomyChange = prev !== null && (prev.type !== t || prev.sub !== sub)
-    taxonomyTemplatePrevRef.current = { type: t, sub }
-    setValue('items', nextItems, { shouldDirty: isUserTaxonomyChange })
-  }, [mode, quoteType, quoteSubCategory, setValue])
-
-  /** Sequential RRD / SWD quote number for the local calendar day (from `quotes` table). */
   useEffect(() => {
     if (mode === 'edit') return
     let cancelled = false
     const dateKey = localDateKeyYmd(new Date())
-    const prefix = quoteNumberPrefixForServiceTaxonomy(quoteType as QuoteTypeSlug, String(quoteSubCategory ?? ''))
     ;(async () => {
       try {
-        const qn = await fetchNextQuoteNumberClient(prefix, dateKey)
+        const qn = await fetchNextQuoteNumberClient('IRD', dateKey)
         if (!cancelled) {
           setValue('quoteNumber', qn, { shouldDirty: false })
         }
@@ -155,7 +81,7 @@ export function ServiceQuoteForm({
     return () => {
       cancelled = true
     }
-  }, [mode, quoteType, quoteSubCategory, setValue])
+  }, [mode, setValue])
 
   const fillCustomerCompanyFromPhoneAndSite = () => {
     const p = String(getValues('phone') ?? '').trim()
@@ -171,6 +97,8 @@ export function ServiceQuoteForm({
 
   const watchedItems = useWatch({ control, name: 'items' }) ?? []
   const watchedValues = watch()
+  const quoteType = watch('quoteType')
+  const quoteSubCategory = watch('quoteSubCategory')
 
   const subtotal = useMemo(() => {
     return watchedItems.reduce((sum, row) => {
@@ -185,7 +113,7 @@ export function ServiceQuoteForm({
   const gst = subtotal * 0.1
   const grandTotal = subtotal + gst
 
-  const onSubmit = async (values: ServiceQuoteFormValues) => {
+  const onSubmit = async (values: RapidDoorQuoteFormValues) => {
     setErrorMessage(null)
     setStatusMessage(
       `Quote ${values.quoteNumber}: required fields look valid. Use Save quote to store this quotation in your list.`,
@@ -204,10 +132,11 @@ export function ServiceQuoteForm({
       const items = values.items
         .map(item => ({
           ...item,
+          itemTitle: String(item.itemTitle ?? '').trim(),
           description: String(item.description ?? '').trim(),
           total: Number(item.qty || 0) * Number(item.unitPrice || 0),
         }))
-        .filter(item => item.description.length > 0)
+        .filter(item => item.itemTitle.length > 0 || item.description.length > 0)
 
       if (!String(values.customerCompany ?? '').trim()) {
         throw new Error('Company name is required.')
@@ -218,12 +147,11 @@ export function ServiceQuoteForm({
       if (!String(values.serviceDate ?? '').trim()) {
         throw new Error('Quote date is required.')
       }
-      const qt = values.quoteType as QuoteTypeSlug
-      if (!subCategoryAllowed(qt, String(values.quoteSubCategory ?? '').trim())) {
-        throw new Error('Choose a valid sub-category for the selected quote type.')
+      if (!String(values.validUntil ?? '').trim()) {
+        throw new Error('Valid until date is required.')
       }
       if (items.length === 0) {
-        throw new Error('Add at least one line item with a description (remove empty rows or fill them in).')
+        throw new Error('Add at least one schedule row with an item title or description.')
       }
 
       const saveSubtotal = items.reduce((sum, item) => sum + Number(item.qty || 0) * Number(item.unitPrice || 0), 0)
@@ -235,6 +163,8 @@ export function ServiceQuoteForm({
         customer_name: String(values.customerCompany).trim(),
         site_address: String(values.siteAddress).trim(),
         service_date: values.serviceDate,
+        valid_until: values.validUntil,
+        quote_kind: 'rapid_door',
         quote_type: values.quoteType,
         quote_sub_category: values.quoteSubCategory,
         subtotal: saveSubtotal,
@@ -267,11 +197,7 @@ export function ServiceQuoteForm({
         setStatusMessage('Quote saved.')
         try {
           const dateKey = localDateKeyYmd(new Date())
-          const prefix = quoteNumberPrefixForServiceTaxonomy(
-            getValues('quoteType') as QuoteTypeSlug,
-            String(getValues('quoteSubCategory') ?? ''),
-          )
-          const nextNum = await fetchNextQuoteNumberClient(prefix, dateKey)
+          const nextNum = await fetchNextQuoteNumberClient('IRD', dateKey)
           setValue('quoteNumber', nextNum, { shouldDirty: false })
         } catch {
           setStatusMessage(
@@ -327,13 +253,10 @@ export function ServiceQuoteForm({
             <NBELogo />
           </div>
           <div className="min-w-0 text-left sm:text-right">
-            <h2 className="text-xl font-bold text-slate-900">Quote</h2>
-            <p className="text-sm text-slate-600">NBE Australia</p>
+            <h2 className="text-xl font-bold text-slate-900">Industrial Rapid Door</h2>
+            <p className="text-sm text-slate-600">New installation quotation</p>
           </div>
         </div>
-        <p className="mt-4 text-sm leading-relaxed text-slate-600">
-          Rapid Roller Door Service • Rapid Door Maintenance • Rapid Door Parts
-        </p>
       </header>
 
       {statusMessage && (
@@ -351,16 +274,88 @@ export function ServiceQuoteForm({
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
         {classificationSlot ? (
           classificationSlot
-        ) : classificationMode === 'internal' ? (
+        ) : !hideQuoteClassification ? (
           <QuoteTaxonomyFields
-            register={register}
+            register={register as unknown as UseFormRegister<ServiceQuoteFormValues>}
             quoteType={quoteType as QuoteTypeSlug}
             quoteSubCategory={String(quoteSubCategory ?? '')}
+            disabled
           />
         ) : null}
-        <QuoteHeader register={register} />
-        <CustomerDetails register={register} onFillCompanyFromPhoneSite={fillCustomerCompanyFromPhoneAndSite} />
-        <LineItemsTable
+        <QuoteHeader register={register as unknown as UseFormRegister<ServiceQuoteFormValues>} />
+
+        <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <h2 className="text-base font-semibold text-slate-900">Quote validity & presentation</h2>
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              Valid until
+              <input
+                type="date"
+                {...register('validUntil')}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-slate-700 md:col-span-2">
+              PDF subtitle (ABN line)
+              <input
+                {...register('quoteSubtitle')}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
+          </div>
+        </section>
+
+        <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <h2 className="text-base font-semibold text-slate-900">NBE sales contact (PDF header)</h2>
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              Name
+              <input {...register('salesContactName')} className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              Phone
+              <input
+                type="tel"
+                {...register('salesContactPhone')}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              Email
+              <input
+                type="email"
+                {...register('salesContactEmail')}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
+          </div>
+        </section>
+
+        <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <h2 className="text-base font-semibold text-slate-900">Scope & standard offering</h2>
+          <p className="mt-1 text-xs text-slate-500">Shown on page 1 of the PDF above the customer block.</p>
+          <textarea
+            rows={5}
+            {...register('introNote')}
+            className="mt-4 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+        </section>
+
+        <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <h2 className="text-base font-semibold text-slate-900">Customer</h2>
+          <label className="mt-4 flex flex-col gap-1 text-sm text-slate-700">
+            Attn
+            <input {...register('attn')} className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
+          </label>
+          <div className="mt-4">
+            <CustomerDetails
+              register={register as unknown as UseFormRegister<ServiceQuoteFormValues>}
+              onFillCompanyFromPhoneSite={fillCustomerCompanyFromPhoneAndSite}
+            />
+          </div>
+        </section>
+
+        <RapidDoorLineItemsTable
           fields={fields}
           register={register}
           remove={remove}
@@ -371,12 +366,19 @@ export function ServiceQuoteForm({
         <QuoteSummary subtotal={subtotal} gst={gst} grandTotal={grandTotal} />
 
         <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-          <h2 className="text-base font-semibold text-slate-900">Notes</h2>
+          <h2 className="text-base font-semibold text-slate-900">Schedule A (PDF page 2)</h2>
           <textarea
-            rows={3}
-            {...register('notes')}
+            rows={4}
+            {...register('scheduleANotes')}
+            placeholder="Additional scope, clarifications, or exclusions…"
             className="mt-4 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
+        </section>
+
+        <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <h2 className="text-base font-semibold text-slate-900">Internal notes</h2>
+          <p className="mt-1 text-xs text-slate-500">Not shown on the Industrial Rapid Door PDF (use Schedule A or scope above).</p>
+          <textarea rows={3} {...register('notes')} className="mt-4 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
         </section>
 
         <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
@@ -386,11 +388,8 @@ export function ServiceQuoteForm({
               Client Signature
             </div>
             <label className="flex flex-col gap-1 text-sm text-slate-700">
-              Name
-              <input
-                {...register('printedName')}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
+              Printed name
+              <input {...register('printedName')} className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
             </label>
             <label className="flex flex-col gap-1 text-sm text-slate-700">
               Date
@@ -417,7 +416,7 @@ export function ServiceQuoteForm({
           </button>
           <PDFDownloadLink
             document={
-              <QuotePDF
+              <RapidDoorQuotePDF
                 data={{
                   values: watchedValues,
                   subtotal,
@@ -426,10 +425,10 @@ export function ServiceQuoteForm({
                 }}
               />
             }
-            fileName="service-quote.pdf"
+            fileName={`industrial-rapid-door-${watchedValues.quoteNumber || 'quote'}.pdf`}
             className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white"
           >
-            {({ loading }) => (loading ? 'Preparing PDF...' : 'Download PDF')}
+            {({ loading }) => (loading ? 'Preparing PDF…' : 'Download PDF')}
           </PDFDownloadLink>
           <button
             type="button"

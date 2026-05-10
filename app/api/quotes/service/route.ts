@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { unauthorizedOrForbiddenResponse } from '@/lib/security/httpAuthErrors'
 import { requirePortalStaff } from '@/lib/security/requirePortalStaff'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
+import { lineItemHasContent } from '@/lib/quotes/serviceQuoteSnapshot'
+import { resolveQuoteTaxonomyForPersist } from '@/lib/quotes/quoteTaxonomy'
 
 type ServiceQuoteItemPayload = {
+  itemTitle?: string
   description: string
   width: string
   height: string
@@ -22,6 +25,11 @@ type ServiceQuotePayload = {
   total: number
   items: ServiceQuoteItemPayload[]
   form_snapshot?: unknown
+  /** Default `service` when omitted (existing clients). */
+  quote_kind?: string
+  valid_until?: string | null
+  quote_type?: string | null
+  quote_sub_category?: string | null
 }
 
 function toNumber(value: unknown): number {
@@ -33,9 +41,14 @@ function normalizeItems(items: ServiceQuotePayload['items']): ServiceQuoteItemPa
   return items
     .map(item => ({
       ...item,
+      itemTitle: typeof item.itemTitle === 'string' ? item.itemTitle.trim() : undefined,
       description: String(item.description ?? '').trim(),
     }))
-    .filter(item => item.description.length > 0)
+    .filter(item => lineItemHasContent(item))
+    .map(item => ({
+      ...item,
+      description: item.description || (item.itemTitle ? item.itemTitle : '—'),
+    }))
 }
 
 function validatePayload(payload: ServiceQuotePayload, items: ServiceQuoteItemPayload[]) {
@@ -60,7 +73,7 @@ function validatePayload(payload: ServiceQuotePayload, items: ServiceQuoteItemPa
   })
 
   if (items.length === 0) {
-    throw new Error('At least one line item with a description is required (empty rows are ignored).')
+    throw new Error('At least one line item with a description or item title is required (empty rows are ignored).')
   }
 
   items.forEach((item, index) => {
@@ -92,11 +105,19 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const q = (searchParams.get('q') ?? '').trim()
 
+    const kind = (searchParams.get('quote_kind') ?? '').trim()
+
     let query = supabase
       .from('quotes')
-      .select('id, quote_number, customer_name, site_address, service_date, total, created_at')
+      .select(
+        'id, quote_number, customer_name, site_address, service_date, total, created_at, quote_kind, quote_type, quote_sub_category',
+      )
       .order('created_at', { ascending: false })
       .limit(200)
+
+    if (kind === 'service' || kind === 'rapid_door') {
+      query = query.eq('quote_kind', kind)
+    }
 
     if (q.length > 0) {
       const safe = q.replace(/%/g, '').replace(/,/g, '').slice(0, 120)
@@ -126,6 +147,19 @@ export async function POST(request: NextRequest) {
     /** Service role bypasses RLS; the user-scoped anon client often has no INSERT policy on `quotes`. */
     const supabase = createServiceRoleClient()
 
+    const quoteKind =
+      payload.quote_kind === 'rapid_door' ? 'rapid_door' : 'service'
+    const validUntil =
+      quoteKind === 'rapid_door' && payload.valid_until?.trim()
+        ? payload.valid_until.trim().slice(0, 10)
+        : null
+
+    const taxonomy = resolveQuoteTaxonomyForPersist({
+      quote_kind: quoteKind,
+      quote_type: payload.quote_type,
+      quote_sub_category: payload.quote_sub_category,
+    })
+
     const { data: quote, error: quoteError } = await supabase
       .from('quotes')
       .insert({
@@ -137,6 +171,10 @@ export async function POST(request: NextRequest) {
         gst: payload.gst,
         total: payload.total,
         form_snapshot: payload.form_snapshot ?? null,
+        quote_kind: quoteKind,
+        valid_until: validUntil,
+        quote_type: taxonomy.quote_type,
+        quote_sub_category: taxonomy.quote_sub_category,
       })
       .select('id')
       .single()
@@ -147,6 +185,7 @@ export async function POST(request: NextRequest) {
 
     const quoteItems = items.map(item => ({
       quote_id: quote.id,
+      item_title: item.itemTitle?.trim() ? item.itemTitle.trim() : null,
       description: item.description,
       width: item.width || null,
       height: item.height || null,

@@ -8,7 +8,7 @@ const currency = new Intl.NumberFormat('en-AU', { style: 'currency', currency: '
 
 export function QuoteSummary({ subtotal, gst, grandTotal }: QuoteSummaryProps) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <h2 className="text-base font-semibold text-slate-900">Price Summary</h2>
       <dl className="mt-4 space-y-2 text-sm">
         <div className="flex items-center justify-between border-b border-slate-200 pb-2">

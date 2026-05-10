@@ -1,84 +1,49 @@
 import type { FieldArrayWithId, UseFieldArrayAppend, UseFieldArrayRemove, UseFormRegister } from 'react-hook-form'
-import type { ServiceLineItem, ServiceQuoteFormValues } from './types'
+import type { RapidDoorQuoteFormValues, ServiceLineItem } from './types'
 
-const QUICK_PART_ROWS: Record<string, ServiceLineItem> = {
-  'Add Photo Cell': {
-    description: 'Install new photo cells',
-    width: '',
-    height: '',
-    qty: 1,
-    unitPrice: 0,
-  },
-  'Add Motor': {
-    description: 'Install replacement rapid door motor',
-    width: '',
-    height: '',
-    qty: 1,
-    unitPrice: 0,
-  },
-  'Add Side Leg': {
-    description: 'Install replacement side leg',
-    width: '',
-    height: '',
-    qty: 1,
-    unitPrice: 0,
-  },
-  'Add Control Panel': {
-    description: 'Install replacement control panel',
-    width: '',
-    height: '',
-    qty: 1,
-    unitPrice: 0,
-  },
-  'Add Remote': {
-    description: 'Supply and program new remote',
-    width: '',
-    height: '',
-    qty: 1,
-    unitPrice: 0,
-  },
-}
-
-type LineItemsTableProps = {
-  fields: FieldArrayWithId<ServiceQuoteFormValues, 'items', 'id'>[]
-  register: UseFormRegister<ServiceQuoteFormValues>
+type RapidDoorLineItemsTableProps = {
+  fields: FieldArrayWithId<RapidDoorQuoteFormValues, 'items', 'id'>[]
+  register: UseFormRegister<RapidDoorQuoteFormValues>
   remove: UseFieldArrayRemove
-  append: UseFieldArrayAppend<ServiceQuoteFormValues, 'items'>
+  append: UseFieldArrayAppend<RapidDoorQuoteFormValues, 'items'>
   watchedItems: ServiceLineItem[]
 }
 
-export function LineItemsTable({ fields, register, remove, append, watchedItems }: LineItemsTableProps) {
+const blankRow: ServiceLineItem = {
+  itemTitle: '',
+  description: '',
+  width: '',
+  height: '',
+  qty: 1,
+  unitPrice: 0,
+}
+
+export function RapidDoorLineItemsTable({
+  fields,
+  register,
+  remove,
+  append,
+  watchedItems,
+}: RapidDoorLineItemsTableProps) {
   return (
     <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-slate-900">Line Items</h2>
+        <h2 className="text-base font-semibold text-slate-900">Door schedule</h2>
         <button
           type="button"
-          onClick={() => append({ description: '', width: '', height: '', qty: 1, unitPrice: 0 })}
+          onClick={() => append(blankRow)}
           className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
         >
           Add Row
         </button>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        {Object.entries(QUICK_PART_ROWS).map(([label, item]) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => append(item)}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
       <div className="mt-4 overflow-x-auto">
-        <table className="w-full min-w-[980px] border-collapse text-sm">
+        <table className="w-full min-w-[1080px] border-collapse text-sm">
           <thead>
             <tr className="bg-slate-100 text-left text-slate-700">
-              <th className="border border-slate-300 px-2 py-2">S.No</th>
+              <th className="border border-slate-300 px-2 py-2">#</th>
+              <th className="border border-slate-300 px-2 py-2">Item</th>
               <th className="border border-slate-300 px-2 py-2">Description</th>
               <th className="border border-slate-300 px-2 py-2">Width</th>
               <th className="border border-slate-300 px-2 py-2">Height</th>
@@ -97,26 +62,33 @@ export function LineItemsTable({ fields, register, remove, append, watchedItems 
               return (
                 <tr key={field.id}>
                   <td className="border border-slate-300 px-2 py-2 align-top">{index + 1}</td>
-                  <td className="border border-slate-300 px-2 py-2">
+                  <td className="border border-slate-300 px-2 py-2 align-top">
                     <textarea
                       rows={2}
-                      {...register(`items.${index}.description`)}
-                      className="w-full rounded-md border border-slate-300 px-2 py-1"
+                      {...register(`items.${index}.itemTitle`)}
+                      className="w-full min-w-[140px] rounded-md border border-slate-300 px-2 py-1 text-xs"
                     />
                   </td>
-                  <td className="border border-slate-300 px-2 py-2">
+                  <td className="border border-slate-300 px-2 py-2 align-top">
+                    <textarea
+                      rows={3}
+                      {...register(`items.${index}.description`)}
+                      className="w-full min-w-[200px] rounded-md border border-slate-300 px-2 py-1 text-xs"
+                    />
+                  </td>
+                  <td className="border border-slate-300 px-2 py-2 align-top">
                     <input
                       {...register(`items.${index}.width`)}
                       className="w-24 rounded-md border border-slate-300 px-2 py-1"
                     />
                   </td>
-                  <td className="border border-slate-300 px-2 py-2">
+                  <td className="border border-slate-300 px-2 py-2 align-top">
                     <input
                       {...register(`items.${index}.height`)}
                       className="w-24 rounded-md border border-slate-300 px-2 py-1"
                     />
                   </td>
-                  <td className="border border-slate-300 px-2 py-2">
+                  <td className="border border-slate-300 px-2 py-2 align-top">
                     <input
                       type="number"
                       min={0}
@@ -125,7 +97,7 @@ export function LineItemsTable({ fields, register, remove, append, watchedItems 
                       className="w-20 rounded-md border border-slate-300 px-2 py-1"
                     />
                   </td>
-                  <td className="border border-slate-300 px-2 py-2">
+                  <td className="border border-slate-300 px-2 py-2 align-top">
                     <input
                       type="number"
                       min={0}
@@ -134,10 +106,10 @@ export function LineItemsTable({ fields, register, remove, append, watchedItems 
                       className="w-28 rounded-md border border-slate-300 px-2 py-1"
                     />
                   </td>
-                  <td className="border border-slate-300 px-2 py-2 font-medium text-slate-900">
+                  <td className="border border-slate-300 px-2 py-2 align-top font-medium text-slate-900">
                     {new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(rowTotal)}
                   </td>
-                  <td className="border border-slate-300 px-2 py-2">
+                  <td className="border border-slate-300 px-2 py-2 align-top">
                     <button
                       type="button"
                       onClick={() => remove(index)}

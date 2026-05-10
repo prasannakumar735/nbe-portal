@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import { registerRobotoForReactPdf } from '@/lib/pdf/reactPdfRoboto'
+import { formatQuoteTaxonomyLine } from '@/lib/quotes/quoteTaxonomy'
 import type { ServiceQuoteFormValues } from './types'
 
 type QuotePDFProps = {
@@ -241,7 +242,8 @@ export function QuotePDF({ data }: QuotePDFProps) {
             </Text>
           </View>
           <View style={styles.titleBlock}>
-            <Text style={styles.quoteTitle}>Service Quote</Text>
+            <Text style={styles.quoteTitle}>Quote</Text>
+            <Text style={styles.quoteMeta}>{formatQuoteTaxonomyLine(values.quoteType, values.quoteSubCategory)}</Text>
             <Text style={styles.quoteMeta}>Quote No: {values.quoteNumber}</Text>
             <Text style={styles.quoteMeta}>Quote date: {values.serviceDate}</Text>
           </View>
