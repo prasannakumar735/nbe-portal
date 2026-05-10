@@ -16,6 +16,7 @@ import type {
   WorkTypeLevel1,
   WorkTypeLevel2
 } from '@/lib/types/timecard.types'
+import { SearchableSelect } from '@/components/ui/SearchableSelect'
 
 interface TimeEntryStartFormProps {
   user?: { id?: string } | null
@@ -452,23 +453,23 @@ export default function TimeEntryStartForm({ user, onSuccess }: TimeEntryStartFo
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
                   {/* Client Selection */}
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">
-                      Client <span className="text-red-500">*</span>
-                    </label>
-                    <select
+                    <SearchableSelect
+                      id="time-entry-start-client"
+                      label="Client *"
+                      labelClassName="block text-sm font-semibold text-slate-700 mb-2"
                       value={selectedClientId}
-                      onChange={(e) => handleClientChange(e.target.value)}
-                      className={`w-full px-4 py-3 border rounded-xl text-sm font-medium focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500 outline-none transition-all ${
-                        errors.client_id ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white hover:border-gray-400'
+                      onChange={handleClientChange}
+                      options={clients.map(client => ({
+                        value: client.id,
+                        label: client.client_name || client.name || client.code || client.id,
+                      }))}
+                      allowEmpty
+                      emptyLabel="Select Client..."
+                      placeholder="Search clients…"
+                      className={`[&_button]:min-h-[48px] [&_button]:rounded-xl [&_button]:px-4 [&_button]:py-3 [&_button]:text-sm [&_button]:font-medium ${
+                        errors.client_id ? '[&_button]:border-red-300 [&_button]:bg-red-50' : ''
                       }`}
-                    >
-                      <option value="">Select Client...</option>
-                      {clients.map(client => (
-                        <option key={client.id} value={client.id}>
-                          {client.client_name || client.name || client.code || client.id}
-                        </option>
-                      ))}
-                    </select>
+                    />
                     {errors.client_id && <p className="mt-1 text-xs text-red-600">{errors.client_id}</p>}
                   </div>
 

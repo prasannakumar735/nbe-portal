@@ -7,6 +7,9 @@ import { Header } from './Header'
 interface LayoutWrapperProps {
   children: ReactNode
   user: any
+  /** Server-resolved profiles.role for navigation (avoids client flash). */
+  portalRole: string | null
+  portalManagerOrAdmin: boolean
 }
 
 /**
@@ -23,7 +26,7 @@ interface LayoutWrapperProps {
  * - Works with existing auth flow
  * - Dynamic content area adjustment based on sidebar state
  */
-export function LayoutWrapper({ children, user }: LayoutWrapperProps) {
+export function LayoutWrapper({ children, user, portalRole, portalManagerOrAdmin }: LayoutWrapperProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
@@ -68,6 +71,8 @@ export function LayoutWrapper({ children, user }: LayoutWrapperProps) {
         onToggleCollapse={handleToggleCollapse}
         isMobileOpen={isMobileOpen}
         onCloseMobile={handleCloseMobile}
+        portalRole={portalRole}
+        portalManagerOrAdmin={portalManagerOrAdmin}
       />
       
       {/* Main Content Area - Dynamically adjusts based on sidebar state */}
@@ -85,9 +90,9 @@ export function LayoutWrapper({ children, user }: LayoutWrapperProps) {
           }
         />
 
-        {/* Page content: centered, compact width — single source for portal density */}
-        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="mx-auto w-full min-w-0 max-w-[min(100%,88rem)] px-4 py-5">{children}</div>
+        {/* Page content: full width of main column (forms/pages can cap themselves if needed) */}
+        <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+          <div className="w-full min-w-0 px-4 py-5 lg:px-6 xl:px-8">{children}</div>
         </main>
       </div>
     </div>

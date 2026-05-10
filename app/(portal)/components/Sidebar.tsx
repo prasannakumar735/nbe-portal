@@ -2,44 +2,31 @@
 
 import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
-import { useAuth } from '@/app/providers/AuthProvider'
 import { useBrowserPathname } from '@/lib/app/useBrowserPathname'
+import { buildPortalSidebarNavItems } from '@/lib/portal/technicianPortal'
 
 interface SidebarProps {
   isCollapsed: boolean
   onToggleCollapse: () => void
   isMobileOpen: boolean
   onCloseMobile: () => void
+  portalRole: string | null
+  portalManagerOrAdmin: boolean
 }
 
-const NAV_ITEMS = [
-  { label: 'Dashboard', icon: 'dashboard', href: '/dashboard' },
-  { label: 'Service Quote', icon: 'request_quote', href: '/dashboard/quotes/service' },
-  { label: 'Timecards', icon: 'schedule', href: '/dashboard/timecards' },
-  { label: 'Maintenance Service', icon: 'build', href: '/maintenance' },
-  { label: 'QR Codes', icon: 'qr_code_2', href: '/qr-codes' },
-  { label: 'Reimbursement', icon: 'payments', href: '/reimbursement' },
-  { label: 'PVC Strip Calculator', icon: 'calculate', href: '/pvc-calculator' },
-  { label: 'Shared Calendar', icon: 'calendar_today', href: '/calendar' },
-  { label: 'Job Card & Client GPS', icon: 'location_on', href: '/job-card' },
-  { label: 'Knowledge Share', icon: 'menu_book', href: '/knowledge' },
-  { label: 'Reports', icon: 'bar_chart', href: '/reports' },
-]
-
-export function Sidebar({ isCollapsed, onToggleCollapse, isMobileOpen, onCloseMobile }: SidebarProps) {
+export function Sidebar({
+  isCollapsed,
+  onToggleCollapse,
+  isMobileOpen,
+  onCloseMobile,
+  portalRole,
+  portalManagerOrAdmin,
+}: SidebarProps) {
   const router = useRouter()
   const pathname = useBrowserPathname()
-  const { isAdmin, isManager } = useAuth()
   const [isMobile, setIsMobile] = useState(false)
 
-  const navItems = (isAdmin || isManager)
-    ? [
-        ...NAV_ITEMS,
-        { label: 'People', icon: 'groups', href: '/dashboard/people' },
-        { label: 'Inventory', icon: 'inventory_2', href: '/admin/inventory' },
-        { label: 'Clients', icon: 'domain', href: '/admin/clients' },
-      ]
-    : NAV_ITEMS
+  const navItems = buildPortalSidebarNavItems(portalRole, portalManagerOrAdmin)
 
   // Detect mobile screen size
   useEffect(() => {
@@ -82,8 +69,8 @@ export function Sidebar({ isCollapsed, onToggleCollapse, isMobileOpen, onCloseMo
       {/* Sidebar */}
       <aside
         className={`
-          fixed top-0 left-0 h-screen bg-white border-r border-slate-200 z-40
-          transition-all duration-300 ease-in-out flex-col overflow-hidden
+          fixed top-0 left-0 flex h-screen flex-col bg-white border-r border-slate-200 z-40
+          transition-all duration-300 ease-in-out overflow-hidden
           ${isMobile 
             ? `w-64 ${isMobileOpen ? 'flex translate-x-0' : 'hidden -translate-x-full'}` 
             : `hidden md:flex ${isCollapsed ? 'w-[72px]' : 'w-[240px]'}`
@@ -96,10 +83,13 @@ export function Sidebar({ isCollapsed, onToggleCollapse, isMobileOpen, onCloseMo
         }`}>
           <div className="relative flex items-center justify-center min-w-[56px]">
             <img
-              src="/Logo_black.png"
+              src="/NBE_LOGO_2026_BG.svg"
               alt="NBE Australia"
-              className="h-10 w-auto object-contain"
-              style={{ minWidth: '56px' }}
+              width={112}
+              height={65}
+              decoding="async"
+              className="h-12 max-h-12 w-auto max-w-[min(160px,100%)] object-contain"
+              style={{ maxHeight: '3rem', maxWidth: 'min(160px, 100%)', minWidth: '56px' }}
             />
           </div>
         </div>

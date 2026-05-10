@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Save, X, AlertCircle, Check } from 'lucide-react'
 import { WorkTypeService, ProjectService, TimeEntryService } from '@/lib/services/timecard.service'
 import type { WorkTypeLevel1, WorkTypeLevel2, Project, TimeEntryFormData } from '@/lib/types/timecard.types'
+import { SearchableSelect } from '@/components/ui/SearchableSelect'
 
 interface TimeEntryFormProps {
   userId: string
@@ -369,26 +370,26 @@ export default function TimeEntryForm({
         {/* Project/Client */}
         {selectedLevel2 && !selectedLevel2.is_leave_type && (
           <div className="md:col-span-2">
-            <label className="block text-sm font-bold text-slate-700 mb-2">
-              Project / Client <span className="text-red-500">*</span>
-            </label>
-            <select
+            <SearchableSelect
+              id="portal-time-entry-project"
+              label="Project / Client *"
+              labelClassName="block text-sm font-bold text-slate-700 mb-2"
               value={formData.project_id || ''}
-              onChange={(e) => {
-                setFormData(prev => ({ ...prev, project_id: e.target.value || null }))
+              onChange={(next) => {
+                setFormData(prev => ({ ...prev, project_id: next || null }))
                 setErrors(prev => ({ ...prev, project_id: '' }))
               }}
-              className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all ${
-                errors.project_id ? 'border-red-300 bg-red-50' : 'border-slate-300'
+              options={projects.map(project => ({
+                value: project.id,
+                label: `${project.project_code} - ${project.project_name} (${project.client_name})`,
+              }))}
+              allowEmpty
+              emptyLabel="Select Project..."
+              placeholder="Search projects or clients…"
+              className={`[&_button]:w-full [&_button]:px-4 [&_button]:py-2.5 [&_button]:rounded-lg ${
+                errors.project_id ? '[&_button]:border-red-300 [&_button]:bg-red-50' : ''
               }`}
-            >
-              <option value="">Select Project...</option>
-              {projects.map(project => (
-                <option key={project.id} value={project.id}>
-                  {project.project_code} - {project.project_name} ({project.client_name})
-                </option>
-              ))}
-            </select>
+            />
             {errors.project_id && (
               <p className="mt-1 text-xs text-red-600">{errors.project_id}</p>
             )}

@@ -15,8 +15,10 @@ export default async function PortalLayout({ children, }: {
     if (portalProfile?.role === 'client') {
         redirect('/client');
     }
+    const portalRole = portalProfile?.role ?? null;
+    const portalManagerOrAdmin = portalRole === 'admin' || portalRole === 'manager';
     return (<RouteGuard>
-      <LayoutWrapper user={user}>
+      <LayoutWrapper user={user} portalRole={portalRole} portalManagerOrAdmin={portalManagerOrAdmin}>
         {children}
       </LayoutWrapper>
     </RouteGuard>);

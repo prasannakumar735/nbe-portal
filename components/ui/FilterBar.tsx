@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import { SearchableSelect } from '@/components/ui/SearchableSelect'
 
 export interface FilterOption {
   id: string
@@ -30,6 +31,11 @@ export function FilterBar({ projects, period, project, startDate, endDate }: Fil
   const projectOptions = useMemo(() => {
     return [{ id: 'all', name: 'All Projects' }, ...projects]
   }, [projects])
+
+  const projectSelectOptions = useMemo(
+    () => projectOptions.map(o => ({ value: o.id, label: o.name })),
+    [projectOptions],
+  )
 
   const updateParams = (updates: Record<string, string>) => {
     const params = new URLSearchParams()
@@ -60,15 +66,18 @@ export function FilterBar({ projects, period, project, startDate, endDate }: Fil
         ))}
       </select>
 
-      <select
-        value={project}
-        onChange={(event) => updateParams({ project: event.target.value })}
-        className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-      >
-        {projectOptions.map(option => (
-          <option key={option.id} value={option.id}>{option.name}</option>
-        ))}
-      </select>
+      <div className="min-w-[180px] flex-1 sm:max-w-xs">
+        <SearchableSelect
+          id="dashboard-filter-project"
+          label="Project / client"
+          labelClassName="sr-only"
+          value={project || 'all'}
+          onChange={(value) => updateParams({ project: value })}
+          options={projectSelectOptions}
+          placeholder="Search projects…"
+          className="[&_button]:h-9 [&_button]:rounded-lg [&_button]:border-gray-200 [&_button]:px-3 [&_button]:text-sm [&_button]:font-medium [&_button]:text-gray-700 [&_button]:shadow-sm"
+        />
+      </div>
 
       {period === 'custom' && (
         <div className="flex flex-wrap gap-2">

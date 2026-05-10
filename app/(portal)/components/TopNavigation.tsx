@@ -5,23 +5,12 @@ import { supabase } from '@/lib/supabase'
 import { useBrowserPathname } from '@/lib/app/useBrowserPathname'
 import { useState } from 'react'
 import { useOfflinePendingCount } from '@/hooks/useOfflinePendingCount'
+import { useAuth } from '@/app/providers/AuthProvider'
+import { buildPortalSidebarNavItems } from '@/lib/portal/technicianPortal'
 
 interface TopNavigationProps {
   user: any
 }
-
-const NAV_ITEMS = [
-  { label: 'Dashboard', icon: 'dashboard', href: '/dashboard' },
-  { label: 'Service Quote', icon: 'request_quote', href: '/dashboard/quotes/service' },
-  { label: 'Timecards', icon: 'schedule', href: '/dashboard/timecards' },
-  { label: 'Maintenance Service', icon: 'build', href: '/maintenance' },
-  { label: 'QR Codes', icon: 'qr_code_2', href: '/qr-codes' },
-  { label: 'Reimbursement', icon: 'payments', href: '/reimbursement' },
-  { label: 'Shared Calendar', icon: 'calendar_today', href: '/calendar' },
-  { label: 'Job Card & Client GPS', icon: 'location_on', href: '/job-card' },
-  { label: 'Knowledge Share', icon: 'menu_book', href: '/knowledge' },
-  { label: 'Reports', icon: 'bar_chart', href: '/reports' }
-]
 
 export function TopNavigation({ user }: TopNavigationProps) {
   const router = useRouter()
@@ -29,6 +18,8 @@ export function TopNavigation({ user }: TopNavigationProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [isUserHovered, setIsUserHovered] = useState(false)
   const { pendingCount } = useOfflinePendingCount()
+  const { profile, isAdmin, isManager } = useAuth()
+  const navItems = buildPortalSidebarNavItems(profile?.role ?? null, isAdmin || isManager)
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
@@ -42,8 +33,17 @@ export function TopNavigation({ user }: TopNavigationProps) {
   }
 
   const isNavItemActive = (href: string) => {
+    if (href === '/dashboard/people') {
+      return pathname === '/dashboard/people'
+    }
+    if (href === '/dashboard/timecards') {
+      return pathname === '/dashboard/timecards'
+    }
     if (href === '/reports') {
       return pathname === '/reports' || pathname.startsWith('/manager/reports')
+    }
+    if (href === '/admin/clients') {
+      return pathname === '/admin/clients' || pathname.startsWith('/admin/clients/')
     }
     if (href === '/dashboard/quotes/service') {
       return pathname.startsWith('/dashboard/quotes/service')
@@ -54,17 +54,21 @@ export function TopNavigation({ user }: TopNavigationProps) {
   return (
     <header className="h-20 bg-white border-b border-slate-200 flex items-center px-8 shrink-0 z-10">
       {/* Logo */}
-      <div className="flex items-center mr-10 shrink-0">
+      <div className="mr-10 flex shrink-0 items-center overflow-hidden">
         <img
-          src="/Logo_black.png"
+          src="/NBE_LOGO_2026_BG.svg"
           alt="NBE Australia"
-          className="h-12 w-auto object-contain"
+          width={132}
+          height={77}
+          decoding="async"
+          className="h-14 max-h-14 w-auto max-w-[min(200px,28vw)] object-contain"
+          style={{ maxHeight: '3.5rem', maxWidth: 'min(200px, 28vw)' }}
         />
       </div>
 
       {/* Navigation Items */}
       <nav className="flex items-center gap-1 h-full flex-1 overflow-x-auto no-scrollbar">
-        {NAV_ITEMS.map(item => (
+        {navItems.map(item => (
           <button
             key={item.href}
             onClick={() => router.push(item.href)}
