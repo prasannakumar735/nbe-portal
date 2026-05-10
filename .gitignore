@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+NBE_Account_Book_WIP_Main.csv
+
+docs/SESSION_SUMMARY_*
