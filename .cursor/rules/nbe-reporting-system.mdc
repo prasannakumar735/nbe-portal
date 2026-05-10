@@ -1,0 +1,18 @@
+---
+description: Staff reporting dashboards, charts, and manager report APIs (scoped).
+alwaysApply: false
+globs:
+  - "components/reports/**"
+  - "app/(portal)/reports/**"
+  - "app/(portal)/manager/reports/**"
+  - "lib/reports/**"
+  - "app/api/manager/reports/**"
+---
+
+# Reporting system
+
+## Charts (`components/reports/ReportsCharts.tsx`)
+
+- Billable vs non-billable pie: `label={false}` on `<Pie>` so labels do not overlap the legend; tune `PieChart` margins; `Legend` `verticalAlign="bottom"`; add `paddingTop` on the wrapper as needed.
+
+When extending exports or filters, align with existing `lib/reports/*` patterns and manager API routes under `app/api/manager/reports/**`.

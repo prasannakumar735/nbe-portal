@@ -1,0 +1,48 @@
+---
+description: Unified login, safe redirects, client portal branding, and customer-facing copy (scoped).
+alwaysApply: false
+globs:
+  - "app/login/**"
+  - "app/client/**"
+  - "app/report/**"
+  - "components/common/AuthScreenLogo.tsx"
+  - "components/client/**"
+  - "lib/app/sessionTiming.ts"
+---
+
+# Auth & client portal UX
+
+## Unified sign-in (`/login`)
+
+- Single login screen for staff and clients: `app/login` + `LoginClient.tsx`.
+- Return URL: `next` query param only; path must be validated server-side (`safeInternalRedirectPath`). Examples: `/login?next=/client`, `/login?next=/client/reports`, `/login?next=/report/view/…`.
+- Legacy `/client/login` and `?redirect=` → redirect to `/login?next=…` (no duplicate client login UI).
+- Post-login (`resolvePostLoginDestination`): `role === 'client'` → honour `next` when it starts with `/client` or `/report/view/`; else `/client`. Staff must **not** be sent to `/client` via `next`; use `/dashboard` or another safe internal route.
+- Idle/expiry: `loginRedirectPath` in `lib/app/sessionTiming.ts` → `/login?next=<encoded path>` (not `/client/login`).
+- Emails/APIs with “sign in” links for portal clients: `/login?next=/client` (or correct `next`), never `/client/login`.
+
+## Login branding (`AuthScreenLogo`)
+
+- Default (staff): `NBE_LOGO_2026_BG.svg`.
+- Client flows: when `clientPortalBranding` is true (`next` starts with `/client` or `/report/view/`), use **`/nbe-logo.png`**; wide mark (~4rem height, capped width). Do **not** use `/logo.png` for client-branded login.
+
+## Tone & copy
+
+- British spelling in UI: **organisation**.
+- Formal, clear, calm — external-customer appropriate.
+- Client login (branded): title **Client portal**; explain org-provided email/password for reports, PDFs, inspection photography; note email/QR links may work **without** an account but access is limited to that document; staff cross-link → internal sign-in at plain `/login`.
+
+## Client dashboard (`app/client/page.tsx`)
+
+- Copy: approved maintenance documentation **by inspection date**; **Maintenance reports** = chronological archive; **Photo gallery** = by door and inspection. Inline links: medium indigo + light underline (not heavy bold + underline).
+
+## Photo gallery
+
+- Landing (`app/client/gallery/page.tsx`): *“Inspection records are organised by door and visit date. Select a folder to view inspection photos, and hover for additional site and door information.”*
+- Per visit (`app/client/gallery/[doorKey]/[reportId]/page.tsx`): (1) images from this visit; (2) full size / individual download; (3) **if photos exist**: **Download ZIP** — omit ZIP mention when empty.
+
+## `components/client/ClientPortalNavControls.tsx`
+
+- **`ClientPortalBackLink`**: Dashboard / All doors — `ChevronLeft`, slate, hover background, no heavy permanent underline.
+- **`ClientPortalOutlineNavButton`**: e.g. **Dates** — outlined + chevron.
+- **`ClientPortalZipDownloadButton`**: primary dark, `Archive` icon, **Download ZIP**; only when photos exist.

@@ -1,0 +1,34 @@
+---
+description: Quotes, timecards, taxonomy, and shared dashboard UI conventions (scoped).
+alwaysApply: false
+globs:
+  - "components/quotes/**"
+  - "lib/quotes/**"
+  - "app/**/quotes/**"
+  - "components/timecard/**"
+  - "components/timecards/**"
+  - "app/(portal)/dashboard/timecards/**"
+  - "app/(portal)/timecard/**"
+  - "components/client/ClientPortalShell.tsx"
+---
+
+# UI standards — quotes & timecards
+
+## Service quotes (`ServiceQuoteForm`, `RapidDoorQuoteForm`, `QuoteCreateClient`)
+
+- Layout: full main column (`w-full min-w-0 max-w-full`); no `max-w-[210mm]` on screen; print `print:max-w-none`. Cards: `min-w-0`, `p-4 sm:p-5`. Header logo row stacks `flex-col` → `sm:flex-row`.
+- Numbering: sequential per **prefix + local calendar day** via `GET /api/quotes/next-number?prefix=&dateKey=YYYYMMDD`. **RRD** default service taxonomy; **SWD** only `new_installation` + `pvc_swing_door`; **IRD** industrial rapid door form. Padding: RRD/IRD three digits (`001`), SWD two (`01`). Logic: `lib/quotes/quoteNumberPolicy.ts`, `nextQuoteNumberFromDb.ts`, `fetchNextQuoteNumberClient.ts`.
+- Classification → lines: `lib/quotes/serviceQuoteTemplates.ts` (+ PVC strip labels via `PVC_STRIP_QUOTE_LINE_MATERIAL_LABELS` in `pvcPricingEngine.ts`). No separate “line item templates” UI — apply on taxonomy change (create only).
+- Buttons: **Verify form** = validation/status only (no persist). **Save quote** / **Update saved quote** = persist. Never expose “Supabase” in user-visible strings.
+
+## Quote taxonomy
+
+- Single source: `lib/quotes/quoteTaxonomy.ts` (`quotes.quote_type` / `quotes.quote_sub_category`). Industrial rapid door → separate form when `new_installation` + `rapid_door`.
+
+## Timecards (`TimecardModal`)
+
+- Sub-project optional when client has sub-projects; `allowEmpty`, empty label **No sub-project**; no client-side mandatory check before save. Server: `assertSubProjectSelection` / `lib/clients/subProjectGate.ts` semantics.
+
+## Client portal shell (`ClientPortalShell`)
+
+- Hide left aside (logo + nav) on `/client/login` and on `/client` when `!user` (guest landing). Signed-in clients keep sidebar on dashboard and sub-routes.

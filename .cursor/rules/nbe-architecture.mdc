@@ -1,0 +1,30 @@
+---
+description: NBE Portal — cross-cutting Next.js, React, Supabase auth, security, and TS boundaries (minimal global context).
+alwaysApply: true
+---
+
+# Architecture & platform
+
+## Next.js (App Router)
+
+- Do **not** register a Service Worker in **development** (stale `_next` chunks → `ChunkLoadError` / App Router crashes).
+- If dev chunk loads time out, prefer raising webpack `output.chunkLoadTimeout` over weakening security headers or adding global retries.
+
+## React (Strict Mode)
+
+- Async effects that call `setState` after `await`: use a `cancelled` flag or `AbortController`; check after each `await` before updating state. Critical for auth/session and subscriptions.
+
+## Supabase auth
+
+- **Single source of truth**: `AuthProvider` owns `getSession()` and auth subscriptions.
+- Route guards: redirect **only in `useEffect`**, never during render.
+- `onAuthStateChange` handlers must not run state updates after cleanup/unsubscribe.
+
+## Security (embedding / clickjacking)
+
+- Default: `X-Frame-Options: DENY`, CSP `frame-ancestors 'none'`.
+- Use `SAMEORIGIN` / `frame-ancestors 'self'` **only** on specific PDF (or other embed) routes if required — **not** site-wide.
+
+## TypeScript
+
+- Exported/public APIs: explicit types; avoid `any` for domain payloads; parse and narrow `unknown` at system edges (API, Supabase rows).

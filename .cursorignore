@@ -1,0 +1,76 @@
+# Cursor indexing & AI context optimisation
+# Optimised for Next.js 16 + TypeScript + Supabase + Tailwind
+
+# Dependencies
+node_modules/
+
+# Next.js / deployment
+.next/
+.vercel/
+out/
+dist/
+build/
+
+# Turbo / cache
+.turbo/
+.cache/
+temp/
+tmp/
+*.tsbuildinfo
+.eslintcache
+
+# Coverage / testing
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Generated reports / exports
+public/reports/
+public/export/
+public/generated/
+
+# Uploads & inspection media
+public/uploads/
+uploads/
+
+# PDFs & archives
+*.pdf
+*.zip
+*.rar
+*.7z
+
+# Images
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.bmp
+*.ico
+
+# Video/media
+*.mp4
+*.mov
+*.avi
+*.webm
+
+# Supabase local temp
+supabase/.temp/
+.supabase/
+
+# Local env backups
+.env.local.backup
+.env.backup
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,101 @@
+---
+description: Maintenance inspection UI, PDF generation, client share links, workflow emails, offline-safe uploads (scoped).
+alwaysApply: false
+globs:
+  - "app/(portal)/maintenance/**"
+  - "app/api/maintenance/**"
+  - "app/api/send-maintenance-report-email/**"
+  - "app/api/ai/door-summary/**"
+  - "components/maintenance/**"
+  - "lib/maintenance/**"
+  - "lib/maintenance-reports/**"
+  - "lib/pdf/**"
+  - "lib/clients/subProjectGate.ts"
+  - "lib/security/rateLimitDistributed.ts"
+  - "lib/browser/downloadFile.ts"
+  - "lib/email/maintenanceReportEmailTemplate.ts"
+---
+
+# Maintenance module
+
+## Inspection form (`MaintenanceInspectionForm` and related)
+
+- **Client**: `SearchableSelect`, not native `<select>`.
+- **Sub-project**: searchable; optional when client has sub-projects; label **Sub-project (optional)**; empty **No sub-project**; single grid column (not `md:col-span-2`). API: `lib/clients/subProjectGate.ts` — optional even when rows exist; if an id is sent it must belong to the client.
+
+### Door cards
+
+- Header/dropdown: **serial-only** ids (`P0####`, legacy `PJ####`); do not repeat door type/extras in the dropdown label.
+
+### Door details & history
+
+- Optional blocks; avoid duplicating notes. Show previous history only when meaningful (no empty section by default).
+
+### Checklist & notes UX
+
+- Label text from maintained source (stable strings). Floating notes: real tooltip (hover + click; dismiss click-away/Escape).
+
+### Photos (bulk upload)
+
+- Avoid stale-prop races: append against latest photos (e.g. ref), not only `onChange([...photos, uploaded])`. **Offline**: keep behaviour safe (sequential OK); online may use limited concurrency.
+
+### Downloads
+
+- Show loading and progress (`Content-Length`) when possible; shared streaming helper with `onProgress`; disable button during download.
+
+### Signature
+
+- DPR-correct canvas (CSS vs backing store). Modes: draw; upload JPG/PNG/WebP; type (Roboto stack, few styles).
+
+### AI rewrite (`app/api/ai/door-summary`)
+
+- Editor behaviour: one defect per sentence; preserve detail; no assumptions; safety language only if stated. Refinement: send original + prior rewrite; if identical, one stronger retry; reduce randomness after first attempt.
+
+### Rate limits (`lib/security/rateLimitDistributed.ts`)
+
+- Do not use coarse per-IP buckets that starve AI routes; scope identifiers by path/feature where applicable.
+
+---
+
+## Display & PDF parity
+
+- **Single source**: `lib/maintenance/maintenanceDisplayFormat.ts` — `formatMaintenanceInteger` (en-AU grouping), `formatMaintenanceNumericField`, `buildDoorMetaSummaryLine` (subtitle **must match** PDF door meta). Change PDF + **`DoorInspectionCard`** together.
+
+### Door meta line
+
+- Omit empty segments; no door type for empty/`unspecified`; **no `Cycles:`** unless entered and &gt; 0 (no `N/A`). **View Window Visibility** when finite (including `0%`), grouped digits. PDF: draw meta line only when helper returns non-empty.
+
+### Door notes (PDF)
+
+- Empty notes: no dash placeholder; empty body under “Door Notes” is OK.
+
+### pdf-lib text
+
+- `drawText()` does not wrap `\n`; split on `\r?\n`, wrap with font metrics (e.g. `wrapPdfTextLines`). Do not hard-break by character count.
+
+### Photo grid
+
+- Thumbnail cap: **`PHOTO_THUMB_MAX_PT`** in `lib/pdf/layouts/maintenancePageMetrics.ts` (affects breaks/layout).
+
+### Numeric fields (cycles / view window / CW / CH)
+
+- **Cycles** & **View Window Visibility**: controlled display via `formatMaintenanceInteger`; store numeric from digits only. Do not mix `register()` + `onInput` that strips commas on controlled values. **CW/CH**: display `formatMaintenanceNumericField`; persist digits-only or null.
+
+---
+
+## Client access & links
+
+- Approved singles use `share_token`; viewer `/report/view/[token]` (merged or single).
+- **Copy client link** = viewer URL from `maintenanceReportClientViewUrl` / `client_view_url` (`NEXT_PUBLIC_APP_URL` + `/report/view/{token}`), **not** raw Supabase `pdf_url`.
+- Merged rows: viewer URL in `merged_reports.pdf_url`; singles expose `client_view_url` on `GET /api/maintenance/reports` and draft/approve responses.
+- Portal **Download**: `GET /api/maintenance/pdf/[reportId]`; embed `coverQrPngBytes` when approved + `share_token` present.
+- Schema: ensure migrations defining `share_token` / `approved` (e.g. `047_maintenance_reports_client_share`) are applied before relying on columns.
+
+---
+
+## Workflow emails
+
+- Resolve labels via **`resolveClientLocationForReport`** when emails need client/site from `client_location_id`.
+- **Client display name**: `clientNameFromDbRow` semantics — `clients` with `select('*')`; consider **`name`**, **`client_name`**, **`company_name`** (not only `name`/`company_name`) to avoid **Unknown Client**.
+- **Location**: `locationLabelFromDbRow` aligned with PDF options (`buildMaintenancePdfOptions`).
+- **Manager HTML**: do not prefix body with literal **Technician** before `technician_name` (avoids “Technician Technician”). Prefer **`<b>{technician_name}</b> submitted…**”; sign-off aligned with technician approval mail (**Thanks** / **NBE Team**).
