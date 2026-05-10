@@ -4,6 +4,7 @@ import { useAuth } from '@/app/providers/AuthProvider';
 import { createSupabaseClient } from '@/lib/supabase/client';
 import { canApproveMaintenanceReport } from '@/lib/auth/roles';
 import type { ClientLocationOption, ClientOption } from '@/lib/types/maintenance.types';
+import { SearchableSelect } from '@/components/ui/SearchableSelect'
 type DoorOption = {
     id: string;
     door_label: string;
@@ -105,7 +106,7 @@ export default function QrCodesPage() {
                 img.src = src;
             });
             const [logoImage, qrImage] = await Promise.all([
-                loadImage('/logo_QR_code.png'),
+                loadImage('/NBE_LOGO_2026_BG.svg'),
                 loadImage(qrImageUrl),
             ]);
             const canvas = document.createElement('canvas');
@@ -172,7 +173,7 @@ export default function QrCodesPage() {
     return (<div className="w-full space-y-4">
       <header className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col items-center gap-3 text-center">
-          <img src="/Logo_black.png" alt="NBE Australia" className="h-20 w-auto object-contain"/>
+          <img src="/NBE_LOGO_2026_BG.svg" alt="NBE Australia" className="h-24 w-auto object-contain"/>
           <h1 className="text-xl font-black tracking-wide text-slate-900">QR Code Generator</h1>
           <p className="text-sm text-slate-600">Generate printable industrial door QR codes.</p>
         </div>
@@ -181,11 +182,18 @@ export default function QrCodesPage() {
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <label className="text-sm font-medium text-slate-700">
-            Client
-            <select value={clientId} onChange={event => setClientId(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-slate-300 px-3">
-              <option value="">Select client</option>
-              {clients.map(client => (<option key={client.id} value={client.id}>{client.name}</option>))}
-            </select>
+            <div className="mt-1">
+              <SearchableSelect
+                id="qr-client"
+                label="Client"
+                value={clientId}
+                onChange={(v) => setClientId(v)}
+                options={(clients ?? []).map(c => ({ value: c.id, label: c.name }))}
+                allowEmpty
+                emptyLabel="Select client"
+                placeholder="Search clients…"
+              />
+            </div>
           </label>
 
           <label className="text-sm font-medium text-slate-700">
@@ -210,7 +218,7 @@ export default function QrCodesPage() {
 
       {doorId && (<section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mx-auto flex max-w-sm flex-col items-center gap-3 rounded-xl border border-slate-300 bg-white p-4 text-center">
-            <img src="/logo_QR_code.png" alt="NBE Australia" className="h-28 w-auto object-contain"/>
+            <img src="/NBE_LOGO_2026_BG.svg" alt="NBE Australia" className="h-32 w-auto object-contain"/>
 
             <div className="-mt-2 text-center leading-tight">
               <p className="text-2xl font-bold text-slate-900">(03) 9357 5858</p>

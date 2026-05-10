@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createSupabaseClient } from '@/lib/supabase/client';
 import type { ClientLocationOption, ClientOption } from '@/lib/types/maintenance.types';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 type DoorWithLocation = {
     id: string;
     door_label: string | null;
@@ -121,18 +122,23 @@ export default function DoorQrStickersPage() {
         </div>
 
         <div className="mt-2 flex flex-wrap gap-3 text-sm">
-          <label className="flex items-center gap-2">
-            <span className="text-slate-700">Client</span>
-            <select value={selectedClientId} onChange={event => {
-            setSelectedClientId(event.target.value);
-            setSelectedLocationId('');
-        }} className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm">
-              <option value="">All clients</option>
-              {clients.map(client => (<option key={client.id} value={client.id}>
-                  {client.name}
-                </option>))}
-            </select>
-          </label>
+          <div className="min-w-[12rem] flex-1">
+            <SearchableSelect
+              id="qr-doors-client"
+              label="Client"
+              labelClassName="text-sm font-medium text-slate-700"
+              value={selectedClientId}
+              onChange={v => {
+                setSelectedClientId(v);
+                setSelectedLocationId('');
+              }}
+              options={clients.map(c => ({ value: c.id, label: c.name }))}
+              allowEmpty
+              emptyLabel="All clients"
+              placeholder="Search clients…"
+              className="[&_button]:h-9"
+            />
+          </div>
 
           <label className="flex items-center gap-2">
             <span className="text-slate-700">Location</span>
