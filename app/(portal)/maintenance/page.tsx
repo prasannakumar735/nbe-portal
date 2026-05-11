@@ -112,6 +112,7 @@ export default function MaintenanceDashboardPage() {
     const { isManager, isAdmin } = useAuth();
     const canMergeReports = isManager || isAdmin;
     const canDeleteMergedReports = isAdmin || isManager;
+    const canDeleteReports = isAdmin || isManager;
     const { isOnline } = useOnlineStatus();
     const [reports, setReports] = useState<ReportRow[]>([]);
     const [mergedReports, setMergedReports] = useState<MergedReportRow[]>([]);
@@ -604,9 +605,9 @@ export default function MaintenanceDashboardPage() {
                     <button type="button" onClick={() => handleDownloadAllPhotos(report.id)} disabled={downloadingKey === `photos:${report.id}`} className={`${actionBtn} border-slate-300 bg-white text-slate-700 hover:bg-slate-50`}>
                       {downloadingKey === `photos:${report.id}` ? `Downloading ${progressLabel}` : 'All photos'}
                     </button>
-                    <button type="button" onClick={() => void handleDeleteMaintenanceReport(report.id, report.report_number ?? report.id.slice(0, 8))} disabled={deletingReportId === report.id} className={`${actionBtn} border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50`}>
+                    {canDeleteReports && (<button type="button" onClick={() => void handleDeleteMaintenanceReport(report.id, report.report_number ?? report.id.slice(0, 8))} disabled={deletingReportId === report.id} className={`${actionBtn} border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50`}>
                       {deletingReportId === report.id ? 'Deleting…' : 'Delete'}
-                    </button>
+                    </button>)}
                   </div>
                 </td>
               </tr>))}
