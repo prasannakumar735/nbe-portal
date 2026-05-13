@@ -46,7 +46,7 @@ export function ApprovalSignOffSummary({
     <div className="mx-auto max-w-3xl px-4 py-6">
       <header className="mb-6 flex items-center gap-6">
         <Image
-          src="/NBE_LOGO_2026_BG.svg"
+          src="/NBE_LOGO_BK_PL.png"
           alt="NBE Australia"
           width={170}
           height={56}

@@ -31,15 +31,16 @@ type MergedReportRow = {
     access_expires_at?: string | null;
     deleted_at?: string | null;
     deleted_by?: string | null;
+    status?: string | null;
+    approved?: boolean | null;
+    approved_at?: string | null;
 };
 function mergedReportViewHref(m: MergedReportRow): string {
-    const u = m.pdf_url?.trim();
-    if (u)
-        return u;
-    return `/api/maintenance/merged-reports/${encodeURIComponent(m.id)}/pdf?inline=1`;
+    return `/maintenance/merged/${encodeURIComponent(m.id)}`;
 }
 const statusStyles: Record<string, string> = {
     draft: 'rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700',
+    pending: 'rounded-full bg-amber-200 px-2 py-0.5 text-xs font-semibold text-amber-800',
     submitted: 'rounded-full bg-amber-200 px-2 py-0.5 text-xs font-semibold text-amber-800',
     reviewing: 'rounded-full bg-emerald-200 px-2 py-0.5 text-xs font-semibold text-emerald-800',
     approved: 'rounded-full bg-emerald-200 px-2 py-0.5 text-xs font-semibold text-emerald-800',
@@ -48,6 +49,7 @@ const statusStyles: Record<string, string> = {
 function statusLabel(status: string): string {
     const labels: Record<string, string> = {
         draft: 'Draft',
+        pending: 'Pending approval',
         submitted: 'Submitted',
         reviewing: 'In review',
         approved: 'Approved',
@@ -128,6 +130,7 @@ export default function MaintenanceDashboardPage() {
     const [mergeTotalDoorsInput, setMergeTotalDoorsInput] = useState('');
     const [mergeDoorsFieldError, setMergeDoorsFieldError] = useState<string | null>(null);
     const [deletingMergedId, setDeletingMergedId] = useState<string | null>(null);
+    const [approvingMergedId, setApprovingMergedId] = useState<string | null>(null);
     const [deletingReportId, setDeletingReportId] = useState<string | null>(null);
     const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
     const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
@@ -457,6 +460,30 @@ export default function MaintenanceDashboardPage() {
         }
         finally {
             setDeletingMergedId(null);
+        }
+    };
+    const handleApproveMergedReport = async (id: string) => {
+        if (!canMergeReports)
+            return;
+        setApprovingMergedId(id);
+        try {
+            const res = await fetch(`/api/maintenance/merged-reports/${encodeURIComponent(id)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'approved' }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error((data as { error?: string }).error ?? 'Approval failed');
+            }
+            toast.success('Merged report approved — client link is now active');
+            await loadMergedLists();
+        }
+        catch (e) {
+            toast.error(e instanceof Error ? e.message : 'Failed to approve merged report');
+        }
+        finally {
+            setApprovingMergedId(null);
         }
     };
     const handleDownloadPdf = async (reportId: string) => {
@@ -814,23 +841,39 @@ export default function MaintenanceDashboardPage() {
                     <th className="px-4 py-3 font-semibold text-slate-700">Client</th>
                     <th className="px-4 py-3 font-semibold text-slate-700">Reports</th>
                     <th className="px-4 py-3 font-semibold text-slate-700">Created</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">Status</th>
                     <th className="px-4 py-3 font-semibold text-slate-700">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {mergedReports.map((m) => (<tr key={m.id} className="border-b border-slate-100 hover:bg-slate-50">
+                  {mergedReports.map((m) => {
+                    const mergedStatus = m.status ?? (m.approved ? 'approved' : null);
+                    const isApproved = m.approved === true || m.approved === null;
+                    return (<tr key={m.id} className="border-b border-slate-100 hover:bg-slate-50">
                       <td className="px-4 py-3 text-slate-800">{m.client_name}</td>
                       <td className="px-4 py-3 text-slate-700">{Array.isArray(m.report_ids) ? m.report_ids.length : 0}</td>
                       <td className="px-4 py-3 text-slate-600">{formatDateTime(m.created_at)}</td>
                       <td className="px-4 py-3">
+                        {mergedStatus ? (
+                          <span className={statusStyles[mergedStatus] ?? statusStyles.draft}>
+                            {statusLabel(mergedStatus)}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3">
                         <div className="flex flex-wrap items-center gap-2">
-                          <a href={mergedReportViewHref(m)} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-gray-300 px-3 py-1 text-sm hover:bg-gray-100">
+                          <Link href={mergedReportViewHref(m)} className="rounded-lg border border-gray-300 px-3 py-1 text-sm hover:bg-gray-100">
                             View
-                          </a>
+                          </Link>
                           <button type="button" onClick={() => void handleDownloadMergedPdf(m.id)} disabled={downloadingKey === `merged:${m.id}`} className="rounded-lg border border-gray-300 px-3 py-1 text-sm hover:bg-gray-100">
                             {downloadingKey === `merged:${m.id}` ? `Downloading ${progressLabel}` : 'Download'}
                           </button>
-                          {m.pdf_url ? (<button type="button" onClick={() => {
+                          {!isApproved && canMergeReports ? (
+                            <button type="button" onClick={() => void handleApproveMergedReport(m.id)} disabled={approvingMergedId === m.id} className="rounded-lg border border-emerald-300 bg-emerald-600 px-3 py-1 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
+                              {approvingMergedId === m.id ? 'Approving…' : 'Approve'}
+                            </button>
+                          ) : null}
+                          {isApproved && m.pdf_url ? (<button type="button" onClick={() => {
                             void navigator.clipboard.writeText(m.pdf_url!).then(() => {
                                 toast.success('Client link copied');
                             });
@@ -842,7 +885,8 @@ export default function MaintenanceDashboardPage() {
                             </button>) : null}
                         </div>
                       </td>
-                    </tr>))}
+                    </tr>);
+                  })}
                 </tbody>
               </table>
             </div>)}

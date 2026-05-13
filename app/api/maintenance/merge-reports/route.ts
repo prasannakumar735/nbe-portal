@@ -171,6 +171,8 @@ export async function POST(request: NextRequest) {
           pdf_url: viewerUrl,
           pdf_storage_path: storageOk ? storagePath : null,
           access_expires_at: accessExpiresAt,
+          status: 'pending',
+          approved: false,
         })
       } catch {
         try {
@@ -185,6 +187,8 @@ export async function POST(request: NextRequest) {
             pdf_url: viewerUrl,
             pdf_storage_path: storageOk ? storagePath : null,
             access_expires_at: accessExpiresAt,
+            status: 'pending',
+            approved: false,
           })
         } catch {
           try {

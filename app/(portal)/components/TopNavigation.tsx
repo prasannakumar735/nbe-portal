@@ -56,7 +56,7 @@ export function TopNavigation({ user }: TopNavigationProps) {
       {/* Logo */}
       <div className="mr-10 flex shrink-0 items-center overflow-hidden">
         <img
-          src="/NBE_LOGO_2026_BG.svg"
+          src="/NBE_LOGO_BK_PL.png"
           alt="NBE Australia"
           width={132}
           height={77}

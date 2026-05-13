@@ -29,6 +29,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     email?: string
     clientId?: string
     status?: ClientUserStatus
+    portalLocationId?: string | null
   } = {}
 
   if (typeof body.name === 'string') patch.name = body.name
@@ -37,6 +38,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (typeof body.client_id === 'string') patch.clientId = body.client_id
   if (body.status === 'active' || body.status === 'disabled') {
     patch.status = body.status
+  }
+  // Explicit key presence means the caller intends to update portal location.
+  // null → clear scope (all locations); string → single-site scope.
+  if ('client_portal_location_id' in body) {
+    patch.portalLocationId =
+      body.client_portal_location_id === null || body.client_portal_location_id === ''
+        ? null
+        : typeof body.client_portal_location_id === 'string'
+          ? body.client_portal_location_id
+          : null
   }
 
   const result = await updateClientUser(id, patch)

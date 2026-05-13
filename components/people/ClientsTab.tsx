@@ -117,6 +117,7 @@ export function ClientsTab({ initialClients, clientsError }: ClientsTabProps) {
                 <th className="whitespace-nowrap px-3 py-2 font-semibold text-slate-700">Client Name</th>
                 <th className="whitespace-nowrap px-3 py-2 font-semibold text-slate-700">Company Name</th>
                 <th className="whitespace-nowrap px-3 py-2 font-semibold text-slate-700">Organisation (reports)</th>
+                <th className="whitespace-nowrap px-3 py-2 font-semibold text-slate-700">Site access</th>
                 <th className="whitespace-nowrap px-3 py-2 font-semibold text-slate-700">Email (login)</th>
                 <th className="whitespace-nowrap px-3 py-2 font-semibold text-slate-700">Status</th>
                 <th className="whitespace-nowrap px-3 py-2 font-semibold text-slate-700">Created</th>
@@ -126,7 +127,7 @@ export function ClientsTab({ initialClients, clientsError }: ClientsTabProps) {
             <tbody className="divide-y divide-slate-100">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={8} className="px-3 py-8 text-center text-sm text-slate-500">
                     No client accounts yet.
                   </td>
                 </tr>
@@ -137,6 +138,12 @@ export function ClientsTab({ initialClients, clientsError }: ClientsTabProps) {
                     <td className="max-w-[200px] truncate px-3 py-2 text-slate-600">{r.company_name || '—'}</td>
                     <td className="max-w-[180px] truncate px-3 py-2 text-slate-600" title={r.linked_client_name ?? undefined}>
                       {r.linked_client_name || (r.client_id ? '—' : 'Not linked')}
+                    </td>
+                    <td className="max-w-[160px] truncate px-3 py-2 text-slate-600" title={r.client_portal_location_name ?? 'All locations'}>
+                      {r.client_portal_location_name
+                        ? <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">{r.client_portal_location_name}</span>
+                        : <span className="text-xs text-slate-400">All locations</span>
+                      }
                     </td>
                     <td className="max-w-[220px] truncate px-3 py-2 text-slate-600">{r.email}</td>
                     <td className="px-3 py-2">
@@ -233,6 +240,10 @@ function CreateClientModal({
   const [orgLoading, setOrgLoading] = useState(true)
   const [clientOrgId, setClientOrgId] = useState('')
 
+  const [locationOptions, setLocationOptions] = useState<{ id: string; name: string }[]>([])
+  const [locLoading, setLocLoading] = useState(false)
+  const [portalLocationId, setPortalLocationId] = useState('')
+
   const [name, setName] = useState('')
   const [companyName, setCompanyName] = useState('')
   const [email, setEmail] = useState('')
@@ -259,10 +270,32 @@ function CreateClientModal({
         if (alive) setOrgLoading(false)
       }
     })()
-    return () => {
-      alive = false
-    }
+    return () => { alive = false }
   }, [])
+
+  // Fetch locations whenever org changes
+  useEffect(() => {
+    if (!clientOrgId.trim()) {
+      setLocationOptions([])
+      setPortalLocationId('')
+      return
+    }
+    let alive = true
+    setLocLoading(true)
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/maintenance/locations?clientId=${encodeURIComponent(clientOrgId)}`)
+        const data = (await res.json()) as { locations?: { id: string; name: string }[] }
+        if (!alive) return
+        setLocationOptions(Array.isArray(data.locations) ? data.locations : [])
+      } catch {
+        if (alive) setLocationOptions([])
+      } finally {
+        if (alive) setLocLoading(false)
+      }
+    })()
+    return () => { alive = false }
+  }, [clientOrgId])
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -370,6 +403,7 @@ function CreateClientModal({
             disabled={orgLoading}
             onChange={(v) => {
               setClientOrgId(v)
+              setPortalLocationId('')
               const opt = orgOptions.find((o) => o.id === v)
               if (opt && !companyName.trim()) setCompanyName(opt.name)
             }}
@@ -383,6 +417,28 @@ function CreateClientModal({
             Must match the client on merged reports — required for /report/view access.
           </p>
         </div>
+        {locationOptions.length >= 2 ? (
+          <div>
+            <label htmlFor="create-portal-location" className="block text-sm font-medium text-slate-800">
+              Site access
+            </label>
+            <p className="mb-1 text-xs text-slate-500">
+              Restrict this login to one site, or leave as &quot;All locations&quot; for full org access.
+            </p>
+            <select
+              id="create-portal-location"
+              value={portalLocationId}
+              disabled={locLoading}
+              onChange={(e) => setPortalLocationId(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-900/10 disabled:bg-slate-100"
+            >
+              <option value="">All locations (full access)</option>
+              {locationOptions.map((loc) => (
+                <option key={loc.id} value={loc.id}>{loc.name}</option>
+              ))}
+            </select>
+          </div>
+        ) : null}
         <Field label="Company name" value={companyName} onChange={setCompanyName} autoComplete="organization" />
         <Field label="Email (login)" type="email" value={email} onChange={setEmail} required autoComplete="email" />
 
@@ -482,6 +538,10 @@ function EditClientModal({
   const [status, setStatus] = useState<ClientUserStatus>(row.status)
   const [loading, setLoading] = useState(false)
 
+  const [locationOptions, setLocationOptions] = useState<{ id: string; name: string }[]>([])
+  const [locLoading, setLocLoading] = useState(false)
+  const [portalLocationId, setPortalLocationId] = useState(row.client_portal_location_id ?? '')
+
   useEffect(() => {
     let alive = true
     ;(async () => {
@@ -496,10 +556,32 @@ function EditClientModal({
         if (alive) setOrgLoading(false)
       }
     })()
-    return () => {
-      alive = false
-    }
+    return () => { alive = false }
   }, [])
+
+  // Fetch locations whenever org changes
+  useEffect(() => {
+    if (!clientOrgId.trim()) {
+      setLocationOptions([])
+      setPortalLocationId('')
+      return
+    }
+    let alive = true
+    setLocLoading(true)
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/maintenance/locations?clientId=${encodeURIComponent(clientOrgId)}`)
+        const data = (await res.json()) as { locations?: { id: string; name: string }[] }
+        if (!alive) return
+        setLocationOptions(Array.isArray(data.locations) ? data.locations : [])
+      } catch {
+        if (alive) setLocationOptions([])
+      } finally {
+        if (alive) setLocLoading(false)
+      }
+    })()
+    return () => { alive = false }
+  }, [clientOrgId])
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -518,6 +600,7 @@ function EditClientModal({
           email,
           client_id: clientOrgId.trim(),
           status,
+          client_portal_location_id: portalLocationId.trim() || null,
         }),
       })
       const data = (await res.json()) as { client?: ClientUserRow; error?: string }
@@ -534,6 +617,8 @@ function EditClientModal({
     }
   }
 
+  const showLocationDropdown = locationOptions.length >= 2
+
   return (
     <ModalFrame title="Edit client" onClose={onClose}>
       <form onSubmit={submit} className="space-y-3">
@@ -547,6 +632,7 @@ function EditClientModal({
             disabled={orgLoading}
             onChange={(v) => {
               setClientOrgId(v)
+              setPortalLocationId('')
               const opt = orgOptions.find((o) => o.id === v)
               if (opt && !companyName.trim()) setCompanyName(opt.name)
             }}
@@ -557,6 +643,28 @@ function EditClientModal({
             className="[&_button]:mt-1 [&_button]:py-2"
           />
         </div>
+        {showLocationDropdown ? (
+          <div>
+            <label htmlFor="edit-portal-location" className="block text-sm font-medium text-slate-800">
+              Site access
+            </label>
+            <p className="mb-1 text-xs text-slate-500">
+              Restrict this login to one site, or leave as &quot;All locations&quot; for full org access.
+            </p>
+            <select
+              id="edit-portal-location"
+              value={portalLocationId}
+              disabled={locLoading}
+              onChange={(e) => setPortalLocationId(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-900/10 disabled:bg-slate-100"
+            >
+              <option value="">All locations (full access)</option>
+              {locationOptions.map((loc) => (
+                <option key={loc.id} value={loc.id}>{loc.name}</option>
+              ))}
+            </select>
+          </div>
+        ) : null}
         <Field label="Company name" value={companyName} onChange={setCompanyName} />
         <Field label="Email (login)" type="email" value={email} onChange={setEmail} required />
         <div>

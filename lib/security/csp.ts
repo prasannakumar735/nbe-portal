@@ -61,7 +61,7 @@ export function buildContentSecurityPolicy(
     ...(isProd ? (["style-src-attr 'unsafe-inline'"] as const) : []),
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob: https:",
-    `frame-src 'self' ${TURNSTILE_ORIGIN}`,
+    `frame-src 'self' blob: ${TURNSTILE_ORIGIN}`,
     // Turnstile may spin workers from Cloudflare origin (not only blob:).
     `worker-src 'self' blob: ${TURNSTILE_ORIGIN}`,
     [

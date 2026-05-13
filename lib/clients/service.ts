@@ -2,7 +2,12 @@ import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import type { ClientUserRow, ClientUserStatus } from '@/lib/types/client-users.types'
 import { generateClientPassword, hashPassword } from '@/lib/clients/password'
 
-function rowFromDb(r: Record<string, unknown>, linkedName?: string | null): ClientUserRow {
+function rowFromDb(
+  r: Record<string, unknown>,
+  linkedName?: string | null,
+  portalLocationId?: string | null,
+  portalLocationName?: string | null,
+): ClientUserRow {
   return {
     id: String(r.id),
     name: String(r.name ?? ''),
@@ -12,6 +17,8 @@ function rowFromDb(r: Record<string, unknown>, linkedName?: string | null): Clie
     created_at: String(r.created_at ?? new Date().toISOString()),
     client_id: r.client_id != null ? String(r.client_id) : null,
     linked_client_name: linkedName ?? null,
+    client_portal_location_id: portalLocationId ?? null,
+    client_portal_location_name: portalLocationName ?? null,
   }
 }
 
@@ -47,17 +54,24 @@ export async function listClientUsers(): Promise<{ clients: ClientUserRow[]; err
 
     const rows = (data ?? []) as Record<string, unknown>[]
     const userIds = rows.map((r) => String(r.id))
-    const { data: profRows } = await service.from('profiles').select('id, client_id').in('id', userIds)
-    const profClientByUser = new Map<string, string | null>(
-      (profRows ?? []).map((p: { id: string; client_id: string | null }) => [p.id, p.client_id])
+    const { data: profRows } = await service
+      .from('profiles')
+      .select('id, client_id, client_portal_location_id')
+      .in('id', userIds)
+
+    type ProfRow = { id: string; client_id: string | null; client_portal_location_id: string | null }
+    const profByUser = new Map<string, ProfRow>(
+      (profRows ?? []).map((p: ProfRow) => [p.id, p])
     )
 
     const merged = rows.map((r) => {
       const id = String(r.id)
+      const prof = profByUser.get(id)
       const fromCu = r.client_id != null ? String(r.client_id) : null
-      const fromProf = profClientByUser.get(id) ?? null
-      const effective = fromCu ?? (fromProf != null ? String(fromProf) : null)
-      return { ...r, client_id: effective }
+      const fromProf = prof?.client_id != null ? String(prof.client_id) : null
+      const effective = fromCu ?? fromProf
+      const portalLocId = prof?.client_portal_location_id ?? null
+      return { ...r, client_id: effective, _portal_location_id: portalLocId }
     })
 
     const nameMap = await resolveClientNames(
@@ -65,10 +79,36 @@ export async function listClientUsers(): Promise<{ clients: ClientUserRow[]; err
       merged.map((r) => (r.client_id != null ? String(r.client_id) : ''))
     )
 
+    // Resolve portal location names in one query
+    const portalLocIds = [...new Set(
+      merged
+        .map((r) => String(r._portal_location_id ?? '').trim())
+        .filter(Boolean)
+    )]
+    const locNameMap = new Map<string, string>()
+    if (portalLocIds.length > 0) {
+      const { data: locRows } = await service
+        .from('client_locations')
+        .select('id, location_name')
+        .in('id', portalLocIds)
+      for (const loc of locRows ?? []) {
+        const l = loc as { id: string; location_name?: string | null }
+        const label = String(l.location_name ?? '').trim()
+        if (l.id && label) locNameMap.set(l.id, label)
+      }
+    }
+
     return {
-      clients: merged.map((r) =>
-        rowFromDb(r, r.client_id != null ? nameMap.get(String(r.client_id)) ?? null : null)
-      ),
+      clients: merged.map((r) => {
+        const portalLocId = r._portal_location_id ? String(r._portal_location_id) : null
+        const portalLocName = portalLocId ? locNameMap.get(portalLocId) ?? null : null
+        return rowFromDb(
+          r,
+          r.client_id != null ? nameMap.get(String(r.client_id)) ?? null : null,
+          portalLocId,
+          portalLocName,
+        )
+      }),
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Failed to load clients'
@@ -181,18 +221,52 @@ export async function updateClientUser(
     email: string
     status: ClientUserStatus
     clientId: string
+    /** null clears location scope (full org access); string sets single-site scope */
+    portalLocationId: string | null
   }>
 ): Promise<{ client: ClientUserRow } | { error: string }> {
   const service = createServiceRoleClient()
 
-  if (typeof patch.clientId === 'string') {
-    const cid = patch.clientId.trim()
-    if (!cid) {
+  const effectiveClientId = typeof patch.clientId === 'string'
+    ? patch.clientId.trim()
+    : null
+
+  if (effectiveClientId !== null) {
+    if (!effectiveClientId) {
       return { error: 'Organisation cannot be empty. Select a client record.' }
     }
-    const ok = await assertClientExists(service, cid)
+    const ok = await assertClientExists(service, effectiveClientId)
     if (!ok) {
       return { error: 'Invalid organisation.' }
+    }
+  }
+
+  // Validate portal location if provided — must belong to the resolved client org
+  const settingPortalLoc = 'portalLocationId' in patch
+  if (settingPortalLoc && patch.portalLocationId) {
+    const locId = patch.portalLocationId.trim()
+
+    // Resolve the org id to validate against: use incoming clientId or look up existing
+    let orgId = effectiveClientId
+    if (!orgId) {
+      const { data: profRow } = await service
+        .from('profiles')
+        .select('client_id')
+        .eq('id', id)
+        .maybeSingle()
+      orgId = String((profRow as { client_id?: string | null } | null)?.client_id ?? '').trim() || null
+    }
+    if (!orgId) {
+      return { error: 'Cannot set a location scope before the client has an assigned organisation.' }
+    }
+    const { data: locRow } = await service
+      .from('client_locations')
+      .select('id, client_id')
+      .eq('id', locId)
+      .maybeSingle()
+    const loc = locRow as { id?: string; client_id?: string } | null
+    if (!loc?.id || String(loc.client_id ?? '').trim() !== orgId) {
+      return { error: 'Invalid location — it does not belong to this client organisation.' }
     }
   }
 
@@ -200,16 +274,14 @@ export async function updateClientUser(
   if (typeof patch.name === 'string') updates.name = patch.name.trim()
   if (typeof patch.companyName === 'string') updates.company_name = patch.companyName.trim()
   if (typeof patch.email === 'string') updates.email = patch.email.trim().toLowerCase()
-
   if (typeof patch.status === 'string') {
     updates.status = patch.status === 'disabled' ? 'disabled' : 'active'
   }
-
-  if (typeof patch.clientId === 'string') {
-    updates.client_id = patch.clientId.trim()
+  if (effectiveClientId !== null) {
+    updates.client_id = effectiveClientId
   }
 
-  if (Object.keys(updates).length === 0) {
+  if (Object.keys(updates).length === 0 && !settingPortalLoc) {
     return { error: 'No changes provided.' }
   }
 
@@ -220,26 +292,26 @@ export async function updateClientUser(
     }
   }
 
-  const { data: updated, error } = await service
-    .from('client_users')
-    .update(updates)
-    .eq('id', id)
-    .select('id, name, company_name, email, status, created_at, client_id')
-    .maybeSingle()
-
-  if (error || !updated) {
-    return { error: error?.message ?? 'Update failed' }
+  if (Object.keys(updates).length > 0) {
+    const { error } = await service
+      .from('client_users')
+      .update(updates)
+      .eq('id', id)
+    if (error) {
+      return { error: error.message }
+    }
   }
 
-  const profilePatch: Record<string, string | boolean> = {}
-  if (typeof updates.name === 'string') {
-    profilePatch.full_name = updates.name
-  }
-  if (typeof updates.status === 'string') {
-    profilePatch.is_active = updates.status === 'active'
-  }
-  if (typeof updates.client_id === 'string') {
-    profilePatch.client_id = updates.client_id
+  // Build profile patch — includes portal location scope
+  const profilePatch: Record<string, string | boolean | null> = {}
+  if (typeof updates.name === 'string') profilePatch.full_name = updates.name
+  if (typeof updates.status === 'string') profilePatch.is_active = updates.status === 'active'
+  if (effectiveClientId !== null) profilePatch.client_id = effectiveClientId
+  if (settingPortalLoc) {
+    // null clears single-site scope; non-empty string sets it (already validated above)
+    profilePatch.client_portal_location_id = patch.portalLocationId
+      ? patch.portalLocationId.trim()
+      : null
   }
 
   if (Object.keys(profilePatch).length > 0) {
@@ -249,9 +321,47 @@ export async function updateClientUser(
     }
   }
 
-  const cid = String((updated as Record<string, unknown>).client_id ?? '')
+  // Re-fetch the full row for response
+  const { data: refreshed } = await service
+    .from('client_users')
+    .select('id, name, company_name, email, status, created_at, client_id')
+    .eq('id', id)
+    .maybeSingle()
+
+  const { data: profRefreshed } = await service
+    .from('profiles')
+    .select('client_portal_location_id')
+    .eq('id', id)
+    .maybeSingle()
+
+  const row = (refreshed ?? {}) as Record<string, unknown>
+  const cid = String(row.client_id ?? '').trim()
   const linked = cid ? await resolveClientNames(service, [cid]) : new Map<string, string>()
-  return { client: rowFromDb(updated as Record<string, unknown>, cid ? linked.get(cid) ?? null : null) }
+
+  const portalLocId = String(
+    (profRefreshed as { client_portal_location_id?: string | null } | null)?.client_portal_location_id ?? ''
+  ).trim() || null
+
+  let portalLocName: string | null = null
+  if (portalLocId) {
+    const { data: locRow } = await service
+      .from('client_locations')
+      .select('location_name')
+      .eq('id', portalLocId)
+      .maybeSingle()
+    portalLocName = String(
+      (locRow as { location_name?: string | null } | null)?.location_name ?? ''
+    ).trim() || null
+  }
+
+  return {
+    client: rowFromDb(
+      row,
+      cid ? linked.get(cid) ?? null : null,
+      portalLocId,
+      portalLocName,
+    ),
+  }
 }
 
 export async function resetClientPassword(

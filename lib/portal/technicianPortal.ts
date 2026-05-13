@@ -67,6 +67,7 @@ const TECHNICIAN_ALLOWED_PREFIXES = [
   '/job-card',
   '/knowledge',
   '/timecard',
+  '/office',
 ] as const
 
 /** Whether a pathname is allowed for technician / legacy employee portal users. */

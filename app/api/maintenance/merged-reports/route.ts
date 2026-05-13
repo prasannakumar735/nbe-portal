@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('merged_reports')
       .select(
-        'id, client_id, client_name, report_ids, created_by, created_at, file_url, pdf_url, access_expires_at, deleted_at, deleted_by',
+        'id, client_id, client_name, report_ids, created_by, created_at, file_url, pdf_url, access_expires_at, deleted_at, deleted_by, status, approved, approved_at',
       )
       .order('created_at', { ascending: false })
       .limit(isDeletedScope ? 100 : 200)
@@ -73,6 +73,9 @@ export async function GET(request: NextRequest) {
         access_expires_at: (r as { access_expires_at?: string | null }).access_expires_at ?? null,
         deleted_at: (r as { deleted_at?: string | null }).deleted_at ?? null,
         deleted_by: (r as { deleted_by?: string | null }).deleted_by ?? null,
+        status: (r as { status?: string | null }).status ?? null,
+        approved: (r as { approved?: boolean | null }).approved ?? null,
+        approved_at: (r as { approved_at?: string | null }).approved_at ?? null,
       }
     })
 

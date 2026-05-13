@@ -83,7 +83,7 @@ export function Sidebar({
         }`}>
           <div className="relative flex items-center justify-center min-w-[56px]">
             <img
-              src="/NBE_LOGO_2026_BG.svg"
+              src="/NBE_LOGO_BK_PL.png"
               alt="NBE Australia"
               width={112}
               height={65}

@@ -19,7 +19,7 @@ export function ReportHeader({
     <div>
       <header className="relative flex min-h-[5.5rem] items-start justify-between gap-4 pb-0">
         <div className="flex shrink-0 items-center">
-          <Image src="/NBE_LOGO_2026_BG.svg" alt="NBE Australia" width={160} height={52} className="h-12 w-auto object-contain" priority />
+          <Image src="/NBE_LOGO_BK_PL.png" alt="NBE Australia" width={160} height={52} className="h-12 w-auto object-contain" priority />
         </div>
         <h1 className="absolute left-1/2 top-0 max-w-[min(100%,20rem)] -translate-x-1/2 text-center text-lg font-bold tracking-tight text-slate-900 md:text-xl">
           {title}

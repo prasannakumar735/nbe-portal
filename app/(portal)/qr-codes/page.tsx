@@ -106,7 +106,7 @@ export default function QrCodesPage() {
                 img.src = src;
             });
             const [logoImage, qrImage] = await Promise.all([
-                loadImage('/NBE_LOGO_2026_BG.svg'),
+                loadImage('/NBE_LOGO_BK_PL.png'),
                 loadImage(qrImageUrl),
             ]);
             const canvas = document.createElement('canvas');
@@ -173,7 +173,7 @@ export default function QrCodesPage() {
     return (<div className="w-full space-y-4">
       <header className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col items-center gap-3 text-center">
-          <img src="/NBE_LOGO_2026_BG.svg" alt="NBE Australia" className="h-24 w-auto object-contain"/>
+          <img src="/NBE_LOGO_BK_PL.png" alt="NBE Australia" className="h-24 w-auto object-contain"/>
           <h1 className="text-xl font-black tracking-wide text-slate-900">QR Code Generator</h1>
           <p className="text-sm text-slate-600">Generate printable industrial door QR codes.</p>
         </div>
@@ -218,7 +218,7 @@ export default function QrCodesPage() {
 
       {doorId && (<section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mx-auto flex max-w-sm flex-col items-center gap-3 rounded-xl border border-slate-300 bg-white p-4 text-center">
-            <img src="/NBE_LOGO_2026_BG.svg" alt="NBE Australia" className="h-32 w-auto object-contain"/>
+            <img src="/NBE_LOGO_BK_PL.png" alt="NBE Australia" className="h-32 w-auto object-contain"/>
 
             <div className="-mt-2 text-center leading-tight">
               <p className="text-2xl font-bold text-slate-900">(03) 9357 5858</p>

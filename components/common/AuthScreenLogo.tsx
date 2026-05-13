@@ -27,7 +27,7 @@ export function AuthScreenLogo({
 
   return (
     <img
-      src="/NBE_LOGO_2026_BG.svg"
+      src="/NBE_LOGO_BK_PL.png"
       alt="NBE Australia"
       width={160}
       height={93}
