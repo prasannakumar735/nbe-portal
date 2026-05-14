@@ -219,6 +219,31 @@ export async function toggleUserStatus(userId: string): Promise<UserManagementAc
   return { ok: true }
 }
 
+export async function resetUserPassword(input: {
+  userId: string
+  password?: string
+  autoGenerate?: boolean
+}): Promise<{ ok: true; plainPassword: string } | { ok: false; error: string }> {
+  const gate = await requireManagerOrAdmin()
+  if (!gate.ok) return { ok: false, error: gate.error }
+
+  let password = input.password ?? ''
+
+  if (input.autoGenerate) {
+    password = generateTempPassword()
+  } else {
+    if (!password || password.length < 8) {
+      return { ok: false, error: 'Password must be at least 8 characters.' }
+    }
+  }
+
+  const admin = createServiceRoleClient()
+  const { error } = await admin.auth.admin.updateUserById(input.userId, { password })
+  if (error) return { ok: false, error: error.message }
+
+  return { ok: true, plainPassword: password }
+}
+
 export async function updateOwnProfile(input: {
   fullName: string
   phone: string

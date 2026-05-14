@@ -1,10 +1,10 @@
 'use client'
 
-import { useMemo, useState, useCallback, useEffect } from 'react'
+import { useMemo, useState, useCallback, useEffect, type FormEvent, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import type { ManagedUserRow } from '@/lib/types/user-management.types'
-import { toggleUserStatus } from '@/lib/users/actions'
+import { toggleUserStatus, resetUserPassword } from '@/lib/users/actions'
 import { UserFilters, type UserFilterState } from '@/components/users/UserFilters'
 import { UserFormModal } from '@/components/users/UserFormModal'
 import { Badge } from '@/components/ui/Badge'
@@ -58,6 +58,7 @@ export function UsersTable({
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add')
   const [editing, setEditing] = useState<ManagedUserRow | null>(null)
   const [toggleLoadingId, setToggleLoadingId] = useState<string | null>(null)
+  const [resetTarget, setResetTarget] = useState<ManagedUserRow | null>(null)
 
   useEffect(() => {
     setRows(initialUsers)
@@ -222,6 +223,14 @@ export function UsersTable({
                         </Button>
                         <Button
                           type="button"
+                          variant="secondary"
+                          className="!h-9 !px-3 !text-sm"
+                          onClick={() => setResetTarget(u)}
+                        >
+                          Reset password
+                        </Button>
+                        <Button
+                          type="button"
                           variant={u.is_active ? 'secondary' : 'primary'}
                           className="!h-9 !px-3 !text-sm"
                           disabled={u.id === currentUserId || toggleLoadingId === u.id}
@@ -246,6 +255,188 @@ export function UsersTable({
         user={editing}
         onClose={() => setModalOpen(false)}
         onSuccess={onModalSuccess}
+      />
+
+      {resetTarget && (
+        <ResetUserPasswordModal
+          user={resetTarget}
+          onClose={() => setResetTarget(null)}
+          onDone={() => setResetTarget(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function ResetUserPasswordModal({
+  user,
+  onClose,
+  onDone,
+}: {
+  user: ManagedUserRow
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [autoGen, setAutoGen] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [plain, setPlain] = useState<string | null>(null)
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!autoGen && password !== confirm) {
+      toast.error('Passwords do not match')
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await resetUserPassword({
+        userId: user.id,
+        password: autoGen ? undefined : password,
+        autoGenerate: autoGen,
+      })
+      if (!res.ok) {
+        toast.error(res.error)
+        return
+      }
+      setPlain(res.plainPassword)
+      setPassword('')
+      setConfirm('')
+      toast.success('Password reset')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const copyPlain = async () => {
+    if (!plain) return
+    try {
+      await navigator.clipboard.writeText(plain)
+      toast.message('Password copied')
+    } catch {
+      toast.error('Could not copy')
+    }
+  }
+
+  if (plain) {
+    return (
+      <UserModalFrame title="New password" onClose={onDone}>
+        <p className="text-sm text-slate-600">Copy this password now — it will not be shown again.</p>
+        <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-sm text-slate-900">
+          ••••••••
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button type="button" variant="secondary" onClick={copyPlain}>
+            Copy password
+          </Button>
+          <Button type="button" onClick={onDone}>
+            Done
+          </Button>
+        </div>
+      </UserModalFrame>
+    )
+  }
+
+  return (
+    <UserModalFrame title={`Reset password — ${user.email}`} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-3">
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={autoGen}
+            onChange={(e) => {
+              setAutoGen(e.target.checked)
+              if (e.target.checked) {
+                setPassword('')
+                setConfirm('')
+              }
+            }}
+          />
+          Auto-generate password
+        </label>
+        {!autoGen ? (
+          <>
+            <UserField label="New password" type="password" value={password} onChange={setPassword} required />
+            <UserField label="Confirm" type="password" value={confirm} onChange={setConfirm} required />
+          </>
+        ) : null}
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={loading}>
+            Reset password
+          </Button>
+        </div>
+      </form>
+    </UserModalFrame>
+  )
+}
+
+function UserModalFrame({
+  title,
+  children,
+  onClose,
+}: {
+  title: string
+  children: ReactNode
+  onClose: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button
+        type="button"
+        className="absolute inset-0 bg-slate-900/40"
+        aria-label="Close"
+        onClick={onClose}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="users-reset-modal-title"
+        className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-slate-200 bg-white p-6 shadow-xl"
+      >
+        <div className="flex items-start justify-between gap-2">
+          <h2 id="users-reset-modal-title" className="text-lg font-semibold text-slate-900">
+            {title}
+          </h2>
+          <button type="button" className="text-sm text-slate-500 hover:text-slate-800" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+        <div className="mt-4">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+function UserField({
+  label,
+  value,
+  onChange,
+  type = 'text',
+  required,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  type?: string
+  required?: boolean
+}) {
+  const id = `user-field-${label.replace(/\s+/g, '-').toLowerCase()}`
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium text-slate-800">
+        {label}
+      </label>
+      <input
+        id={id}
+        type={type}
+        required={required}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-900/10"
       />
     </div>
   )
