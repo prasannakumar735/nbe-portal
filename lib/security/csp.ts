@@ -17,6 +17,16 @@ const isProd = process.env.NODE_ENV === 'production'
 /** Cloudflare Turnstile — extend `script-src` / `frame-src` / `connect-src` / `worker-src` together (do not drop other origins). */
 const TURNSTILE_ORIGIN = 'https://challenges.cloudflare.com'
 
+/**
+ * SHA-256 hashes of inline scripts that Turnstile's `api.js` injects into `about:srcdoc` challenge iframes.
+ * These iframes inherit the parent page's CSP and must be explicitly hash-allowed.
+ * Under `strict-dynamic`, hash-sources are still honoured for inline scripts (only host-source entries are ignored).
+ * To update: check the browser console CSP violation — it prints the required hash directly.
+ */
+const TURNSTILE_INLINE_SCRIPT_HASHES = [
+  "'sha256-eJGI0Ik4oYe/PKLDOt4wcN76wYs8h+Ew05pMzdY6xG8='",
+]
+
 export function generateCspNonce(): string {
   return Buffer.from(crypto.randomUUID()).toString('base64')
 }
@@ -45,6 +55,8 @@ export function buildContentSecurityPolicy(
     // CSP3 `'wasm-unsafe-eval'` authorises WASM compile/instantiate WITHOUT re-enabling general `'unsafe-eval'`.
     // Keyword sources are still honored under `'strict-dynamic'` (only host-source entries are ignored).
     "'wasm-unsafe-eval'",
+    // Turnstile srcdoc challenge iframes — see TURNSTILE_INLINE_SCRIPT_HASHES above.
+    ...TURNSTILE_INLINE_SCRIPT_HASHES,
     ...(isDev ? (["'unsafe-eval'"] as const) : []),
   ].join(' ')
 
