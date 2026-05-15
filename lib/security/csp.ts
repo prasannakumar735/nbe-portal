@@ -10,12 +10,27 @@
  * Cloudflare Turnstile `api.js`) must use a **nonce** on `<script>` (see `TurnstileWidget` + `x-nonce`).
  * `style-src-attr 'unsafe-inline'` allows `style=""` on elements (React/Turnstile) without allowing
  * unnonced `<style>` tags — see MDN `style-src-attr`.
+ *
+ * **Turnstile inline-script hashes**: Turnstile's `api.js` (trusted via nonce) creates `about:srcdoc`
+ * sub-iframes whose inline scripts inherit the parent CSP. Under `strict-dynamic`, hash-sources are still
+ * honoured for inline scripts (only host-source entries are ignored), so adding the known hash allows
+ * those scripts without weakening the rest of the policy. Update the hash if Cloudflare rotates Turnstile
+ * and the browser console reports a new `sha256-...` value in the CSP violation message.
  */
 
 const isProd = process.env.NODE_ENV === 'production'
 
 /** Cloudflare Turnstile — extend `script-src` / `frame-src` / `connect-src` / `worker-src` together (do not drop other origins). */
 const TURNSTILE_ORIGIN = 'https://challenges.cloudflare.com'
+
+/**
+ * SHA-256 hashes of inline scripts that Turnstile's `api.js` injects into `about:srcdoc` challenge iframes.
+ * These inherit the parent page's CSP and must be explicitly hash-allowed.
+ * To update: check the browser console CSP violation — it prints the required hash directly.
+ */
+const TURNSTILE_INLINE_SCRIPT_HASHES = [
+  "'sha256-eJGI0Ik4oYe/PKLDOt4wcN76wYs8h+Ew05pMzdY6xG8='",
+]
 
 export function generateCspNonce(): string {
   return Buffer.from(crypto.randomUUID()).toString('base64')
@@ -45,6 +60,8 @@ export function buildContentSecurityPolicy(
     // CSP3 `'wasm-unsafe-eval'` authorises WASM compile/instantiate WITHOUT re-enabling general `'unsafe-eval'`.
     // Keyword sources are still honored under `'strict-dynamic'` (only host-source entries are ignored).
     "'wasm-unsafe-eval'",
+    // Turnstile srcdoc challenge iframes — see TURNSTILE_INLINE_SCRIPT_HASHES above.
+    ...TURNSTILE_INLINE_SCRIPT_HASHES,
     ...(isDev ? (["'unsafe-eval'"] as const) : []),
   ].join(' ')
 
