@@ -201,7 +201,12 @@ export function EventModal({
     totalMinutesFor,
   } = useTravelTime()
 
-  const readOnly = !canManage
+  // Read-only only when VIEWING/EDITING an existing event without manage rights.
+  // Creating a new event is open to all users (technicians assign to themselves only).
+  const readOnly = !!initial && !canManage
+
+  // Technicians cannot change who the event is assigned to — always self.
+  const assigneeLocked = !canManage
 
   useEffect(() => {
     if (!open) return
@@ -502,6 +507,11 @@ export function EventModal({
     const description = form.description.trim() || null
     const dur = coerceDurationMinutes(form.duration_minutes)
 
+    // Hard-enforce self-assignment for non-managers (belt-and-suspenders on top of UI lock)
+    if (assigneeLocked && form.assigned_to !== currentUserId) {
+      setForm(f => ({ ...f, assigned_to: currentUserId }))
+    }
+
     let resolvedTravel = travelMinutes
     let resolvedLatLng: { lat: number; lng: number } | null = latLng
     let location_text: string | null = form.location_text.trim() || null
@@ -647,7 +657,11 @@ export function EventModal({
             <h2 id="calendar-event-modal-title" className="text-lg font-semibold text-gray-900">
               {readOnly ? 'Event details' : initial ? 'Edit event' : 'New event'}
             </h2>
-            <p className="mt-0.5 text-sm text-gray-500">Schedule work, leave, blocks, or meetings.</p>
+            <p className="mt-0.5 text-sm text-gray-500">
+              {assigneeLocked && !initial
+                ? 'Create an event for yourself.'
+                : 'Schedule work, leave, blocks, or meetings.'}
+            </p>
           </div>
           <button
             type="button"
@@ -700,21 +714,34 @@ export function EventModal({
           </label>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block sm:col-span-2">
+            <div className="block sm:col-span-2">
               <span className={LABEL}>Assign to</span>
-              <select
-                disabled={readOnly}
-                value={form.assigned_to}
-                onChange={e => setForm(f => ({ ...f, assigned_to: e.target.value }))}
-                className={INPUT}
-              >
-                {assigneeOptions.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {profileDisplayName(p) || p.id.slice(0, 8)}
-                  </option>
-                ))}
-              </select>
-            </label>
+              {assigneeLocked ? (
+                /* Technicians always create for themselves — show as read-only chip */
+                <div className={`${INPUT} flex items-center gap-2 bg-gray-50 text-gray-600`}>
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-[10px] font-bold text-blue-700">
+                    {(profileDisplayName(assigneeOptions.find(a => a.id === currentUserId) ?? { full_name: null, first_name: null, last_name: null, role: null, id: currentUserId }) || 'You').slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="text-sm font-medium text-gray-800">
+                    {profileDisplayName(assigneeOptions.find(a => a.id === currentUserId) ?? { full_name: null, first_name: null, last_name: null, role: null, id: currentUserId }) || 'You'}
+                  </span>
+                  <span className="ml-auto text-[11px] text-gray-400">assigned to you</span>
+                </div>
+              ) : (
+                <select
+                  disabled={readOnly}
+                  value={form.assigned_to}
+                  onChange={e => setForm(f => ({ ...f, assigned_to: e.target.value }))}
+                  className={INPUT}
+                >
+                  {assigneeOptions.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {profileDisplayName(p) || p.id.slice(0, 8)}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
 
             <label className="block">
               <span className={LABEL}>Type</span>

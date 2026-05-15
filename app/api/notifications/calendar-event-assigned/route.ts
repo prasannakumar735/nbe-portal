@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     const { data: ev, error: evErr } = await supabase
       .from('calendar_events')
       .select(
-        'id, assigned_to, created_by, title, date, start_time, is_full_day, location_text, client_id, location_id',
+        'id, assigned_to, created_by, title, description, date, start_time, is_full_day, location_text, client_id, location_id',
       )
       .eq('id', eventId)
       .maybeSingle()
@@ -77,6 +77,7 @@ export async function POST(request: NextRequest) {
       startTime: row.start_time ? String(row.start_time) : null,
       isFullDay: Boolean(row.is_full_day),
       locationLabel,
+      description: row.description ? String(row.description) : null,
     })
 
     if (result.status === 'failed') {

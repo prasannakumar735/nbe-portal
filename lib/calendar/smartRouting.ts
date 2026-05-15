@@ -58,5 +58,6 @@ export async function computeSmartTravelMinutes(
     )
   }
 
-  return getTravelTime(BASE_LOCATION, dest)
+  const result = await getTravelTime(BASE_LOCATION, dest)
+  return result.minutes
 }

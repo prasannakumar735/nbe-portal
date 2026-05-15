@@ -23,7 +23,7 @@ const START_MIN = CALENDAR_DAY_START_HOUR * 60
 const END_MIN = CALENDAR_DAY_END_HOUR * 60
 
 /** Fixed width so time labels stay one line (no “10:00” / “am” wrap). */
-const TIME_GUTTER = '70px'
+const DEFAULT_TIME_GUTTER = '70px'
 
 const SLOT_COUNT = WORKING_DAY_SLOT_COUNT
 const DEFAULT_BODY_PX = defaultDayBodyHeightPx(SLOT_COUNT, CALENDAR_SLOT_HEIGHT_PX)
@@ -35,6 +35,8 @@ type Props = {
   resolveName: (id: string) => string
   onSelectEvent: (ev: CalendarEventRow) => void
   bodyHeightPx?: number
+  /** Override the left time-label column width (e.g. '52px' on mobile). */
+  timeGutterWidth?: string
 }
 
 function CurrentTimeLine({
@@ -82,6 +84,7 @@ export function CalendarGrid({
   resolveName,
   onSelectEvent,
   bodyHeightPx = DEFAULT_BODY_PX,
+  timeGutterWidth = DEFAULT_TIME_GUTTER,
 }: Props) {
   const slotHeightPx = bodyHeightPx / SLOT_COUNT
 
@@ -107,7 +110,7 @@ export function CalendarGrid({
   }, [])
 
   const gridCols =
-    mode === 'week' ? `${TIME_GUTTER} repeat(7,minmax(0,1fr))` : `${TIME_GUTTER} minmax(0,1fr)`
+    mode === 'week' ? `${timeGutterWidth} repeat(7,minmax(0,1fr))` : `${timeGutterWidth} minmax(0,1fr)`
 
   return (
     <div className="flex min-h-[min(520px,70vh)] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -143,7 +146,7 @@ export function CalendarGrid({
             minHeight: bodyHeightPx + 48,
           }}
         >
-          <div className="relative min-w-[70px] max-w-[70px] border-r border-gray-200 bg-gray-50 pr-2 text-right text-xs text-gray-500">
+          <div className="relative border-r border-gray-200 bg-gray-50 pr-2 text-right text-xs text-gray-500" style={{ minWidth: timeGutterWidth, maxWidth: timeGutterWidth }}>
             {slotLabels.map(({ key, topPct, text }) => (
               <div
                 key={key}

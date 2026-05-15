@@ -21,16 +21,16 @@ export function Header({ user, mobileMenu }: HeaderProps) {
           <button
             type="button"
             onClick={mobileMenu.onToggle}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
             aria-expanded={mobileMenu.isOpen}
             aria-label={mobileMenu.isOpen ? 'Close navigation menu' : 'Open navigation menu'}
           >
-            <span className="material-symbols-outlined text-[22px] leading-none">
+            <span className="material-symbols-outlined text-[28px] leading-none">
               {mobileMenu.isOpen ? 'close' : 'menu'}
             </span>
           </button>
         ) : null}
-        <div className="relative min-w-0 max-w-md flex-1">
+        <div className="relative min-w-0 max-w-[160px] flex-1 sm:max-w-xs md:max-w-md">
           <span className="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-slate-400">
             search
           </span>

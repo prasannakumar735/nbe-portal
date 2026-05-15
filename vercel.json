@@ -3,6 +3,10 @@
     {
       "path": "/api/office-clock/auto-close-forgotten",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/calendar-reminders",
+      "schedule": "*/30 * * * *"
     }
   ]
 }
