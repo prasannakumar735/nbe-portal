@@ -1,9 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { isManagerOrAdmin } from '@/app/api/job-cards/helpers'
 import { loadJobDetailExport, mapJob } from '@/app/api/job-cards/detail'
 
 export const runtime = 'nodejs'
+
+async function technicianIdsForEvent(
+  sb: SupabaseClient,
+  eventId: string,
+  fallbackAssigned?: string | null,
+): Promise<string[]> {
+  const { data } = await sb.from('calendar_event_assignees').select('user_id').eq('event_id', eventId)
+  const rows = data ?? []
+  const fromJoin =
+    rows.length > 0
+      ? [...new Set((rows as { user_id?: string }[]).map(r => String(r.user_id ?? '').trim()).filter(Boolean))]
+      : []
+  if (fromJoin.length > 0) return fromJoin
+  const fb = fallbackAssigned?.trim()
+  return fb ? [fb] : []
+}
 
 /**
  * GET /api/job-cards?event_id=UUID&ensure=1
@@ -23,17 +40,6 @@ export async function GET(req: NextRequest) {
     const ensure = req.nextUrl.searchParams.get('ensure') === '1' || req.nextUrl.searchParams.get('ensure') === 'true'
 
     if (eventId) {
-      const { data: existing } = await supabase.from('job_cards').select('id').eq('event_id', eventId).maybeSingle()
-
-      if (existing?.id) {
-        const detail = await loadJobDetailExport(supabase, existing.id)
-        return NextResponse.json(detail)
-      }
-
-      if (!ensure) {
-        return NextResponse.json({ error: 'Not found' }, { status: 404 })
-      }
-
       const { data: ev, error: evErr } = await supabase
         .from('calendar_events')
         .select(
@@ -47,47 +53,80 @@ export async function GET(req: NextRequest) {
       }
 
       const row = ev as Record<string, unknown>
-      const assignee = String(row.assigned_to ?? '')
       const manager = await isManagerOrAdmin(supabase, user.id)
-      if (assignee !== user.id && !manager) {
+      const techIds = await technicianIdsForEvent(supabase, eventId, String(row.assigned_to ?? ''))
+      const primary = String(row.assigned_to ?? '').trim()
+      const roster = [...new Set(techIds.length > 0 ? techIds : primary ? [primary] : [])].filter(Boolean)
+
+      if (roster.length === 0) {
+        return NextResponse.json({ error: 'Event has no crew assigned' }, { status: 400 })
+      }
+
+      if (!manager && !roster.includes(user.id)) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
 
-      const insertPayload = {
-        event_id: eventId,
-        technician_id: assignee,
+      const { data: existingRowsRaw } = await supabase.from('job_cards').select('id, technician_id').eq('event_id', eventId)
+      let existingRows = (existingRowsRaw ?? []) as { id: string; technician_id?: string | null }[]
+
+      const pickDetailJobId = (rowsList: { id: string; technician_id?: string | null }[]): string | undefined => {
+        const sorted = [...rowsList].sort((a, b) => a.id.localeCompare(b.id))
+        const mine = sorted.find(r => r.technician_id === user.id)
+        if (mine?.id) return mine.id
+        if (manager && sorted[0]?.id) return sorted[0].id
+        return undefined
+      }
+
+      let pickId = pickDetailJobId(existingRows)
+      if (pickId) {
+        const detail = await loadJobDetailExport(supabase, pickId)
+        return NextResponse.json(detail)
+      }
+
+      if (!ensure) {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      }
+
+      const rosterDedup = roster.filter(Boolean)
+
+      const insertPayloadBase = {
         client_id: (row.client_id as string | null) ?? null,
         location_id: (row.location_id as string | null) ?? null,
         job_title: String(row.title ?? 'Job'),
         job_description: (row.description as string | null) ?? null,
-        is_manual: false,
+        is_manual: false as const,
         status: 'pending' as const,
       }
 
-      const { data: created, error: cErr } = await supabase.from('job_cards').insert(insertPayload).select('*').single()
+      for (const technician_id of rosterDedup) {
+        if (!technician_id) continue
+        if (existingRows.some(r => r.technician_id === technician_id)) continue
+        const { error: insErr } = await supabase
+          .from('job_cards')
+          .insert({ ...insertPayloadBase, event_id: eventId, technician_id })
 
-      if (cErr) {
-        if (String(cErr.code) === '23505') {
-          const { data: again } = await supabase.from('job_cards').select('id').eq('event_id', eventId).maybeSingle()
-          if (again?.id) {
-            const detail = await loadJobDetailExport(supabase, again.id)
-            return NextResponse.json(detail)
+        if (insErr?.code !== '23505') {
+          if (insErr) {
+            console.error('[job-cards ensure]', insErr)
+            return NextResponse.json({ error: insErr.message }, { status: 400 })
           }
         }
-        console.error('[POST job-cards create]', cErr)
-        return NextResponse.json({ error: cErr.message }, { status: 400 })
       }
 
-      const detail = await loadJobDetailExport(supabase, String(created!.id))
+      const { data: refreshed } = await supabase.from('job_cards').select('id, technician_id').eq('event_id', eventId)
+      existingRows = (refreshed ?? []) as typeof existingRows
+
+      pickId = pickDetailJobId(existingRows)
+      if (!pickId) {
+        return NextResponse.json({ error: 'Could not create job card' }, { status: 400 })
+      }
+
+      const detail = await loadJobDetailExport(supabase, pickId)
       return NextResponse.json(detail)
     }
 
     const manager = await isManagerOrAdmin(supabase, user.id)
-    let q = supabase
-      .from('job_cards')
-      .select('*')
-      .order('updated_at', { ascending: false })
-      .limit(100)
+    let q = supabase.from('job_cards').select('*').order('updated_at', { ascending: false }).limit(100)
     if (!manager) {
       q = q.eq('technician_id', user.id)
     }
@@ -140,23 +179,34 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Event not found' }, { status: 404 })
       }
 
-      const assignee = String((ev as Record<string, unknown>).assigned_to ?? '')
-      if (assignee !== user.id && !manager) {
+      const erow = ev as Record<string, unknown>
+      const primary = String(erow.assigned_to ?? '').trim()
+      const techIds = await technicianIdsForEvent(supabase, eventId, primary)
+      const roster = [...new Set(techIds.length > 0 ? techIds : primary ? [primary] : [])].filter(Boolean)
+
+      if (roster.length === 0) {
+        return NextResponse.json({ error: 'Event has no crew assigned' }, { status: 400 })
+      }
+
+      if (!manager && !roster.includes(user.id)) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
 
-      const { data: dup } = await supabase.from('job_cards').select('id').eq('event_id', eventId).maybeSingle()
-      if (dup?.id) {
-        const detail = await loadJobDetailExport(supabase, dup.id)
+      const { data: existingRowsRaw } = await supabase.from('job_cards').select('id').eq('event_id', eventId).eq('technician_id', user.id)
+
+      const existingMineId = existingRowsRaw?.[0]?.id as string | undefined
+      if (existingMineId) {
+        const detail = await loadJobDetailExport(supabase, existingMineId)
         return NextResponse.json(detail, { status: 200 })
       }
 
-      const row = ev as Record<string, unknown>
+      const row = erow
+
       const { data: created, error: cErr } = await supabase
         .from('job_cards')
         .insert({
           event_id: eventId,
-          technician_id: assignee,
+          technician_id: user.id,
           client_id: (row.client_id as string | null) ?? null,
           location_id: (row.location_id as string | null) ?? null,
           job_title: String(row.title ?? 'Job'),
@@ -168,6 +218,18 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (cErr) {
+        if (String(cErr.code) === '23505') {
+          const { data: again } = await supabase
+            .from('job_cards')
+            .select('id')
+            .eq('event_id', eventId)
+            .eq('technician_id', user.id)
+            .maybeSingle()
+          if (again?.id) {
+            const detail = await loadJobDetailExport(supabase, again.id)
+            return NextResponse.json(detail, { status: 200 })
+          }
+        }
         return NextResponse.json({ error: cErr.message }, { status: 400 })
       }
       const detail = await loadJobDetailExport(supabase, String(created!.id))

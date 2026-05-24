@@ -6,9 +6,9 @@ import type { ServiceQuoteFormValues } from './types'
 import { computeServiceQuoteTotals } from '@/lib/quotes/serviceQuoteSnapshot'
 
 export async function downloadServiceQuotePdf(formValues: ServiceQuoteFormValues, fileName?: string) {
-  const { subtotal, gst, grandTotal } = computeServiceQuoteTotals(formValues)
+  const { subtotal, discount, gst, grandTotal } = computeServiceQuoteTotals(formValues)
   const blob = await pdf(
-    <QuotePDF data={{ values: formValues, subtotal, gst, grandTotal }} />,
+    <QuotePDF data={{ values: formValues, subtotal, discount, gst, grandTotal }} />,
   ).toBlob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

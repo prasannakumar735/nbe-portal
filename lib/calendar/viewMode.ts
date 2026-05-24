@@ -1,1 +1,1 @@
-export type CalendarViewMode = 'week' | 'day' | 'team'
+export type CalendarViewMode = 'week' | 'day' | 'month' | 'team'

@@ -2,6 +2,11 @@ export type EventType = 'task' | 'block' | 'leave' | 'meeting'
 export type EventStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
 export type CalendarLocationMode = 'client' | 'manual'
 
+export type EventAssignee = {
+  id: string
+  full_name?: string | null
+}
+
 export type CalendarEventRow = {
   id: string
   title: string
@@ -10,6 +15,8 @@ export type CalendarEventRow = {
   created_by: string
   event_type: EventType
   date: string
+  /** Inclusive end calendar day for multi-day tasks; omit or null for single-day. */
+  end_date: string | null
   start_time: string | null
   end_time: string | null
   is_full_day: boolean
@@ -31,6 +38,8 @@ export type CalendarEventRow = {
   overlap_position?: number | null
   /** Optional sub-lane / dispatch grouping. */
   lane_id?: string | null
+  /** Populated when join-table rows exist or after client merge fetch. */
+  assignees?: EventAssignee[]
   created_at: string
   updated_at: string
 }

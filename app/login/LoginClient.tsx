@@ -29,6 +29,7 @@ function resolvePostLoginDestination(
     return '/client'
   }
   if (n?.startsWith('/client')) {
+    
     return '/dashboard'
   }
   return n ?? '/dashboard'

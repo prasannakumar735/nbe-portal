@@ -20,10 +20,37 @@ export function QuoteHeader({ register }: QuoteHeaderProps) {
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-slate-700">
-          Quote date
+          Quote Date
           <input
             type="date"
             {...register('serviceDate')}
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
+          Valid Until
+          <input
+            type="date"
+            {...register('validUntil')}
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
+          Salesperson
+          <input
+            {...register('salesperson')}
+            placeholder="e.g. Andrew Newton"
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-slate-700">
+          Payment Terms
+          <input
+            {...register('paymentTerms')}
+            placeholder="e.g. 30 EOM, COD"
             className="rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </label>

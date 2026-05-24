@@ -137,7 +137,7 @@ export default function ViewQuotePage() {
 }
 
 function ServiceQuoteReadOnlyBody({ values }: { values: ServiceQuoteFormValues }) {
-  const { subtotal, gst, grandTotal } = computeServiceQuoteTotals(values)
+  const { subtotal, discount, gst, grandTotal } = computeServiceQuoteTotals(values)
 
   return (
     <>
@@ -232,6 +232,12 @@ function ServiceQuoteReadOnlyBody({ values }: { values: ServiceQuoteFormValues }
             <span className="text-slate-600">Subtotal</span>
             <span>{currency.format(subtotal)}</span>
           </div>
+          {discount > 0 && (
+            <div className="flex justify-between border-b border-slate-200 py-1 text-red-600">
+              <span>Discount</span>
+              <span>−{currency.format(discount)}</span>
+            </div>
+          )}
           <div className="flex justify-between border-b border-slate-200 py-1">
             <span className="text-slate-600">GST (10%)</span>
             <span>{currency.format(gst)}</span>

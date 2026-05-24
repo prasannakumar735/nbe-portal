@@ -1,12 +1,16 @@
 type QuoteSummaryProps = {
   subtotal: number
+  discount?: number
+  discountPercent?: number
   gst: number
   grandTotal: number
 }
 
 const currency = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
 
-export function QuoteSummary({ subtotal, gst, grandTotal }: QuoteSummaryProps) {
+export function QuoteSummary({ subtotal, discount = 0, discountPercent = 0, gst, grandTotal }: QuoteSummaryProps) {
+  const afterDiscount = subtotal - discount
+
   return (
     <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <h2 className="text-base font-semibold text-slate-900">Price Summary</h2>
@@ -15,6 +19,20 @@ export function QuoteSummary({ subtotal, gst, grandTotal }: QuoteSummaryProps) {
           <dt className="text-slate-600">Subtotal</dt>
           <dd className="font-medium text-slate-900">{currency.format(subtotal)}</dd>
         </div>
+        {discount > 0 && (
+          <>
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+              <dt className="text-slate-600">
+                Discount{discountPercent > 0 ? ` (${discountPercent}%)` : ''}
+              </dt>
+              <dd className="font-medium text-red-600">−{currency.format(discount)}</dd>
+            </div>
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+              <dt className="text-slate-600">After Discount</dt>
+              <dd className="font-medium text-slate-900">{currency.format(afterDiscount)}</dd>
+            </div>
+          </>
+        )}
         <div className="flex items-center justify-between border-b border-slate-200 pb-2">
           <dt className="text-slate-600">GST (10%)</dt>
           <dd className="font-medium text-slate-900">{currency.format(gst)}</dd>

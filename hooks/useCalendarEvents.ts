@@ -9,9 +9,13 @@ import type {
   EventStatus,
   ProfileOption,
 } from '@/lib/calendar/types'
-import { blockTotalMinutes } from '@/lib/calendar/eventDisplay'
 import { coerceDurationMinutes } from '@/lib/calendar/duration'
 import { parseTimeToMinutes, validateTimedEventWindow } from '@/lib/calendar/workingHours'
+import { normalizeCalendarEventEndDate } from '@/lib/calendar/multiDay'
+import { mergeAssigneeProfilesIntoEvents } from '@/lib/calendar/assignees'
+import { findOverlappingEvents, getEventWindow, type EventWindow } from '@/lib/calendar/overlap'
+
+export { findOverlappingEvents, getEventWindow, type EventWindow } from '@/lib/calendar/overlap'
 
 function assertTimedEventInWorkingHours(
   isFullDay: boolean,
@@ -40,13 +44,17 @@ function mapCalendarEventFromDb(row: Record<string, unknown>): CalendarEventRow 
   const modeRaw = rest.location_mode
   const location_mode: CalendarLocationMode = modeRaw === 'client' ? 'client' : 'manual'
 
+  const endRaw = rest.end_date as string | null | undefined
+  const endNorm = typeof endRaw === 'string' && endRaw.trim() ? endRaw.trim() : null
+
   return {
-    ...(rest as Omit<CalendarEventRow, 'location_mode' | 'client_name' | 'client_location_label'>),
+    ...(rest as Omit<CalendarEventRow, 'location_mode' | 'client_name' | 'client_location_label' | 'assignees'>),
     location_mode,
     client_id: (rest.client_id as string | null | undefined) ?? null,
     location_id: (rest.location_id as string | null | undefined) ?? null,
     client_name: clients?.name?.trim() ?? null,
     client_location_label,
+    end_date: endNorm,
   }
 }
 
@@ -59,41 +67,6 @@ function timeToMinutes(t: string | null): number | null {
   return h * 60 + m
 }
 
-export type EventWindow = {
-  start: number
-  end: number
-  isFullDay: boolean
-}
-
-export function getEventWindow(ev: CalendarEventRow): EventWindow | null {
-  if (ev.is_full_day) {
-    return { start: 0, end: 24 * 60, isFullDay: true }
-  }
-  const start = timeToMinutes(ev.start_time)
-  const dur = coerceDurationMinutes(ev.duration_minutes)
-  if (start === null || dur <= 0) return null
-  const total = blockTotalMinutes(ev)
-  return { start, end: start + total, isFullDay: false }
-}
-
-function windowsOverlap(a: EventWindow, b: EventWindow): boolean {
-  return a.start < b.end && b.start < a.end
-}
-
-export function findOverlappingEvents(
-  candidate: { date: string; assigned_to: string; window: EventWindow },
-  existing: CalendarEventRow[],
-  excludeId?: string
-): CalendarEventRow[] {
-  return existing.filter(ev => {
-    if (ev.id === excludeId) return false
-    if (ev.date !== candidate.date || ev.assigned_to !== candidate.assigned_to) return false
-    const w = getEventWindow(ev)
-    if (!w) return false
-    return windowsOverlap(candidate.window, w)
-  })
-}
-
 function endTimeFromStartAndTotal(startTime: string, workMinutes: number, travelMinutes: number): string {
   const start = timeToMinutes(startTime)
   if (start === null) return '00:00:00'
@@ -101,6 +74,29 @@ function endTimeFromStartAndTotal(startTime: string, workMinutes: number, travel
   const hh = Math.floor(end / 60) % 24
   const mm = end % 60
   return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00`
+}
+
+function normalizeAssigneeList(assigned_to: string, assignees?: string[] | undefined): string[] {
+  const base = assignees?.length ? assignees : [assigned_to]
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const id of base.map(x => String(x ?? '').trim()).filter(Boolean)) {
+    if (seen.has(id)) continue
+    seen.add(id)
+    out.push(id)
+  }
+  return out
+}
+
+async function syncCalendarEventAssignees(eventId: string, userIds: string[]): Promise<void> {
+  const uniq = [...new Set(userIds.map(id => String(id).trim()))].filter(Boolean)
+  const { error: delErr } = await supabase.from('calendar_event_assignees').delete().eq('event_id', eventId)
+  if (delErr) throw delErr
+  if (uniq.length === 0) return
+  const { error: insErr } = await supabase
+    .from('calendar_event_assignees')
+    .insert(uniq.map(user_id => ({ event_id: eventId, user_id })))
+  if (insErr) throw insErr
 }
 
 export function useCalendarEvents(options: { userId: string; canManage: boolean }) {
@@ -134,11 +130,13 @@ export function useCalendarEvents(options: { userId: string; canManage: boolean 
         clients ( name ),
         client_locations ( location_name, suburb )
       `
+      const rangeLowerOr = `end_date.gte.${from},and(end_date.is.null,date.gte.${from})`
+
       let res = await supabase
         .from('calendar_events')
         .select(calendarSelect)
-        .gte('date', from)
         .lte('date', to)
+        .or(rangeLowerOr)
         .order('date', { ascending: true })
         .order('start_time', { ascending: true })
 
@@ -146,15 +144,44 @@ export function useCalendarEvents(options: { userId: string; canManage: boolean 
         res = await supabase
           .from('calendar_events')
           .select('*')
-          .gte('date', from)
           .lte('date', to)
+          .or(rangeLowerOr)
           .order('date', { ascending: true })
           .order('start_time', { ascending: true })
       }
 
       if (res.error) throw res.error
-      const rows = (res.data ?? []) as Record<string, unknown>[]
-      setEvents(rows.map(r => mapCalendarEventFromDb(r)))
+      let mapped = ((res.data ?? []) as Record<string, unknown>[]).map(r => mapCalendarEventFromDb(r))
+
+      const ids = mapped.map(e => e.id).filter(Boolean)
+      if (ids.length > 0) {
+        try {
+          const { data: ceaRows, error: ceaErr } = await supabase
+            .from('calendar_event_assignees')
+            .select('event_id,user_id')
+            .in('event_id', ids)
+          if (!ceaErr && Array.isArray(ceaRows) && ceaRows.length > 0) {
+            const pids = [...new Set((ceaRows as { user_id?: string }[]).map(r => String(r.user_id ?? '').trim()).filter(Boolean))]
+            let profileMap: Record<string, string | null> = {}
+            if (pids.length > 0) {
+              const { data: profs } = await supabase.from('profiles').select('id,full_name').in('id', pids)
+              if (Array.isArray(profs)) {
+                profileMap = Object.fromEntries(
+                  (profs as { id: string; full_name?: string | null }[]).map(p => [
+                    p.id,
+                    (p.full_name ?? '').trim() || null,
+                  ])
+                )
+              }
+            }
+            mapped = mergeAssigneeProfilesIntoEvents(mapped, ceaRows as { event_id: string; user_id: string }[], profileMap)
+          }
+        } catch {
+          /* join table absent on old environments — degrade to assigned_to-only */
+        }
+      }
+
+      setEvents(mapped)
     } catch {
       setError('Could not load calendar')
       setEvents([])
@@ -195,7 +222,6 @@ export function useCalendarEvents(options: { userId: string; canManage: boolean 
   const resolveName = useCallback(
     (id: string) => {
       if (id === userId) {
-        // self might not be in assignees list
         return assigneeNameById.get(id) ?? 'You'
       }
       return assigneeNameById.get(id) ?? id.slice(0, 8)
@@ -208,8 +234,10 @@ export function useCalendarEvents(options: { userId: string; canManage: boolean 
       title: string
       description: string | null
       assigned_to: string
+      assignees?: string[]
       event_type: EventType
       date: string
+      end_date: string | null
       is_full_day: boolean
       start_time: string | null
       duration_minutes: number | null
@@ -229,6 +257,16 @@ export function useCalendarEvents(options: { userId: string; canManage: boolean 
 
       assertTimedEventInWorkingHours(payload.is_full_day, payload.start_time, payload.duration_minutes)
 
+      const assigneeChain = normalizeAssigneeList(payload.assigned_to, payload.assignees)
+      const assigned_to = assigneeChain[0] ?? payload.assigned_to
+
+      const end_date = normalizeCalendarEventEndDate({
+        event_type: payload.event_type,
+        is_full_day: payload.is_full_day,
+        date: payload.date,
+        end_date: payload.end_date,
+      })
+
       const durInsert = payload.is_full_day ? null : coerceDurationMinutes(payload.duration_minutes)
 
       let end_time: string | null = null
@@ -239,10 +277,11 @@ export function useCalendarEvents(options: { userId: string; canManage: boolean 
       const row = {
         title: payload.title,
         description: payload.description,
-        assigned_to: payload.assigned_to,
+        assigned_to,
         created_by: uid,
         event_type: payload.event_type,
         date: payload.date,
+        end_date,
         start_time: payload.is_full_day ? null : payload.start_time,
         end_time: payload.is_full_day ? null : end_time,
         is_full_day: payload.is_full_day,
@@ -260,14 +299,31 @@ export function useCalendarEvents(options: { userId: string; canManage: boolean 
 
       const { data, error: e } = await supabase.from('calendar_events').insert(row).select('*').single()
       if (e) throw e
-      const inserted = mapCalendarEventFromDb(data as Record<string, unknown>)
+      let inserted = mapCalendarEventFromDb(data as Record<string, unknown>)
+
+      if (canManage) {
+        await syncCalendarEventAssignees(inserted.id, assigneeChain)
+      }
+
+      /** Local row: approximate assignees via profile ids only (labels filled on next refresh). */
+      if (assigneeChain.length > 1 || canManage) {
+        inserted = {
+          ...inserted,
+          assignees: assigneeChain.map(id => ({
+            id,
+            full_name: assigneeNameById.get(id) ?? null,
+          })),
+        }
+      }
+
       setEvents(prev => [...prev, inserted].sort((a, b) => a.date.localeCompare(b.date)))
 
-      if (inserted.created_by !== inserted.assigned_to) {
+      const notifyTargets = assigneeChain
+      if (notifyTargets.some(id => id !== uid)) {
         void fetch('/api/notifications/calendar-event-assigned', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
+          credentials: 'same-origin',
           body: JSON.stringify({ event_id: inserted.id }),
         }).catch(err => {
           console.warn('[useCalendarEvents] Calendar assignee notification failed', err)
@@ -276,7 +332,7 @@ export function useCalendarEvents(options: { userId: string; canManage: boolean 
 
       return inserted
     },
-    []
+    [assigneeNameById, canManage]
   )
 
   const updateEvent = useCallback(
@@ -286,8 +342,10 @@ export function useCalendarEvents(options: { userId: string; canManage: boolean 
         title: string
         description: string | null
         assigned_to: string
+        assignees?: string[]
         event_type: EventType
         date: string
+        end_date: string | null
         is_full_day: boolean
         start_time: string | null
         duration_minutes: number | null
@@ -304,6 +362,16 @@ export function useCalendarEvents(options: { userId: string; canManage: boolean 
     ) => {
       assertTimedEventInWorkingHours(payload.is_full_day, payload.start_time, payload.duration_minutes)
 
+      const assigneeChain = normalizeAssigneeList(payload.assigned_to, payload.assignees)
+      const assigned_to = assigneeChain[0] ?? payload.assigned_to
+
+      const end_date = normalizeCalendarEventEndDate({
+        event_type: payload.event_type,
+        is_full_day: payload.is_full_day,
+        date: payload.date,
+        end_date: payload.end_date,
+      })
+
       const durUpdate = payload.is_full_day ? null : coerceDurationMinutes(payload.duration_minutes)
 
       let end_time: string | null = null
@@ -314,9 +382,10 @@ export function useCalendarEvents(options: { userId: string; canManage: boolean 
       const row = {
         title: payload.title,
         description: payload.description,
-        assigned_to: payload.assigned_to,
+        assigned_to,
         event_type: payload.event_type,
         date: payload.date,
+        end_date,
         start_time: payload.is_full_day ? null : payload.start_time,
         end_time: payload.is_full_day ? null : end_time,
         is_full_day: payload.is_full_day,
@@ -334,11 +403,23 @@ export function useCalendarEvents(options: { userId: string; canManage: boolean 
 
       const { data, error: e } = await supabase.from('calendar_events').update(row).eq('id', id).select('*').single()
       if (e) throw e
-      const updated = mapCalendarEventFromDb(data as Record<string, unknown>)
+      let updated = mapCalendarEventFromDb(data as Record<string, unknown>)
+
+      if (canManage) {
+        await syncCalendarEventAssignees(id, assigneeChain)
+        updated = {
+          ...updated,
+          assignees: assigneeChain.map(uid => ({
+            id: uid,
+            full_name: assigneeNameById.get(uid) ?? null,
+          })),
+        }
+      }
+
       setEvents(prev => prev.map(x => (x.id === id ? updated : x)))
       return updated
     },
-    []
+    [assigneeNameById, canManage]
   )
 
   const deleteEvent = useCallback(async (id: string) => {
@@ -347,10 +428,6 @@ export function useCalendarEvents(options: { userId: string; canManage: boolean 
     setEvents(prev => prev.filter(x => x.id !== id))
   }, [])
 
-  /**
-   * Board drag/resize: update timed fields (start, duration, travel, totals, end_time).
-   * Does not replace full `updateEvent` form payload — optimized for scheduler patches.
-   */
   const patchEventSchedule = useCallback(
     async (
       id: string,

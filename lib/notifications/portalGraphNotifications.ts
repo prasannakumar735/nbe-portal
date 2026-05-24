@@ -3,6 +3,7 @@ import { sendMailViaGraph } from '@/lib/graph/sendMail'
 import { escapeHtml } from '@/lib/html/escapeHtml'
 import { publicAppBaseUrl } from '@/lib/app/publicAppBaseUrl'
 import { getManagerPlusServiceRecipients, isValidEmail } from '@/lib/notifications/managerRecipients'
+import { isCalendarNotificationsDisabled } from '@/lib/notifications/isCalendarNotificationsDisabled'
 
 export type PortalNotifyResult =
   | { status: 'sent'; recipients: number }
@@ -76,6 +77,10 @@ export async function notifyCalendarEventAssignedEmail(
     description?: string | null
   },
 ): Promise<PortalNotifyResult> {
+  if (isCalendarNotificationsDisabled()) {
+    return { status: 'skipped', reason: 'notifications disabled (local testing)' }
+  }
+
   const { assigneeUserId, creatorDisplayName, title, date, startTime, isFullDay, locationLabel, description } =
     params
 
@@ -138,6 +143,10 @@ export async function notifyCalendarReminder24h(
     description: string | null
   },
 ): Promise<PortalNotifyResult> {
+  if (isCalendarNotificationsDisabled()) {
+    return { status: 'skipped', reason: 'notifications disabled (local testing)' }
+  }
+
   const { assigneeUserId, assigneeName, title, date, startTime, locationLabel, description } = params
 
   const { data: userData, error } = await supabase.auth.admin.getUserById(assigneeUserId)
@@ -204,6 +213,10 @@ export async function notifyCalendarReminder2h(
     description: string | null
   },
 ): Promise<PortalNotifyResult> {
+  if (isCalendarNotificationsDisabled()) {
+    return { status: 'skipped', reason: 'notifications disabled (local testing)' }
+  }
+
   const { assigneeUserId, assigneeName, title, date, startTime, locationLabel, description } = params
 
   const { data: userData, error } = await supabase.auth.admin.getUserById(assigneeUserId)

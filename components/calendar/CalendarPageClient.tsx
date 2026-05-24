@@ -1,13 +1,15 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, CalendarPlus, Loader2 } from 'lucide-react'
 import { CalendarGrid, type CalendarViewMode } from '@/components/calendar/CalendarGrid'
 import { EventCard } from '@/components/calendar/EventCard'
 import { EventModal } from '@/components/calendar/EventModal'
 import { useCalendarEvents } from '@/hooks/useCalendarEvents'
 import type { CalendarEventRow } from '@/lib/calendar/types'
-import { addDays, formatIsoDate, startOfWeekMonday, WEEKDAY_SHORT } from '@/lib/calendar/dates'
+import { addDays, endOfCalendarMonth, formatIsoDate, getMonthCalendarGridDates, startOfCalendarMonth, startOfWeekMonday, WEEKDAY_SHORT } from '@/lib/calendar/dates'
+import { calendarEventAssigneeLabels } from '@/lib/calendar/assignees'
+import { calendarEventEnumerateIsoDays, calendarEventTouchesDay } from '@/lib/calendar/multiDay'
 import { BASE_LOCATION } from '@/lib/constants'
 import { parseDbTimeToMinutes } from '@/lib/calendar/duration'
 
@@ -17,6 +19,18 @@ const WEEKDAY_LETTER = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const
 type Props = {
   userId: string
   canManage: boolean
+}
+
+/** Parse YYYY-MM-DD to local date at midnight. */
+function parseLocalIsoDay(iso: string): Date | null {
+  const parts = iso.split('-').map(Number)
+  const y = parts[0]
+  const mo = parts[1]
+  const day = parts[2]
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(day)) return null
+  const d = new Date(y, mo - 1, day)
+  d.setHours(0, 0, 0, 0)
+  return d.getFullYear() === y && d.getMonth() === mo - 1 && d.getDate() === day ? d : null
 }
 
 /** Sort events within a day: full-day first, then by start_time ascending. */
@@ -31,6 +45,8 @@ function sortDayEvents(evs: CalendarEventRow[]): CalendarEventRow[] {
 }
 
 export function CalendarPageClient({ userId, canManage }: Props) {
+  const monthJumpInputRef = useRef<HTMLInputElement>(null)
+
   const [anchorDate, setAnchorDate] = useState(() => {
     const d = new Date()
     d.setHours(0, 0, 0, 0)
@@ -53,12 +69,14 @@ export function CalendarPageClient({ userId, canManage }: Props) {
   const [modalOpen, setModalOpen] = useState(false)
   const [modalEvent, setModalEvent] = useState<CalendarEventRow | null>(null)
 
-  // Keep view + isMobile in sync with viewport
+  // Keep isMobile + view in sync with viewport — desktop view mode persists (day/week/month)
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 768px)')
     const handler = (e: MediaQueryListEvent) => {
-      if (e.matches) { setView('week'); setIsMobile(false) }
-      else { setView('day'); setIsMobile(true) }
+      if (!e.matches) {
+        setView('day')
+        setIsMobile(true)
+      } else setIsMobile(false)
     }
     mq.addEventListener('change', handler)
     return () => mq.removeEventListener('change', handler)
@@ -76,12 +94,23 @@ export function CalendarPageClient({ userId, canManage }: Props) {
     deleteEvent,
   } = useCalendarEvents({ userId, canManage })
 
-  // Always fetch the full week on mobile (for strip dots + agenda).
-  // Desktop day-view fetches only that day.
+  // Desktop day: single day · week/week grid: anchored week · month: 6-week matrix · mobile: anchor month only
   const range = useMemo(() => {
-    const ws = startOfWeekMonday(anchorDate)
-    const we = addDays(ws, 6)
-    if (view === 'week' || isMobile) {
+    if (isMobile) {
+      const sm = startOfCalendarMonth(anchorDate)
+      const em = endOfCalendarMonth(anchorDate)
+      return { from: formatIsoDate(sm), to: formatIsoDate(em) }
+    }
+    if (view === 'month') {
+      const grid = getMonthCalendarGridDates(anchorDate)
+      return {
+        from: formatIsoDate(grid[0]),
+        to: formatIsoDate(grid[41]),
+      }
+    }
+    if (view === 'week') {
+      const ws = startOfWeekMonday(anchorDate)
+      const we = addDays(ws, 6)
       return { from: formatIsoDate(ws), to: formatIsoDate(we) }
     }
     const d = formatIsoDate(anchorDate)
@@ -104,12 +133,17 @@ export function CalendarPageClient({ userId, canManage }: Props) {
   // Event dot map for the strip
   const eventDaySet = useMemo(() => {
     const s = new Set<string>()
-    for (const ev of events) s.add(ev.date)
+    for (const ev of events) {
+      for (const d of calendarEventEnumerateIsoDays(ev)) s.add(d)
+    }
     return s
   }, [events])
 
   // Desktop range label
   const rangeLabel = useMemo(() => {
+    if (view === 'month') {
+      return anchorDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+    }
     if (view === 'week') {
       const ws = startOfWeekMonday(anchorDate)
       const we = addDays(ws, 6)
@@ -120,6 +154,13 @@ export function CalendarPageClient({ userId, canManage }: Props) {
       weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
     })
   }, [anchorDate, view])
+
+  /** For native month input (`type="month"`) — local calendar month — no timezone drift. */
+  const monthJumpValue = useMemo(() => {
+    const y = anchorDate.getFullYear()
+    const m = String(anchorDate.getMonth() + 1).padStart(2, '0')
+    return `${y}-${m}`
+  }, [anchorDate])
 
   // Mobile day heading (day view only)
   const mobileDayLabel = useMemo(
@@ -144,11 +185,27 @@ export function CalendarPageClient({ userId, canManage }: Props) {
   }
 
   const goPrev = () => {
+    if (view === 'month') {
+      setAnchorDate(d => {
+        const x = new Date(d.getFullYear(), d.getMonth() - 1, 1)
+        x.setHours(0, 0, 0, 0)
+        return x
+      })
+      return
+    }
     if (view === 'week') setAnchorDate(d => addDays(d, -7))
     else setAnchorDate(d => addDays(d, -1))
   }
 
   const goNext = () => {
+    if (view === 'month') {
+      setAnchorDate(d => {
+        const x = new Date(d.getFullYear(), d.getMonth() + 1, 1)
+        x.setHours(0, 0, 0, 0)
+        return x
+      })
+      return
+    }
     if (view === 'week') setAnchorDate(d => addDays(d, 7))
     else setAnchorDate(d => addDays(d, 1))
   }
@@ -215,6 +272,15 @@ export function CalendarPageClient({ userId, canManage }: Props) {
                 >
                   Day
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setView('month')}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                    view === 'month' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Month
+                </button>
               </div>
               <div className="mx-1 hidden h-6 w-px bg-gray-200 sm:block" />
               <div className="flex items-center gap-1">
@@ -236,7 +302,25 @@ export function CalendarPageClient({ userId, canManage }: Props) {
         {/* ── Mobile: Teams-style week strip ───────────────────────────── */}
         {isMobile && (
           <div className="sticky top-[57px] z-10 shrink-0 border-b border-gray-100 bg-white shadow-sm">
-
+            {/* Hidden month picker (Teams-style agenda: jump calendar month without a full grid). */}
+            <input
+              ref={monthJumpInputRef}
+              type="month"
+              className="sr-only"
+              value={monthJumpValue}
+              onChange={e => {
+                const raw = e.target.value
+                if (!/^\d{4}-\d{2}$/.test(raw)) return
+                const yy = Number(raw.slice(0, 4))
+                const mm = Number(raw.slice(5, 7))
+                if (!Number.isFinite(yy) || !Number.isFinite(mm)) return
+                const next = new Date(yy, mm - 1, 1)
+                next.setHours(0, 0, 0, 0)
+                setAnchorDate(next)
+              }}
+              aria-hidden
+              tabIndex={-1}
+            />
             {/* Week navigation row */}
             <div className="flex items-center px-1 pt-2">
               <button
@@ -300,25 +384,43 @@ export function CalendarPageClient({ userId, canManage }: Props) {
 
             {/* Day / Week toggle + label row */}
             <div className="flex items-center justify-between px-3 pb-2 pt-1">
-              {/* View toggle */}
-              <div className="inline-flex rounded-lg border border-gray-200 bg-gray-100 p-0.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="sr-only">View mode</span>
+                <div className="inline-flex rounded-lg border border-gray-200 bg-gray-100 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setMobileView('day')}
+                    className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+                      mobileView === 'day' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    Day
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMobileView('week')}
+                    className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+                      mobileView === 'week' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    Week
+                  </button>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setMobileView('day')}
-                  className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
-                    mobileView === 'day' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'
-                  }`}
+                  onClick={() => {
+                    const el = monthJumpInputRef.current
+                    if (!el) return
+                    try {
+                      if (typeof el.showPicker === 'function') void el.showPicker()
+                      else el.click()
+                    } catch {
+                      el.click()
+                    }
+                  }}
+                  className="rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
                 >
-                  Day
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMobileView('week')}
-                  className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
-                    mobileView === 'week' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'
-                  }`}
-                >
-                  Week
+                  Month
                 </button>
               </div>
 
@@ -361,7 +463,7 @@ export function CalendarPageClient({ userId, canManage }: Props) {
             {stripDays.map((d, i) => {
               const iso = formatIsoDate(d)
               const isToday = iso === todayIso
-              const dayEvents = sortDayEvents(events.filter(ev => ev.date === iso))
+              const dayEvents = sortDayEvents(events.filter(ev => calendarEventTouchesDay(ev, iso)))
               return (
                 <div key={iso}>
                   {/* Day header */}
@@ -386,9 +488,10 @@ export function CalendarPageClient({ userId, canManage }: Props) {
                     <div className="space-y-2 px-3 py-2">
                       {dayEvents.map(ev => (
                         <EventCard
-                          key={ev.id}
+                          key={`${ev.id}-${iso}`}
                           ev={ev}
-                          assigneeName={resolveName(ev.assigned_to)}
+                          calendarDayIso={iso}
+                          assigneeLabels={calendarEventAssigneeLabels(ev, resolveName)}
                           onClick={() => openEvent(ev)}
                         />
                       ))}
@@ -416,6 +519,15 @@ export function CalendarPageClient({ userId, canManage }: Props) {
                 events={events}
                 resolveName={resolveName}
                 onSelectEvent={openEvent}
+                onOpenDayInDayView={
+                  view === 'month' && !isMobile
+                    ? iso => {
+                        const parsed = parseLocalIsoDay(iso)
+                        if (parsed) setAnchorDate(parsed)
+                        setView('day')
+                      }
+                    : undefined
+                }
                 timeGutterWidth={isMobile ? '52px' : '70px'}
               />
             </div>

@@ -83,10 +83,14 @@ function mapDbItemToLine(row: QuoteItemRow): ServiceLineItem {
 function serviceBaseFromQuote(quote: QuoteRow, items: QuoteItemRow[]): ServiceQuoteFormValues {
   const lines = items.length ? items.map(mapDbItemToLine) : [defaultLineItem()]
   const tax = taxonomyForQuoteRow(quote)
+  const today = new Date().toISOString().split('T')[0]
 
   return {
     quoteNumber: quote.quote_number,
     serviceDate: String(quote.service_date).slice(0, 10),
+    validUntil: quote.valid_until ? String(quote.valid_until).slice(0, 10) : '',
+    salesperson: '',
+    paymentTerms: '',
     quoteType: tax.quoteType,
     quoteSubCategory: tax.quoteSubCategory,
     companyName: 'NBE Australia Pty Ltd',
@@ -99,10 +103,12 @@ function serviceBaseFromQuote(quote: QuoteRow, items: QuoteItemRow[]): ServiceQu
     customerEmail: '',
     siteAddress: quote.site_address ?? '',
     items: lines,
+    discountPercent: 0,
+    hidePricing: false,
     notes:
       'Should you require any further information or clarification about this quotation, please do not hesitate to contact us.',
     printedName: '',
-    signatureDate: new Date().toISOString().split('T')[0],
+    signatureDate: today,
   }
 }
 
@@ -185,18 +191,23 @@ export function quoteRowsToFormValues(
 
 function normalizeLine(line: Partial<ServiceLineItem>): ServiceLineItem {
   const title = line.itemTitle?.trim()
+  const overrideRaw = Number(line.totalOverride)
   return {
     itemTitle: title ? String(line.itemTitle) : undefined,
+    sno: line.sno?.trim() ? String(line.sno) : undefined,
     description: String(line.description ?? ''),
     width: String(line.width ?? ''),
     height: String(line.height ?? ''),
     qty: Number.isFinite(Number(line.qty)) ? Number(line.qty) : 1,
     unitPrice: Number.isFinite(Number(line.unitPrice)) ? Number(line.unitPrice) : 0,
+    totalOverride: Number.isFinite(overrideRaw) && line.totalOverride !== undefined ? overrideRaw : undefined,
+    itemNotes: line.itemNotes?.trim() ? String(line.itemNotes) : undefined,
   }
 }
 
 export function computeServiceQuoteTotals(values: ServiceQuoteFormValues): {
   subtotal: number
+  discount: number
   gst: number
   grandTotal: number
 } {
@@ -205,10 +216,17 @@ export function computeServiceQuoteTotals(values: ServiceQuoteFormValues): {
     const u = Number(row?.unitPrice ?? 0)
     const qty = Number.isFinite(q) ? q : 0
     const unit = Number.isFinite(u) ? u : 0
-    return sum + qty * unit
+    const computed = qty * unit
+    const override = Number(row?.totalOverride)
+    const rowTotal = !isNaN(override) && row?.totalOverride !== undefined ? override : computed
+    return sum + rowTotal
   }, 0)
-  const gst = subtotal * 0.1
-  return { subtotal, gst, grandTotal: subtotal + gst }
+  const pctRaw = Number(values.discountPercent ?? 0)
+  const pct = Number.isFinite(pctRaw) && pctRaw > 0 ? Math.min(pctRaw, 100) : 0
+  const discount = subtotal * (pct / 100)
+  const afterDiscount = subtotal - discount
+  const gst = afterDiscount * 0.1
+  return { subtotal, discount, gst, grandTotal: afterDiscount + gst }
 }
 
 export function parseFormSnapshot(raw: unknown): ServiceQuoteFormValues | null {
@@ -220,10 +238,14 @@ export function parseFormSnapshot(raw: unknown): ServiceQuoteFormValues | null {
     : 'service'
   const subRaw = String(s.quoteSubCategory ?? '').trim().toLowerCase()
   const quoteSubCategory = subCategoryAllowed(quoteType, subRaw) ? subRaw : defaultSubCategoryForType(quoteType)
+  const discountPctRaw = Number((s as Partial<ServiceQuoteFormValues>).discountPercent)
 
   return {
     quoteNumber: String(s.quoteNumber ?? ''),
     serviceDate: String(s.serviceDate ?? '').slice(0, 10),
+    validUntil: String(s.validUntil ?? '').slice(0, 10),
+    salesperson: String(s.salesperson ?? ''),
+    paymentTerms: String(s.paymentTerms ?? ''),
     quoteType,
     quoteSubCategory,
     companyName: String(s.companyName ?? ''),
@@ -236,6 +258,8 @@ export function parseFormSnapshot(raw: unknown): ServiceQuoteFormValues | null {
     customerEmail: String(s.customerEmail ?? ''),
     siteAddress: String(s.siteAddress ?? ''),
     items: s.items.map(normalizeLine),
+    discountPercent: Number.isFinite(discountPctRaw) && discountPctRaw > 0 ? Math.min(discountPctRaw, 100) : 0,
+    hidePricing: Boolean(s.hidePricing),
     notes: String(s.notes ?? ''),
     printedName: String(s.printedName ?? ''),
     signatureDate: String(s.signatureDate ?? '').slice(0, 10),

@@ -149,10 +149,9 @@ export async function POST(request: NextRequest) {
 
     const quoteKind =
       payload.quote_kind === 'rapid_door' ? 'rapid_door' : 'service'
-    const validUntil =
-      quoteKind === 'rapid_door' && payload.valid_until?.trim()
-        ? payload.valid_until.trim().slice(0, 10)
-        : null
+    const validUntil = payload.valid_until?.trim()
+      ? payload.valid_until.trim().slice(0, 10)
+      : null
 
     const taxonomy = resolveQuoteTaxonomyForPersist({
       quote_kind: quoteKind,

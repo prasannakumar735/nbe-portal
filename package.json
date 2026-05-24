@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "tsx --test lib/calendar/overlap.test.ts",
     "security:pen-test": "node scripts/security-pen-test.mjs",
     "security:test": "tsx scripts/security-tests.ts",
     "backup:check": "tsx scripts/backup-check.ts"

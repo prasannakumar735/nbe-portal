@@ -5,13 +5,43 @@ import { notifyCalendarEventAssignedEmail } from '@/lib/notifications/portalGrap
 import { unauthorizedOrForbiddenResponse } from '@/lib/security/httpAuthErrors'
 import { requireUser } from '@/lib/security/requireUser'
 import { jsonError500 } from '@/lib/security/safeApiError'
+import { isCalendarNotificationsDisabled } from '@/lib/notifications/isCalendarNotificationsDisabled'
 
 export const runtime = 'nodejs'
+
+async function recipientUserIdsForEvent(
+  service: ReturnType<typeof createServiceRoleClient>,
+  eventId: string,
+  fallbackAssignedTo: string | null
+): Promise<string[]> {
+  const { data: assigns } = await service
+    .from('calendar_event_assignees')
+    .select('user_id')
+    .eq('event_id', eventId)
+  const fromJoinRows = assigns ?? []
+  const fromJoin =
+    fromJoinRows.length > 0
+      ? fromJoinRows.map(r => String((r as Record<string, unknown>).user_id ?? '').trim()).filter(Boolean)
+      : []
+  if (fromJoin.length > 0) {
+    return [...new Set(fromJoin)]
+  }
+  const p = fallbackAssignedTo?.trim()
+  return p ? [p] : []
+}
 
 export async function POST(request: NextRequest) {
   try {
     const serverAuth = await createServerClient()
     const user = await requireUser(serverAuth)
+
+    if (isCalendarNotificationsDisabled()) {
+      return NextResponse.json({
+        success: true,
+        skipped: true,
+        reason: 'notifications disabled (local testing)',
+      })
+    }
 
     const body = (await request.json()) as { event_id?: string }
     const eventId = String(body.event_id ?? '').trim()
@@ -35,10 +65,6 @@ export async function POST(request: NextRequest) {
     const row = ev as Record<string, unknown>
     if (String(row.created_by) !== user.id) {
       return NextResponse.json({ error: 'Only the event creator can trigger this notification' }, { status: 403 })
-    }
-
-    if (String(row.assigned_to) === String(row.created_by)) {
-      return NextResponse.json({ success: true, skipped: true, reason: 'Self-assigned event' })
     }
 
     let locationLabel: string | null = String(row.location_text ?? '').trim() || null
@@ -69,30 +95,41 @@ export async function POST(request: NextRequest) {
       user.email?.split('@')[0] ||
       'Manager'
 
-    const result = await notifyCalendarEventAssignedEmail(supabase, {
-      assigneeUserId: String(row.assigned_to),
-      creatorDisplayName,
-      title: String(row.title ?? 'Event'),
-      date: String(row.date ?? ''),
-      startTime: row.start_time ? String(row.start_time) : null,
-      isFullDay: Boolean(row.is_full_day),
-      locationLabel,
-      description: row.description ? String(row.description) : null,
-    })
+    const assignees = await recipientUserIdsForEvent(supabase, eventId, String(row.assigned_to ?? ''))
 
-    if (result.status === 'failed') {
+    /** Notify every assignee who is not the creator (dedupe by id). */
+    const targets = [...new Set(assignees.filter(id => id && id !== user.id))]
+    if (targets.length === 0) {
+      return NextResponse.json({ success: true, skipped: true, reason: 'No recipients (self-assigned or empty)' })
+    }
+
+    let firstFailure: string | null = null
+    let sent = 0
+    for (const assigneeUserId of targets) {
+      const result = await notifyCalendarEventAssignedEmail(supabase, {
+        assigneeUserId,
+        creatorDisplayName,
+        title: String(row.title ?? 'Event'),
+        date: String(row.date ?? ''),
+        startTime: row.start_time ? String(row.start_time) : null,
+        isFullDay: Boolean(row.is_full_day),
+        locationLabel,
+        description: row.description ? String(row.description) : null,
+      })
+      if (result.status === 'failed' && !firstFailure) firstFailure = result.error
+      if (result.status === 'sent') sent += result.recipients
+    }
+
+    if (firstFailure) {
       return NextResponse.json(
         {
-          error:
-            process.env.NODE_ENV === 'production'
-              ? 'Notification could not be sent.'
-              : result.error,
+          error: process.env.NODE_ENV === 'production' ? 'Notification could not be sent.' : firstFailure,
         },
         { status: 500 },
       )
     }
 
-    return NextResponse.json({ success: true, notification: result })
+    return NextResponse.json({ success: true, notified: targets.length, sent })
   } catch (e) {
     const auth = unauthorizedOrForbiddenResponse(e)
     if (auth) return auth

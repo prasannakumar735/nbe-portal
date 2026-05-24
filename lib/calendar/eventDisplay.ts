@@ -1,5 +1,7 @@
 import { coerceDurationMinutes, parseDbTimeToMinutes } from '@/lib/calendar/duration'
 import type { CalendarEventRow } from '@/lib/calendar/types'
+import { calendarEventIsMultiDayTask } from '@/lib/calendar/multiDay'
+import { parseIsoCalendarDate } from '@/lib/calendar/dates'
 
 /** Primary line shown on cards / lists for where the job is. */
 export function calendarEventDisplayLocation(ev: CalendarEventRow): string | null {
@@ -29,17 +31,33 @@ export function blockTotalMinutes(ev: {
   return coerceDurationMinutes(ev.duration_minutes) + Math.max(0, Math.round(ev.travel_minutes))
 }
 
+/** Full-day / multi-day chip line (no times). */
+export function formatCalendarMultiDayOrFullDay(ev: CalendarEventRow): string {
+  if (!ev.is_full_day) return ''
+  if (calendarEventIsMultiDayTask(ev)) {
+    const a = parseIsoCalendarDate(ev.date)
+    const b = parseIsoCalendarDate(ev.end_date ?? ev.date)
+    if (!a || !b) return 'Multi-day task'
+    const y0 = a.getFullYear()
+    const y1 = b.getFullYear()
+    const noYear: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric' }
+    const withYear: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }
+    const sameYear = y0 === y1
+    const left = a.toLocaleDateString(undefined, sameYear ? noYear : withYear)
+    const right = b.toLocaleDateString(undefined, sameYear ? noYear : withYear)
+    return `${left} – ${right}`
+  }
+  return 'Full day'
+}
+
 /**
  * Locale time range for the full block: start → start + work + travel.
  * Does not use DB `end_time` (derived from duration + travel only).
  */
-export function formatEventTimeRange(ev: {
-  start_time: string | null
-  duration_minutes: number | null
-  travel_minutes: number
-  is_full_day: boolean
-}): string {
-  if (ev.is_full_day) return 'Full day'
+export function formatEventTimeRange(ev: CalendarEventRow): string {
+  if (ev.is_full_day) {
+    return formatCalendarMultiDayOrFullDay(ev)
+  }
   const start = parseDbTimeToMinutes(ev.start_time)
   if (start === null) return ''
   const total = blockTotalMinutes(ev)

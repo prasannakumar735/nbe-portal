@@ -21,36 +21,48 @@ import { localDateKeyYmd, quoteNumberPrefixForServiceTaxonomy } from '@/lib/quot
 
 const currency = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
 
+function addDays(isoDate: string, days: number): string {
+  const d = new Date(`${isoDate}T12:00:00`)
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
 const emptyDefaults = (): ServiceQuoteFormValues => {
   const defaultServiceSub = defaultSubCategoryForType('service')
+  const today = new Date().toISOString().split('T')[0]
   return {
-  quoteNumber: '',
-  serviceDate: new Date().toISOString().split('T')[0],
-  quoteType: 'service',
-  quoteSubCategory: defaultServiceSub,
-  companyName: 'NBE Australia Pty Ltd',
-  abn: '17 007 048 008',
-  companyAddress: '22a Humeside Drive, Campbellfield Victoria 3061 Australia',
-  companyEmail: 'accountsreceivable@nbeaustralia.com.au',
-  customerCompany: '',
-  contactPerson: '',
-  phone: '',
-  customerEmail: '',
-  siteAddress: '',
-  items:
-    lineItemsForTaxonomy('service', defaultServiceSub) ?? [
-    {
-      description: 'Conducted scheduled service on rapid roller doors',
-      width: '',
-      height: '',
-      qty: 1,
-      unitPrice: 0,
-    },
-  ],
-  notes:
-    'Should you require any further information or clarification about this quotation, please do not hesitate to contact us.',
-  printedName: '',
-  signatureDate: new Date().toISOString().split('T')[0],
+    quoteNumber: '',
+    serviceDate: today,
+    validUntil: addDays(today, 30),
+    salesperson: '',
+    paymentTerms: '',
+    quoteType: 'service',
+    quoteSubCategory: defaultServiceSub,
+    companyName: 'NBE Australia Pty Ltd',
+    abn: '17 007 048 008',
+    companyAddress: '22a Humeside Drive, Campbellfield Victoria 3061 Australia',
+    companyEmail: 'accountsreceivable@nbeaustralia.com.au',
+    customerCompany: '',
+    contactPerson: '',
+    phone: '',
+    customerEmail: '',
+    siteAddress: '',
+    items:
+      lineItemsForTaxonomy('service', defaultServiceSub) ?? [
+        {
+          description: 'Conducted scheduled service on rapid roller doors',
+          width: '',
+          height: '',
+          qty: 1,
+          unitPrice: 0,
+        },
+      ],
+    discountPercent: 0,
+    hidePricing: false,
+    notes:
+      'Should you require any further information or clarification about this quotation, please do not hesitate to contact us.',
+    printedName: '',
+    signatureDate: today,
   }
 }
 
@@ -99,6 +111,8 @@ export function ServiceQuoteForm({
 
   const quoteType = watch('quoteType')
   const quoteSubCategory = watch('quoteSubCategory')
+  const hidePricing = watch('hidePricing')
+  const watchedDiscountPercent = watch('discountPercent')
   const taxonomyTemplatePrevRef = useRef<{ type: string; sub: string } | null>(null)
 
   useEffect(() => {
@@ -176,14 +190,24 @@ export function ServiceQuoteForm({
     return watchedItems.reduce((sum, row) => {
       const qty = Number(row?.qty ?? 0)
       const unitPrice = Number(row?.unitPrice ?? 0)
-      const q = Number.isFinite(qty) ? qty : 0
-      const u = Number.isFinite(unitPrice) ? unitPrice : 0
-      return sum + q * u
+      const computed = Number.isFinite(qty) && Number.isFinite(unitPrice) ? qty * unitPrice : 0
+      const override = Number(row?.totalOverride)
+      const rowTotal = !isNaN(override) && row?.totalOverride !== undefined && row?.totalOverride !== null
+        ? override
+        : computed
+      return sum + rowTotal
     }, 0)
   }, [watchedItems])
 
-  const gst = subtotal * 0.1
-  const grandTotal = subtotal + gst
+  const discountPercent = useMemo(() => {
+    const d = Number(watchedDiscountPercent ?? 0)
+    return Number.isFinite(d) && d > 0 ? Math.min(d, 100) : 0
+  }, [watchedDiscountPercent])
+
+  const discount = subtotal * (discountPercent / 100)
+  const afterDiscount = subtotal - discount
+  const gst = afterDiscount * 0.1
+  const grandTotal = afterDiscount + gst
 
   const onSubmit = async (values: ServiceQuoteFormValues) => {
     setErrorMessage(null)
@@ -202,11 +226,18 @@ export function ServiceQuoteForm({
 
     try {
       const items = values.items
-        .map(item => ({
-          ...item,
-          description: String(item.description ?? '').trim(),
-          total: Number(item.qty || 0) * Number(item.unitPrice || 0),
-        }))
+        .map(item => {
+          const computed = Number(item.qty || 0) * Number(item.unitPrice || 0)
+          const override = Number(item.totalOverride)
+          const total = !isNaN(override) && item.totalOverride !== undefined && item.totalOverride !== null
+            ? override
+            : computed
+          return {
+            ...item,
+            description: String(item.description ?? '').trim(),
+            total,
+          }
+        })
         .filter(item => item.description.length > 0)
 
       if (!String(values.customerCompany ?? '').trim()) {
@@ -226,15 +257,19 @@ export function ServiceQuoteForm({
         throw new Error('Add at least one line item with a description (remove empty rows or fill them in).')
       }
 
-      const saveSubtotal = items.reduce((sum, item) => sum + Number(item.qty || 0) * Number(item.unitPrice || 0), 0)
-      const saveGst = saveSubtotal * 0.1
-      const saveTotal = saveSubtotal + saveGst
+      const saveSubtotal = items.reduce((sum, item) => sum + item.total, 0)
+      const saveDiscountPct = Number(values.discountPercent ?? 0)
+      const discountPct = Number.isFinite(saveDiscountPct) && saveDiscountPct > 0 ? Math.min(saveDiscountPct, 100) : 0
+      const discountAmt = saveSubtotal * (discountPct / 100)
+      const saveGst = (saveSubtotal - discountAmt) * 0.1
+      const saveTotal = saveSubtotal - discountAmt + saveGst
 
       const body = {
         quote_number: values.quoteNumber,
         customer_name: String(values.customerCompany).trim(),
         site_address: String(values.siteAddress).trim(),
         service_date: values.serviceDate,
+        valid_until: values.validUntil || null,
         quote_type: values.quoteType,
         quote_sub_category: values.quoteSubCategory,
         subtotal: saveSubtotal,
@@ -363,12 +398,44 @@ export function ServiceQuoteForm({
         <LineItemsTable
           fields={fields}
           register={register}
+          setValue={setValue}
           remove={remove}
           append={append}
           watchedItems={watchedItems}
+          hidePricing={hidePricing}
         />
 
-        <QuoteSummary subtotal={subtotal} gst={gst} grandTotal={grandTotal} />
+        {/* Discount field */}
+        <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <h2 className="text-base font-semibold text-slate-900">Discount</h2>
+          <div className="mt-4 flex flex-wrap items-end gap-4">
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              Discount (%)
+              <div className="relative flex items-center">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.1"
+                  {...register('discountPercent', { valueAsNumber: true })}
+                  placeholder="0"
+                  className="w-32 rounded-md border border-slate-300 py-2 pl-3 pr-7 text-sm"
+                />
+                <span className="pointer-events-none absolute right-2.5 text-sm text-slate-500">%</span>
+              </div>
+            </label>
+            {discountPercent > 0 && (
+              <div className="flex flex-col gap-0.5 pb-0.5 text-sm">
+                <span className="text-slate-500">
+                  = −{currency.format(discount)} off subtotal of {currency.format(subtotal)}
+                </span>
+                <span className="text-slate-500">Applied before GST</span>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <QuoteSummary subtotal={subtotal} discount={discount} discountPercent={discountPercent} gst={gst} grandTotal={grandTotal} />
 
         <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <h2 className="text-base font-semibold text-slate-900">Notes</h2>
@@ -421,6 +488,7 @@ export function ServiceQuoteForm({
                 data={{
                   values: watchedValues,
                   subtotal,
+                  discount,
                   gst,
                   grandTotal,
                 }}

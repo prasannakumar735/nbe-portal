@@ -14,6 +14,33 @@ export type TravelResult = {
 
 const OSRM_TIMEOUT_MS = 10_000
 
+/** Nominal avg speed when OSRM is down (straight-line inflated by winding factor below). km/h */
+const FALLBACK_SPEED_KMH = 42
+
+/** Multiply crow-flies km to approximate driving distance (Australian metro — rough heuristic). */
+const FALLBACK_DISTANCE_FACTOR = 1.25
+
+function haversineKm(a: LatLng, b: LatLng): number {
+  const R = 6371
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180
+  const dLon = ((b.lng - a.lng) * Math.PI) / 180
+  const lat1 = (a.lat * Math.PI) / 180
+  const lat2 = (b.lat * Math.PI) / 180
+  const s =
+    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)))
+}
+
+/** Round-trip minutes when OSRM is unavailable — distance estimate only. */
+function estimatedRoundTripMinutes(origin: LatLng, destination: LatLng): number {
+  let km = haversineKm(origin, destination) * FALLBACK_DISTANCE_FACTOR
+  if (!Number.isFinite(km) || km < 0) km = 0
+  /** One-way + return at nominal speed */
+  const oneWayMin = (km / FALLBACK_SPEED_KMH) * 60
+  const rt = Math.round(oneWayMin * 2)
+  return Math.max(0, rt)
+}
+
 /**
  * One OSRM driving route: origin → destination (seconds).
  * Returns null + logs on any failure so callers can distinguish 0-distance from error.
@@ -90,6 +117,16 @@ export async function getDrivingMinutesOneWay(origin: LatLng, destination: LatLn
  */
 export async function getTravelTime(origin: LatLng, destination: LatLng): Promise<TravelResult> {
   const seconds = await fetchDrivingRouteDurationSeconds(origin, destination)
-  if (seconds === null) return { minutes: 0, ok: false }
-  return { minutes: Math.max(0, Math.round(seconds / 60)) * 2, ok: true }
+  if (seconds !== null) {
+    return { minutes: Math.max(0, Math.round(seconds / 60)) * 2, ok: true }
+  }
+  const estimate = estimatedRoundTripMinutes(origin, destination)
+  if (estimate > 0) {
+    console.warn('[travel] OSRM unavailable — using crow-flies estimate for round-trip minutes', estimate)
+    return { minutes: estimate, ok: true }
+  }
+  const straightKm = haversineKm(origin, destination)
+  if (straightKm < 0.04) return { minutes: 0, ok: true }
+
+  return { minutes: 0, ok: false }
 }

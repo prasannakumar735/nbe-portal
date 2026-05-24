@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { X, Trash2, AlertTriangle, Building2, MapPin } from 'lucide-react'
+import { X, Trash2, AlertTriangle, Building2, MapPin, Loader2 } from 'lucide-react'
 import { useTravelTime } from '@/hooks/useTravelTime'
-import { findOverlappingEvents } from '@/hooks/useCalendarEvents'
+import { findOverlappingEvents } from '@/lib/calendar/overlap'
 import { supabase } from '@/lib/supabase'
 import type {
   CalendarEventRow,
@@ -22,6 +22,8 @@ import {
   validateTimedEventWindow,
 } from '@/lib/calendar/workingHours'
 import { splitRoundTripLegs } from '@/lib/calendar/eventDisplay'
+import { calendarEventAssigneeIds } from '@/lib/calendar/assignees'
+import { calendarEventEffectiveEndIso } from '@/lib/calendar/multiDay'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 
 /** Teams-style form controls: readable contrast, visible focus rings. */
@@ -30,6 +32,8 @@ const INPUT =
 const INPUT_INVALID =
   'mt-1 w-full rounded-lg border border-rose-400 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm outline-none transition focus:border-rose-500 focus:ring-2 focus:ring-rose-200 disabled:bg-gray-50'
 const LABEL = 'text-xs font-medium uppercase tracking-wide text-gray-500'
+
+const ADDRESS_SUGGEST_DEBOUNCE_MS = 300
 
 const LS_LOCATION_MODE = 'nbe-calendar-event-location-mode'
 
@@ -75,8 +79,10 @@ type FormState = {
   title: string
   description: string
   assigned_to: string
+  assignee_ids: string[]
   event_type: EventType
   date: string
+  end_date: string
   is_full_day: boolean
   start_time: string
   duration_minutes: number
@@ -91,8 +97,10 @@ const defaultForm = (userId: string): FormState => ({
   title: '',
   description: '',
   assigned_to: userId,
+  assignee_ids: [userId],
   event_type: 'task',
   date: new Date().toISOString().slice(0, 10),
+  end_date: new Date().toISOString().slice(0, 10),
   is_full_day: false,
   start_time: '09:00',
   duration_minutes: 60,
@@ -129,8 +137,10 @@ type Props = {
     title: string
     description: string | null
     assigned_to: string
+    assignees?: string[]
     event_type: EventType
     date: string
+    end_date: string | null
     is_full_day: boolean
     start_time: string | null
     duration_minutes: number | null
@@ -150,8 +160,10 @@ type Props = {
       title: string
       description: string | null
       assigned_to: string
+      assignees?: string[]
       event_type: EventType
       date: string
+      end_date: string | null
       is_full_day: boolean
       start_time: string | null
       duration_minutes: number | null
@@ -186,10 +198,22 @@ export function EventModal({
   const [latLng, setLatLng] = useState<{ lat: number; lng: number } | null>(null)
   const [saving, setSaving] = useState(false)
   const [overlapWarning, setOverlapWarning] = useState<CalendarEventRow[]>([])
+  const [assigneeFilter, setAssigneeFilter] = useState('')
   const [clients, setClients] = useState<ClientOption[]>([])
   const [clientLocations, setClientLocations] = useState<ClientLocationOption[]>([])
   const [loadingClients, setLoadingClients] = useState(false)
   const [loadingLocations, setLoadingLocations] = useState(false)
+  const [siteFilter, setSiteFilter] = useState('')
+  const [addressSuggestions, setAddressSuggestions] = useState<
+    Array<{ label: string; lat: number; lng: number }>
+  >([])
+  const [suggestOpen, setSuggestOpen] = useState(false)
+  const [suggestLoading, setSuggestLoading] = useState(false)
+  const [activeSuggestIndex, setActiveSuggestIndex] = useState(-1)
+  const suggestGenRef = useRef(0)
+  const suggestAbortRef = useRef<AbortController | null>(null)
+  /** After committing a dropdown pick, suppress suggest fetches until the user edits text (picked label would re-trigger the debounced effect). */
+  const addressSuggestPausedUntilEditRef = useRef(false)
   const {
     travelMinutes,
     setTravelMinutes,
@@ -212,12 +236,17 @@ export function EventModal({
     if (!open) return
     if (initial) {
       const mode: CalendarLocationMode = initial.location_mode === 'client' ? 'client' : 'manual'
+      const chain = calendarEventAssigneeIds(initial)
+      const assignee_ids = chain.length > 0 ? chain : [initial.assigned_to].filter(Boolean)
+      const assigned_head = assignee_ids[0] ?? initial.assigned_to
       setForm({
         title: initial.title,
         description: initial.description ?? '',
-        assigned_to: initial.assigned_to,
+        assigned_to: assigned_head,
+        assignee_ids: assignee_ids.length > 0 ? assignee_ids : [initial.assigned_to],
         event_type: initial.event_type,
         date: initial.date,
+        end_date: calendarEventEffectiveEndIso(initial),
         is_full_day: initial.is_full_day,
         start_time: timeDbToInput(initial.start_time),
         duration_minutes: coerceDurationMinutes(initial.duration_minutes ?? 60),
@@ -264,15 +293,18 @@ export function EventModal({
       }
     } else {
       const base = defaultForm(currentUserId)
+      const start = defaultDate ?? base.date
       setForm({
         ...base,
-        date: defaultDate ?? base.date,
+        date: start,
+        end_date: start,
       })
       setLatLng(null)
       setTravelMinutes(0)
     }
     setOverlapWarning([])
     setTravelError(null)
+    setAssigneeFilter('')
   }, [
     open,
     initial,
@@ -346,6 +378,113 @@ export function EventModal({
       })
   }, [open, form.client_id, form.location_mode, readOnly])
 
+  useEffect(() => {
+    setSiteFilter('')
+  }, [form.client_id])
+
+  /** Clear address suggestions when autosuggest isn't applicable or modal closes. */
+  useEffect(() => {
+    const shouldHideSuggest =
+      !open || form.location_mode !== 'manual' || form.is_full_day || readOnly
+    if (!shouldHideSuggest) return
+    addressSuggestPausedUntilEditRef.current = false
+    suggestGenRef.current += 1
+    suggestAbortRef.current?.abort()
+    setAddressSuggestions([])
+    setSuggestOpen(false)
+    setSuggestLoading(false)
+    setActiveSuggestIndex(-1)
+  }, [open, form.location_mode, form.is_full_day, readOnly])
+
+  const filteredClientLocations = useMemo(() => {
+    const f = siteFilter.trim().toLowerCase()
+    let list =
+      !f ? clientLocations : clientLocations.filter(loc => loc.label.toLowerCase().includes(f) || loc.address.toLowerCase().includes(f))
+
+    const selectedId = form.location_id
+    if (selectedId && !list.some(l => l.id === selectedId)) {
+      const sel = clientLocations.find(l => l.id === selectedId)
+      if (sel) list = [sel, ...list]
+    }
+
+    return list
+  }, [clientLocations, siteFilter, form.location_id])
+
+  const pickAddressSuggestion = useCallback(
+    async (item: { label: string; lat: number; lng: number }) => {
+      addressSuggestPausedUntilEditRef.current = true
+      suggestGenRef.current += 1
+      suggestAbortRef.current?.abort()
+      const c = { lat: item.lat, lng: item.lng }
+      setForm(f => ({ ...f, location_text: item.label }))
+      setLatLng(c)
+      setAddressSuggestions([])
+      setSuggestOpen(false)
+      setSuggestLoading(false)
+      setActiveSuggestIndex(-1)
+      await computeTravelFromCoords(c, false)
+    },
+    [computeTravelFromCoords]
+  )
+
+  /** Debounced Nominatim suggestions via server proxy — min length 3, abort stale responses. */
+  useEffect(() => {
+    if (!open || form.is_full_day || form.location_mode !== 'manual' || readOnly) return
+    const q = form.location_text.trim()
+    if (q.length < 3) {
+      addressSuggestPausedUntilEditRef.current = false
+      suggestGenRef.current += 1
+      suggestAbortRef.current?.abort()
+      setSuggestLoading(false)
+      setAddressSuggestions([])
+      setSuggestOpen(false)
+      setActiveSuggestIndex(-1)
+      return
+    }
+    if (addressSuggestPausedUntilEditRef.current) {
+      suggestAbortRef.current?.abort()
+      setSuggestLoading(false)
+      setAddressSuggestions([])
+      setSuggestOpen(false)
+      setActiveSuggestIndex(-1)
+      return
+    }
+    suggestAbortRef.current?.abort()
+    const ac = new AbortController()
+    suggestAbortRef.current = ac
+    const gen = ++suggestGenRef.current
+    const t = window.setTimeout(() => {
+      void (async () => {
+        try {
+          setSuggestLoading(true)
+          const res = await fetch(
+            `/api/calendar/geocode?suggest=1&q=${encodeURIComponent(q)}`,
+            { signal: ac.signal }
+          )
+          const json = (await res.json()) as { suggestions?: Array<{ label: string; lat: number; lng: number }> }
+          if (gen !== suggestGenRef.current) return
+          const list =
+            Array.isArray(json?.suggestions) && res.ok ? json.suggestions.filter(s => s?.label != null && Number.isFinite(s.lat) && Number.isFinite(s.lng)) : []
+          setAddressSuggestions(list)
+          setSuggestOpen(true)
+          setSuggestLoading(false)
+          setActiveSuggestIndex(list.length > 0 ? 0 : -1)
+        } catch (e) {
+          if ((e as Error).name === 'AbortError') return
+          if (gen !== suggestGenRef.current) return
+          setAddressSuggestions([])
+          setSuggestOpen(true)
+          setSuggestLoading(false)
+          setActiveSuggestIndex(-1)
+        }
+      })()
+    }, ADDRESS_SUGGEST_DEBOUNCE_MS)
+    return () => {
+      clearTimeout(t)
+      ac.abort()
+    }
+  }, [form.location_text, form.location_mode, form.is_full_day, open, readOnly])
+
   const workingWindowCheck = useMemo(() => {
     if (form.is_full_day) return { ok: true as const }
     const sm = parseTimeToMinutes(form.start_time)
@@ -377,13 +516,33 @@ export function EventModal({
   )
 
   const assigneeOptions = useMemo(() => {
-    const id = form.assigned_to
-    if (!id || assignees.some(a => a.id === id)) return assignees
-    return [
-      ...assignees,
-      { id, full_name: null, first_name: null, last_name: null, role: null } satisfies ProfileOption,
-    ]
-  }, [assignees, form.assigned_to])
+    const extras = form.assignee_ids
+      .filter(id => !assignees.some(a => a.id === id))
+      .map(
+        id =>
+          ({ id, full_name: null, first_name: null, last_name: null, role: null }) satisfies ProfileOption
+      )
+    return [...assignees, ...extras]
+  }, [assignees, form.assignee_ids])
+
+  const displayAssigneeId = useCallback(
+    (id: string) => {
+      const opt =
+        assigneeOptions.find(a => a.id === id) ??
+        ({
+          id,
+          full_name: null,
+          first_name: null,
+          last_name: null,
+          role: null,
+        } satisfies ProfileOption)
+      if (id === currentUserId) {
+        return profileDisplayName(opt) || 'You'
+      }
+      return profileDisplayName(opt) || id.slice(0, 8)
+    },
+    [assigneeOptions, currentUserId]
+  )
 
   const handleLocationBlur = async () => {
     if (form.is_full_day || form.location_mode !== 'manual') return
@@ -401,6 +560,7 @@ export function EventModal({
   const applyLocationMode = (mode: CalendarLocationMode) => {
     persistLocationMode(mode)
     if (mode === 'manual') {
+      addressSuggestPausedUntilEditRef.current = false
       setForm(f => ({
         ...f,
         location_mode: 'manual',
@@ -426,7 +586,14 @@ export function EventModal({
     if (f.is_full_day) {
       const w = { start: 0, end: 24 * 60, isFullDay: true as const }
       const hits = findOverlappingEvents(
-        { date: f.date, assigned_to: f.assigned_to, window: w },
+        {
+          date: f.date,
+          end_date: f.event_type === 'task' ? f.end_date : null,
+          event_type: f.event_type,
+          assigned_to: f.assigned_to,
+          assignee_ids: f.assignee_ids,
+          window: w,
+        },
         allEvents,
         initial?.id
       )
@@ -448,7 +615,13 @@ export function EventModal({
     const travel = Math.max(0, Math.round(travelMinutes))
     const w = { start: startMin, end: startMin + dur + travel, isFullDay: false }
     const hits = findOverlappingEvents(
-      { date: f.date, assigned_to: f.assigned_to, window: w },
+      {
+        date: f.date,
+        event_type: f.event_type,
+        assigned_to: f.assigned_to,
+        assignee_ids: f.assignee_ids,
+        window: w,
+      },
       allEvents,
       initial?.id
     )
@@ -462,31 +635,24 @@ export function EventModal({
     open,
     form.date,
     form.assigned_to,
+    form.assignee_ids,
     form.is_full_day,
     form.start_time,
     form.duration_minutes,
+    form.end_date,
+    form.event_type,
     travelMinutes,
     allEvents,
     initial?.id,
   ])
 
-  /** Debounced geocode + travel when manual address text changes (not only on blur). */
-  useEffect(() => {
-    if (!open || form.is_full_day || form.location_mode !== 'manual') return
-    const q = form.location_text.trim()
-    if (!q) return
-    const id = window.setTimeout(() => {
-      void (async () => {
-        const r = await computeFromLocation(q, false)
-        if (r.coords) setLatLng(r.coords)
-      })()
-    }, 550)
-    return () => clearTimeout(id)
-  }, [form.location_text, form.location_mode, open, form.is_full_day, computeFromLocation])
-
   const handleSubmit = async () => {
     if (readOnly) return
     if (!form.title.trim()) return
+    if (form.event_type === 'task' && form.is_full_day && form.end_date < form.date) {
+      alert('End date must be on or after the start date.')
+      return
+    }
     if (!form.is_full_day && workingWindowCheck.ok === false) {
       alert(workingWindowCheck.message)
       return
@@ -507,10 +673,12 @@ export function EventModal({
     const description = form.description.trim() || null
     const dur = coerceDurationMinutes(form.duration_minutes)
 
-    // Hard-enforce self-assignment for non-managers (belt-and-suspenders on top of UI lock)
-    if (assigneeLocked && form.assigned_to !== currentUserId) {
-      setForm(f => ({ ...f, assigned_to: currentUserId }))
+    const resolvedAssignees = assigneeLocked ? [currentUserId] : [...new Set(form.assignee_ids)].filter(Boolean)
+    if (!assigneeLocked && resolvedAssignees.length === 0) {
+      alert('Select at least one assignee.')
+      return
     }
+    const assigned_to_head = resolvedAssignees[0]!
 
     let resolvedTravel = travelMinutes
     let resolvedLatLng: { lat: number; lng: number } | null = latLng
@@ -570,9 +738,12 @@ export function EventModal({
     const payloadBase = {
       title: form.title.trim(),
       description,
-      assigned_to: form.assigned_to,
+      assigned_to: assigned_to_head,
+      ...(canManage ? { assignees: resolvedAssignees } : {}),
       event_type: form.event_type,
       date: form.date,
+      end_date:
+        form.event_type === 'task' && form.is_full_day ? (form.end_date.trim() || form.date) : null,
       is_full_day: form.is_full_day,
       start_time: form.is_full_day ? null : toPgTime(form.start_time),
       duration_minutes: form.is_full_day ? null : dur,
@@ -588,8 +759,19 @@ export function EventModal({
     }
 
     if (!form.is_full_day && overlapWarning.length > 0) {
+      const nameSet = new Set<string>()
+      for (const ev of overlapWarning) {
+        for (const id of calendarEventAssigneeIds(ev)) {
+          nameSet.add(displayAssigneeId(id))
+        }
+      }
+      const unique = [...nameSet]
+      const who =
+        unique.length <= 3
+          ? unique.join(', ')
+          : `${unique.slice(0, 3).join(', ')} and ${unique.length - 3} other(s)`
       const ok = window.confirm(
-        `This overlaps ${overlapWarning.length} existing booking(s) for that person. Save anyway?`
+        `This overlaps ${overlapWarning.length} existing booking(s) for overlapping assignee schedules (${who}). Save anyway?`
       )
       if (!ok) return
     }
@@ -692,8 +874,13 @@ export function EventModal({
                 <ul className="mt-1 list-inside list-disc text-xs text-gray-700">
                   {overlapWarning.slice(0, 4).map(ev => (
                     <li key={ev.id}>
-                      {ev.title} ({ev.date}
-                      {!ev.is_full_day && ev.start_time ? ` · ${timeDbToInput(ev.start_time)}` : ''})
+                      {ev.title} (
+                      {!ev.is_full_day && ev.start_time
+                        ? `${ev.date} · ${timeDbToInput(ev.start_time)}`
+                        : calendarEventEffectiveEndIso(ev) !== ev.date
+                          ? `${ev.date} – ${calendarEventEffectiveEndIso(ev)}`
+                          : ev.date}
+                      )
                     </li>
                   ))}
                 </ul>
@@ -728,29 +915,109 @@ export function EventModal({
                   <span className="ml-auto text-[11px] text-gray-400">assigned to you</span>
                 </div>
               ) : (
-                <select
-                  disabled={readOnly}
-                  value={form.assigned_to}
-                  onChange={e => setForm(f => ({ ...f, assigned_to: e.target.value }))}
-                  className={INPUT}
-                >
-                  {assigneeOptions.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {profileDisplayName(p) || p.id.slice(0, 8)}
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-2">
+                  <p className="text-[11px] text-gray-500">
+                    First assignee is the legacy primary contact (routing). Add others for shared jobs.
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {form.assignee_ids.map(id => (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-800 shadow-sm"
+                      >
+                        <span>{displayAssigneeId(id)}</span>
+                        {!readOnly && (
+                          <button
+                            type="button"
+                            className="rounded px-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                            aria-label={`Remove ${displayAssigneeId(id)}`}
+                            disabled={form.assignee_ids.length <= 1}
+                            onClick={() =>
+                              setForm(f => {
+                                if (f.assignee_ids.length <= 1) return f
+                                const next = f.assignee_ids.filter(x => x !== id)
+                                return {
+                                  ...f,
+                                  assignee_ids: next,
+                                  assigned_to: next[0] ?? f.assigned_to,
+                                }
+                              })
+                            }
+                          >
+                            ×
+                          </button>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                  <input
+                    type="search"
+                    disabled={readOnly}
+                    value={assigneeFilter}
+                    onChange={e => setAssigneeFilter(e.target.value)}
+                    placeholder="Filter team members…"
+                    className={`${INPUT} mb-1`}
+                  />
+                  <div
+                    className={`max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 ${
+                      readOnly ? 'pointer-events-none opacity-60' : ''
+                    }`}
+                  >
+                    {assigneeOptions
+                      .filter(p => {
+                        const q = assigneeFilter.trim().toLowerCase()
+                        if (!q) return true
+                        const label = (profileDisplayName(p) || p.id).toLowerCase()
+                        return label.includes(q)
+                      })
+                      .map(p => {
+                        const checked = form.assignee_ids.includes(p.id)
+                        return (
+                          <label
+                            key={p.id}
+                            className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-gray-50"
+                          >
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              checked={checked}
+                              disabled={readOnly}
+                              onChange={() =>
+                                setForm(f => {
+                                  if (checked) {
+                                    if (f.assignee_ids.length <= 1) return f
+                                    const next = f.assignee_ids.filter(x => x !== p.id)
+                                    return { ...f, assignee_ids: next, assigned_to: next[0] ?? f.assigned_to }
+                                  }
+                                  if (f.assignee_ids.includes(p.id)) return f
+                                  const next = [...f.assignee_ids, p.id]
+                                  return { ...f, assignee_ids: next, assigned_to: next[0] ?? p.id }
+                                })
+                              }
+                            />
+                            <span>{profileDisplayName(p) || p.id.slice(0, 8)}</span>
+                          </label>
+                        )
+                      })}
+                  </div>
+                </div>
               )}
             </div>
 
             <label className="block">
               <span className={LABEL}>Type</span>
-              <select
-                disabled={readOnly}
-                value={form.event_type}
-                onChange={e => setForm(f => ({ ...f, event_type: e.target.value as EventType }))}
-                className={INPUT}
-              >
+                <select
+                  disabled={readOnly}
+                  value={form.event_type}
+                  onChange={e =>
+                    setForm(f => ({
+                      ...f,
+                      event_type: e.target.value as EventType,
+                      end_date: e.target.value === 'task' ? f.end_date : f.date,
+                    }))
+                  }
+                  className={INPUT}
+                >
                 <option value="task">Task</option>
                 <option value="block">Block</option>
                 <option value="leave">Leave</option>
@@ -780,10 +1047,31 @@ export function EventModal({
               type="date"
               disabled={readOnly}
               value={form.date}
-              onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+              onChange={e =>
+                setForm(f => {
+                  const date = e.target.value
+                  let end_date = f.end_date
+                  if (f.event_type === 'task' && f.is_full_day && end_date < date) end_date = date
+                  return { ...f, date, end_date }
+                })
+              }
               className={INPUT}
             />
           </label>
+
+          {form.event_type === 'task' && form.is_full_day && (
+            <label className="block">
+              <span className={LABEL}>End date</span>
+              <input
+                type="date"
+                disabled={readOnly}
+                min={form.date}
+                value={form.end_date}
+                onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))}
+                className={INPUT}
+              />
+            </label>
+          )}
 
           <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
             <input
@@ -792,7 +1080,11 @@ export function EventModal({
               checked={form.is_full_day}
               onChange={e => {
                 const is_full_day = e.target.checked
-                setForm(f => ({ ...f, is_full_day }))
+                setForm(f => ({
+                  ...f,
+                  is_full_day,
+                  end_date: is_full_day ? (f.end_date >= f.date ? f.end_date : f.date) : f.date,
+                }))
                 if (is_full_day) {
                   setTravelMinutes(0)
                   setLatLng(null)
@@ -912,6 +1204,17 @@ export function EventModal({
                       className="[&_button]:mt-1 [&_button]:rounded-lg [&_button]:border-gray-300 [&_button]:bg-white [&_button]:px-3 [&_button]:py-2 [&_button]:text-sm [&_button]:text-gray-900 [&_button]:shadow-sm [&_button]:outline-none [&_button]:transition [&_button]:focus:border-blue-500 [&_button]:focus:ring-2 [&_button]:focus:ring-blue-500/30 [&_button]:disabled:cursor-not-allowed [&_button]:disabled:bg-gray-50 [&_button]:disabled:text-gray-500"
                     />
                     <label className="block">
+                      <span className={LABEL}>Filter sites</span>
+                      <input
+                        type="search"
+                        disabled={readOnly || !form.client_id || loadingLocations}
+                        value={siteFilter}
+                        onChange={e => setSiteFilter(e.target.value)}
+                        className={INPUT}
+                        placeholder="Search by site name or address…"
+                      />
+                    </label>
+                    <label className="block">
                       <span className={LABEL}>Site</span>
                       <select
                         disabled={readOnly || !form.client_id || loadingLocations}
@@ -954,7 +1257,7 @@ export function EventModal({
                                 ? 'No locations available'
                                 : 'Select a site'}
                         </option>
-                        {clientLocations.map(loc => (
+                        {filteredClientLocations.map(loc => (
                           <option key={loc.id} value={loc.id}>
                             {loc.label}
                             {loc.address && loc.address !== loc.label ? ` — ${loc.address}` : ''}
@@ -964,29 +1267,118 @@ export function EventModal({
                     </label>
                   </div>
                 ) : (
-                  <label className="mt-2 block">
-                    <span className="sr-only">Manual location</span>
+                  <div className="relative mt-2">
+                    <span className="sr-only">
+                      Manual location suggestions use arrow keys after opening the listbox.
+                    </span>
                     <input
                       type="text"
                       disabled={readOnly}
+                      aria-autocomplete="list"
                       value={form.location_text}
-                      onChange={e => setForm(f => ({ ...f, location_text: e.target.value }))}
+                      onChange={e => {
+                        addressSuggestPausedUntilEditRef.current = false
+                        setForm(f => ({ ...f, location_text: e.target.value }))
+                      }}
                       onBlur={() => void handleLocationBlur()}
+                      onKeyDown={e => {
+                        if (
+                          ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key) &&
+                          (suggestLoading || suggestOpen || addressSuggestions.length > 0)
+                        ) {
+                          const hasList =
+                            addressSuggestions.length > 0 ||
+                            suggestLoading ||
+                            (suggestOpen && form.location_text.trim().length >= 3)
+                          if (!hasList || form.location_text.trim().length < 3) {
+                            if (e.key === 'Escape') setSuggestOpen(false)
+                            return
+                          }
+                          if (e.key === 'ArrowDown') {
+                            e.preventDefault()
+                            setSuggestOpen(true)
+                            setActiveSuggestIndex(i => {
+                              if (addressSuggestions.length === 0) return -1
+                              const next = i < 0 ? 0 : Math.min(addressSuggestions.length - 1, i + 1)
+                              return next
+                            })
+                          } else if (e.key === 'ArrowUp') {
+                            e.preventDefault()
+                            setSuggestOpen(true)
+                            setActiveSuggestIndex(i => Math.max(0, (i < 0 ? 0 : i) - 1))
+                          } else if (e.key === 'Enter') {
+                            if (addressSuggestions.length > 0 && activeSuggestIndex >= 0) {
+                              e.preventDefault()
+                              const sel = addressSuggestions[activeSuggestIndex]
+                              if (sel) void pickAddressSuggestion(sel)
+                            }
+                          } else if (e.key === 'Escape') {
+                            e.preventDefault()
+                            suggestGenRef.current += 1
+                            suggestAbortRef.current?.abort()
+                            setSuggestOpen(false)
+                          }
+                        }
+                      }}
                       className={INPUT}
                       placeholder="Enter suburb or address"
                     />
-                  </label>
+                    {form.location_text.trim().length >= 3 && (suggestOpen || suggestLoading || addressSuggestions.length > 0) && (
+                      <div
+                        id="manual-address-suggestions"
+                        className="absolute left-0 right-0 top-full z-20 mt-1 max-h-52 overflow-auto rounded-lg border border-gray-200 bg-white py-1 text-left text-xs shadow-lg"
+                        role="listbox"
+                      >
+                        {suggestLoading && (
+                          <div className="flex items-center gap-2 px-3 py-2 text-gray-500">
+                            <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden />
+                            Searching…
+                          </div>
+                        )}
+                        {!suggestLoading &&
+                          addressSuggestions.length === 0 && (
+                          <div className="px-3 py-2 text-gray-500">No matches</div>
+                        )}
+                        {addressSuggestions.map((s, i) => (
+                          <button
+                            key={`${s.label}-${i}-${s.lat}`}
+                            type="button"
+                            role="option"
+                            aria-selected={i === activeSuggestIndex}
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={() => void pickAddressSuggestion(s)}
+                            onMouseEnter={() => setActiveSuggestIndex(i)}
+                            className={`flex w-full text-left px-3 py-2 transition hover:bg-blue-50 ${
+                              i === activeSuggestIndex ? 'bg-blue-50' : ''
+                            }`}
+                          >
+                            <span className="leading-snug text-gray-800">{s.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 
               <div className="flex flex-wrap gap-6 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
                 <div>
                   <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Travel (return)</span>
-                  <p className="mt-0.5 text-sm font-semibold tabular-nums text-orange-600">
-                    <span className="mr-0.5" aria-hidden>
+                  <p
+                    className="mt-0.5 inline-flex flex-wrap items-center gap-2 text-sm font-semibold tabular-nums text-orange-600"
+                    aria-busy={loadingTravel}
+                  >
+                    <span className="mr-0.5 shrink-0" aria-hidden>
                       🚗
                     </span>
-                    {loadingTravel ? '…' : `${travelMinutes} min`}
+                    {loadingTravel ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin shrink-0" aria-hidden />
+                        <span className="sr-only">Calculating travel time</span>
+                      </>
+                    ) : (
+                      <span>{travelMinutes} min</span>
+                    )}
                   </p>
                   {!loadingTravel && travelMinutes > 0 && travelLegPreview && (
                     <p className="mt-1 text-[10px] leading-snug text-gray-500">
@@ -1021,7 +1413,7 @@ export function EventModal({
         </div>
 
         <div className="flex flex-col gap-2 border-t border-gray-200 bg-gray-50/80 px-4 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-2 md:px-6">
-          {initial && initial.event_type === 'task' && (canManage || initial.assigned_to === currentUserId) && (
+          {initial && initial.event_type === 'task' && (canManage || calendarEventAssigneeIds(initial).includes(currentUserId)) && (
             <Link
               href={`/job-card/${initial.id}`}
               onClick={onClose}
