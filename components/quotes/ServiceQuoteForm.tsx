@@ -17,23 +17,26 @@ import { defaultSubCategoryForType, subCategoryAllowed } from '@/lib/quotes/quot
 import type { QuoteTypeSlug } from '@/lib/quotes/quoteTaxonomy'
 import { lineItemsForTaxonomy } from '@/lib/quotes/serviceQuoteTemplates'
 import { fetchNextQuoteNumberClient } from '@/lib/quotes/fetchNextQuoteNumberClient'
-import { localDateKeyYmd, quoteNumberPrefixForServiceTaxonomy } from '@/lib/quotes/quoteNumberPolicy'
+import { quoteNumberPrefixForServiceTaxonomy } from '@/lib/quotes/quoteNumberPolicy'
+import {
+  addCalendarDaysIso,
+  quoteTodayMelbourneDateKey,
+  quoteTodayMelbourneIso,
+} from '@/lib/quotes/quoteCalendarDates'
+import {
+  lineItemRowTotal,
+  sanitizeServiceLineItemForSnapshot,
+} from '@/lib/quotes/lineItemTotal'
 
 const currency = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
 
-function addDays(isoDate: string, days: number): string {
-  const d = new Date(`${isoDate}T12:00:00`)
-  d.setDate(d.getDate() + days)
-  return d.toISOString().slice(0, 10)
-}
-
 const emptyDefaults = (): ServiceQuoteFormValues => {
   const defaultServiceSub = defaultSubCategoryForType('service')
-  const today = new Date().toISOString().split('T')[0]
+  const today = quoteTodayMelbourneIso()
   return {
     quoteNumber: '',
     serviceDate: today,
-    validUntil: addDays(today, 30),
+    validUntil: addCalendarDaysIso(today, 30),
     salesperson: '',
     paymentTerms: '',
     quoteType: 'service',
@@ -152,7 +155,7 @@ export function ServiceQuoteForm({
   useEffect(() => {
     if (mode === 'edit') return
     let cancelled = false
-    const dateKey = localDateKeyYmd(new Date())
+    const dateKey = quoteTodayMelbourneDateKey()
     const prefix = quoteNumberPrefixForServiceTaxonomy(quoteType as QuoteTypeSlug, String(quoteSubCategory ?? ''))
     ;(async () => {
       try {
@@ -187,16 +190,7 @@ export function ServiceQuoteForm({
   const watchedValues = watch()
 
   const subtotal = useMemo(() => {
-    return watchedItems.reduce((sum, row) => {
-      const qty = Number(row?.qty ?? 0)
-      const unitPrice = Number(row?.unitPrice ?? 0)
-      const computed = Number.isFinite(qty) && Number.isFinite(unitPrice) ? qty * unitPrice : 0
-      const override = Number(row?.totalOverride)
-      const rowTotal = !isNaN(override) && row?.totalOverride !== undefined && row?.totalOverride !== null
-        ? override
-        : computed
-      return sum + rowTotal
-    }, 0)
+    return watchedItems.reduce((sum, row) => sum + lineItemRowTotal(row ?? {}), 0)
   }, [watchedItems])
 
   const discountPercent = useMemo(() => {
@@ -221,23 +215,17 @@ export function ServiceQuoteForm({
     setStatusMessage(null)
 
     const values = getValues()
-    const form_snapshot = values
+    const sanitizedItems = values.items.map(sanitizeServiceLineItemForSnapshot)
+    const form_snapshot = { ...values, items: sanitizedItems }
     setIsSaving(true)
 
     try {
-      const items = values.items
-        .map(item => {
-          const computed = Number(item.qty || 0) * Number(item.unitPrice || 0)
-          const override = Number(item.totalOverride)
-          const total = !isNaN(override) && item.totalOverride !== undefined && item.totalOverride !== null
-            ? override
-            : computed
-          return {
-            ...item,
-            description: String(item.description ?? '').trim(),
-            total,
-          }
-        })
+      const items = sanitizedItems
+        .map(item => ({
+          ...item,
+          description: String(item.description ?? '').trim(),
+          total: lineItemRowTotal(item),
+        }))
         .filter(item => item.description.length > 0)
 
       if (!String(values.customerCompany ?? '').trim()) {
@@ -301,7 +289,7 @@ export function ServiceQuoteForm({
       } else {
         setStatusMessage('Quote saved.')
         try {
-          const dateKey = localDateKeyYmd(new Date())
+          const dateKey = quoteTodayMelbourneDateKey()
           const prefix = quoteNumberPrefixForServiceTaxonomy(
             getValues('quoteType') as QuoteTypeSlug,
             String(getValues('quoteSubCategory') ?? ''),

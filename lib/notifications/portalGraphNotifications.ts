@@ -260,6 +260,197 @@ export async function notifyCalendarReminder2h(
   }
 }
 
+function serviceDueDetailsTable(p: {
+  clientName: string
+  title: string
+  dueDateLabel: string
+  leadTimeDays: number
+  lastServiceDateLabel: string | null
+}): string {
+  const row = (label: string, value: string) =>
+    `<tr>
+      <td style="padding:8px 12px 8px 0;font-weight:600;color:#374151;white-space:nowrap;vertical-align:top">${label}</td>
+      <td style="padding:8px 0;color:#111827">${value}</td>
+    </tr>`
+  return `
+    <table style="border-collapse:collapse;width:100%;background:#f8fafc;border-radius:8px;margin:0 0 16px;overflow:hidden">
+      <tbody style="padding:4px 16px;display:table;width:100%">
+        ${row('Client', `<strong>${escapeHtml(p.clientName)}</strong>`)}
+        ${row('Reminder', escapeHtml(p.title))}
+        ${row('Service due', escapeHtml(p.dueDateLabel))}
+        ${p.leadTimeDays > 0 ? row('Lead time', escapeHtml(`${p.leadTimeDays} day(s) before due`)) : ''}
+        ${p.lastServiceDateLabel ? row('Last service', escapeHtml(p.lastServiceDateLabel)) : ''}
+      </tbody>
+    </table>`
+}
+
+/**
+ * Manager/service inbox: prep reminder before client maintenance is due.
+ */
+export async function notifyServiceDueReminderManagers(
+  supabase: SupabaseClient,
+  params: {
+    clientName: string
+    title: string
+    dueDate: string
+    leadTimeDays: number
+    lastServiceDate: string | null
+    notes: string | null
+  },
+): Promise<PortalNotifyResult> {
+  if (isCalendarNotificationsDisabled()) {
+    return { status: 'skipped', reason: 'notifications disabled (local testing)' }
+  }
+
+  let recipients: Array<{ email: string; full_name: string | null }>
+  try {
+    recipients = await getManagerPlusServiceRecipients(supabase)
+  } catch (e) {
+    return { status: 'failed', error: e instanceof Error ? e.message : 'Recipient lookup failed.' }
+  }
+  if (recipients.length === 0) {
+    return { status: 'skipped', reason: 'No manager/admin or service recipients.' }
+  }
+
+  const listUrl = `${publicAppBaseUrl()}/service-reminders`
+  const dueDateLabel = formatDateForEmail(params.dueDate)
+  const lastServiceDateLabel = params.lastServiceDate
+    ? formatDateForEmail(params.lastServiceDate)
+    : null
+  const subject = `Service due soon: ${params.clientName} — ${params.title.slice(0, 50)}`
+  const notes = params.notes?.trim()
+
+  try {
+    for (const r of recipients) {
+      const name = String(r.full_name ?? '').trim() || 'there'
+      const html = buildServiceDueEmailHtml({
+        preheader: `${params.clientName} scheduled service due ${dueDateLabel}`,
+        accentColour: '#0d9488',
+        headerSubtitle: 'Service due reminder',
+        footerLine:
+          'You received this email because a client service-due reminder is configured in the NBE Portal.',
+        body: `
+          <p style="margin:0 0 16px">Hi ${escapeHtml(name)},</p>
+          <p style="margin:0 0 16px">
+            This is your advance notice to prepare client communication. Scheduled maintenance is coming due for
+            <strong>${escapeHtml(params.clientName)}</strong>.
+          </p>
+          ${serviceDueDetailsTable({
+            clientName: params.clientName,
+            title: params.title,
+            dueDateLabel,
+            leadTimeDays: params.leadTimeDays,
+            lastServiceDateLabel,
+          })}
+          ${notes ? `<p style="margin:16px 0 4px"><strong>Notes:</strong></p>
+          <p style="margin:0 0 16px;padding:12px 16px;background:#f0fdfa;border-left:3px solid #0d9488;border-radius:4px">${escapeHtml(notes)}</p>` : ''}
+          <p style="margin:24px 0 0">
+            <a href="${escapeHtml(listUrl)}" style="display:inline-block;background:#0d9488;color:#fff;font-weight:600;padding:10px 20px;border-radius:6px;text-decoration:none">View service reminders</a>
+          </p>
+        `,
+      })
+      await sendMailViaGraph({ to: r.email, subject, bodyHtml: html })
+    }
+    return { status: 'sent', recipients: recipients.length }
+  } catch (e) {
+    return { status: 'failed', error: e instanceof Error ? e.message : 'Graph send failed.' }
+  }
+}
+
+/**
+ * Optional client-facing “service due soon” email to the selected contact.
+ */
+export async function notifyServiceDueReminderClient(
+  params: {
+    toEmail: string
+    contactName: string | null
+    clientName: string
+    title: string
+    dueDate: string
+  },
+): Promise<PortalNotifyResult> {
+  if (isCalendarNotificationsDisabled()) {
+    return { status: 'skipped', reason: 'notifications disabled (local testing)' }
+  }
+
+  const to = params.toEmail.trim()
+  if (!isValidEmail(to)) {
+    return { status: 'skipped', reason: 'Invalid client contact email.' }
+  }
+
+  const dueDateLabel = formatDateForEmail(params.dueDate)
+  const greeting = params.contactName?.trim() || 'there'
+  const subject = `Scheduled service reminder — ${params.clientName}`
+  const html = buildServiceDueEmailHtml({
+    preheader: `Your scheduled service with NBE is due on ${dueDateLabel}`,
+    accentColour: '#2563eb',
+    headerSubtitle: 'Scheduled service',
+    footerLine: 'You received this email from NBE Australia regarding scheduled maintenance.',
+    body: `
+      <p style="margin:0 0 16px">Hi ${escapeHtml(greeting)},</p>
+      <p style="margin:0 0 16px">
+        This is a friendly reminder that your scheduled maintenance service with NBE is due on
+        <strong>${escapeHtml(dueDateLabel)}</strong>.
+      </p>
+      ${serviceDueDetailsTable({
+        clientName: params.clientName,
+        title: params.title,
+        dueDateLabel,
+        leadTimeDays: 0,
+        lastServiceDateLabel: null,
+      })}
+      <p style="margin:16px 0 0;color:#6b7280;font-size:13px">
+        If you have any questions or need to reschedule, please reply to this email or contact our service team.
+      </p>
+    `,
+  })
+
+  try {
+    await sendMailViaGraph({ to, subject, bodyHtml: html })
+    return { status: 'sent', recipients: 1 }
+  } catch (e) {
+    return { status: 'failed', error: e instanceof Error ? e.message : 'Graph send failed.' }
+  }
+}
+
+function buildServiceDueEmailHtml(p: {
+  preheader: string
+  accentColour: string
+  headerSubtitle: string
+  footerLine: string
+  body: string
+}): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NBE Portal</title></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<span style="display:none;max-height:0;overflow:hidden">${escapeHtml(p.preheader)}</span>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px">
+  <tr><td align="center">
+    <table width="100%" style="max-width:600px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+      <tr>
+        <td style="background:${p.accentColour};padding:20px 28px">
+          <p style="margin:0;color:#fff;font-size:20px;font-weight:700;letter-spacing:-0.3px">NBE Portal</p>
+          <p style="margin:4px 0 0;color:rgba(255,255,255,.85);font-size:13px">${escapeHtml(p.headerSubtitle)}</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:28px 28px 24px;color:#111827;font-size:15px;line-height:1.6">
+          ${p.body}
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:16px 28px 24px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:12px">
+          ${escapeHtml(p.footerLine)} This is an automated message.
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`
+}
+
 // ── Private helpers ──────────────────────────────────────────────────────────
 
 function formatDateForEmail(yyyyMmDd: string): string {

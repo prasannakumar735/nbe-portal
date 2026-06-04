@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/calendar-reminders",
       "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/cron/service-due-reminders",
+      "schedule": "0 19 * * *"
     }
   ]
 }

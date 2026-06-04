@@ -1,5 +1,7 @@
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import { registerRobotoForReactPdf } from '@/lib/pdf/reactPdfRoboto'
+import { formatQuoteDisplayDate } from '@/lib/quotes/quoteCalendarDates'
+import { lineItemRowTotal } from '@/lib/quotes/lineItemTotal'
 import { formatQuoteTaxonomyLine } from '@/lib/quotes/quoteTaxonomy'
 import type { ServiceQuoteFormValues } from './types'
 
@@ -170,6 +172,9 @@ const styles = StyleSheet.create({
     fontSize: 8,
     color: '#ffffff',
   },
+  cellAmount: {
+    textAlign: 'right',
+  },
   descText: {
     width: '100%',
     fontSize: 8,
@@ -266,11 +271,7 @@ const defaultNote =
   'Should you require any further information or clarification about this quotation, please do not hesitate to contact us.'
 
 function rowTotal(item: ServiceQuoteFormValues['items'][number]): number {
-  const computed = Number(item.qty || 0) * Number(item.unitPrice || 0)
-  const override = Number(item.totalOverride)
-  return !isNaN(override) && item.totalOverride !== undefined && item.totalOverride !== null
-    ? override
-    : computed
+  return lineItemRowTotal(item)
 }
 
 function snoLabel(item: ServiceQuoteFormValues['items'][number], index: number): string {
@@ -309,9 +310,11 @@ export function QuotePDF({ data }: QuotePDFProps) {
             <Text style={styles.quoteTitle}>QUOTE</Text>
             <Text style={styles.quoteMeta}>{formatQuoteTaxonomyLine(values.quoteType, values.quoteSubCategory)}</Text>
             <Text style={styles.quoteMeta}>No: {values.quoteNumber}</Text>
-            <Text style={styles.quoteMeta}>Date: {values.serviceDate}</Text>
+            <Text style={styles.quoteMeta}>Date: {formatQuoteDisplayDate(values.serviceDate)}</Text>
             {values.validUntil?.trim() && (
-              <Text style={styles.quoteMeta}>Valid until: {values.validUntil}</Text>
+              <Text style={styles.quoteMeta}>
+                Valid until: {formatQuoteDisplayDate(values.validUntil)}
+              </Text>
             )}
           </View>
         </View>
@@ -377,14 +380,8 @@ export function QuotePDF({ data }: QuotePDFProps) {
             ) : null}
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Quote Date</Text>
-              <Text style={styles.infoValue}>{values.serviceDate}</Text>
+              <Text style={styles.infoValue}>{formatQuoteDisplayDate(values.serviceDate)}</Text>
             </View>
-            {values.validUntil?.trim() ? (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Valid Until</Text>
-                <Text style={styles.infoValue}>{values.validUntil}</Text>
-              </View>
-            ) : null}
           </View>
         </View>
 
@@ -397,9 +394,13 @@ export function QuotePDF({ data }: QuotePDFProps) {
             <Text style={[styles.cellHead, { width: col.h }]}>Height</Text>
             <Text style={[styles.cellHead, { width: col.qty }]}>Qty</Text>
             {!hidePricing && 'unit' in col && (
-              <Text style={[styles.cellHead, { width: (col as {unit: string}).unit }]}>Unit Price</Text>
+              <Text style={[styles.cellHead, styles.cellAmount, { width: (col as {unit: string}).unit }]}>
+                Unit Price
+              </Text>
             )}
-            <Text style={[styles.cellHead, styles.lastCell, { width: col.total }]}>Amount (ex GST)</Text>
+            <Text style={[styles.cellHead, styles.cellAmount, styles.lastCell, { width: col.total }]}>
+              Amount (ex GST)
+            </Text>
           </View>
 
           {values.items.map((item, index) => {
@@ -423,13 +424,15 @@ export function QuotePDF({ data }: QuotePDFProps) {
                   </View>
                   <Text style={[styles.cell, { width: col.w }]}>{item.width || '-'}</Text>
                   <Text style={[styles.cell, { width: col.h }]}>{item.height || '-'}</Text>
-                  <Text style={[styles.cell, { width: col.qty }]}>{String(item.qty || 0)}</Text>
+                  <Text style={[styles.cell, styles.cellAmount, { width: col.qty }]}>
+                    {String(item.qty || 0)}
+                  </Text>
                   {!hidePricing && 'unit' in col && (
-                    <Text style={[styles.cell, { width: (col as {unit: string}).unit }]}>
+                    <Text style={[styles.cell, styles.cellAmount, { width: (col as {unit: string}).unit }]}>
                       {currency.format(Number(item.unitPrice || 0))}
                     </Text>
                   )}
-                  <Text style={[styles.cell, styles.lastCell, { width: col.total }]}>
+                  <Text style={[styles.cell, styles.cellAmount, styles.lastCell, { width: col.total }]}>
                     {currency.format(total)}
                   </Text>
                 </View>
@@ -486,7 +489,11 @@ export function QuotePDF({ data }: QuotePDFProps) {
             </View>
             <View style={styles.sigItem}>
               <Text style={styles.sigLabel}>Date</Text>
-              <Text style={styles.sigLine}>{values.signatureDate || ' '}</Text>
+              <Text style={styles.sigLine}>
+                {values.signatureDate?.trim()
+                  ? formatQuoteDisplayDate(values.signatureDate)
+                  : ' '}
+              </Text>
             </View>
           </View>
         </View>

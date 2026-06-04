@@ -17,7 +17,8 @@ import type { QuoteTypeSlug } from '@/lib/quotes/quoteTaxonomy'
 import NBELogo from '@/components/common/NBELogo'
 import { emptyRapidDoorFormValues } from '@/lib/quotes/rapidDoorDefaults'
 import { fetchNextQuoteNumberClient } from '@/lib/quotes/fetchNextQuoteNumberClient'
-import { localDateKeyYmd } from '@/lib/quotes/quoteNumberPolicy'
+import { quoteTodayMelbourneDateKey } from '@/lib/quotes/quoteCalendarDates'
+import { lineItemRowTotal, sanitizeServiceLineItemForSnapshot } from '@/lib/quotes/lineItemTotal'
 
 const currency = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
 
@@ -65,7 +66,7 @@ export function RapidDoorQuoteForm({
   useEffect(() => {
     if (mode === 'edit') return
     let cancelled = false
-    const dateKey = localDateKeyYmd(new Date())
+    const dateKey = quoteTodayMelbourneDateKey()
     ;(async () => {
       try {
         const qn = await fetchNextQuoteNumberClient('IRD', dateKey)
@@ -101,13 +102,7 @@ export function RapidDoorQuoteForm({
   const quoteSubCategory = watch('quoteSubCategory')
 
   const subtotal = useMemo(() => {
-    return watchedItems.reduce((sum, row) => {
-      const qty = Number(row?.qty ?? 0)
-      const unitPrice = Number(row?.unitPrice ?? 0)
-      const q = Number.isFinite(qty) ? qty : 0
-      const u = Number.isFinite(unitPrice) ? unitPrice : 0
-      return sum + q * u
-    }, 0)
+    return watchedItems.reduce((sum, row) => sum + lineItemRowTotal(row ?? {}), 0)
   }, [watchedItems])
 
   const gst = subtotal * 0.1
@@ -125,16 +120,17 @@ export function RapidDoorQuoteForm({
     setStatusMessage(null)
 
     const values = getValues()
-    const form_snapshot = values
+    const sanitizedItems = values.items.map(sanitizeServiceLineItemForSnapshot)
+    const form_snapshot = { ...values, items: sanitizedItems }
     setIsSaving(true)
 
     try {
-      const items = values.items
+      const items = sanitizedItems
         .map(item => ({
           ...item,
           itemTitle: String(item.itemTitle ?? '').trim(),
           description: String(item.description ?? '').trim(),
-          total: Number(item.qty || 0) * Number(item.unitPrice || 0),
+          total: lineItemRowTotal(item),
         }))
         .filter(item => item.itemTitle.length > 0 || item.description.length > 0)
 
@@ -154,7 +150,7 @@ export function RapidDoorQuoteForm({
         throw new Error('Add at least one schedule row with an item title or description.')
       }
 
-      const saveSubtotal = items.reduce((sum, item) => sum + Number(item.qty || 0) * Number(item.unitPrice || 0), 0)
+      const saveSubtotal = items.reduce((sum, item) => sum + lineItemRowTotal(item), 0)
       const saveGst = saveSubtotal * 0.1
       const saveTotal = saveSubtotal + saveGst
 
@@ -196,7 +192,7 @@ export function RapidDoorQuoteForm({
       } else {
         setStatusMessage('Quote saved.')
         try {
-          const dateKey = localDateKeyYmd(new Date())
+          const dateKey = quoteTodayMelbourneDateKey()
           const nextNum = await fetchNextQuoteNumberClient('IRD', dateKey)
           setValue('quoteNumber', nextNum, { shouldDirty: false })
         } catch {

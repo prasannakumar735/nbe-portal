@@ -51,6 +51,9 @@ export function Sidebar({
     if (href === '/admin/clients') {
       return pathname === '/admin/clients' || pathname.startsWith('/admin/clients/')
     }
+    if (href === '/service-reminders') {
+      return pathname === '/service-reminders'
+    }
     if (href === '/dashboard/quotes/service') {
       return pathname.startsWith('/dashboard/quotes/service')
     }

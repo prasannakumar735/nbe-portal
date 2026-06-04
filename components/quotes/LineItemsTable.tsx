@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import type {
   FieldArrayWithId,
   UseFieldArrayAppend,
@@ -9,6 +9,11 @@ import type {
   UseFormSetValue,
 } from 'react-hook-form'
 import type { ServiceLineItem, ServiceQuoteFormValues } from './types'
+import {
+  hasLineTotalOverride,
+  lineItemRowTotal,
+  parseLineTotalOverride,
+} from '@/lib/quotes/lineItemTotal'
 
 const QUICK_PART_ROWS: Record<string, ServiceLineItem> = {
   'Add Photo Cell': {
@@ -152,23 +157,16 @@ export function LineItemsTable({
           <tbody>
             {fields.map((field, index) => {
               const item = watchedItems[index]
-              const qty = Number(item?.qty || 0)
-              const unitPrice = Number(item?.unitPrice || 0)
-              const computed = qty * unitPrice
-              const override = Number(item?.totalOverride)
-              const hasOverride =
-                !isNaN(override) &&
-                item?.totalOverride !== undefined &&
-                item?.totalOverride !== null
-              const displayTotal = hasOverride ? override : computed
+              const hasOverride = hasLineTotalOverride(item ?? {})
+              const displayTotal = lineItemRowTotal(item ?? {})
               const notesOpen = expandedNotes.has(index)
               const hasNotes = Boolean(item?.itemNotes?.trim())
 
               return (
-                <>
+                <Fragment key={field.id}>
                   {/* Notes row — shown ABOVE the item row */}
                   {(notesOpen || hasNotes) && (
-                    <tr key={`${field.id}-notes`}>
+                    <tr>
                       <td colSpan={9} className="border border-slate-300 bg-blue-50 px-3 py-2">
                         <label className="flex flex-col gap-1 text-xs text-blue-800">
                           Door / item notes (shown in PDF above this row)
@@ -184,7 +182,7 @@ export function LineItemsTable({
                   )}
 
                   {/* Main item row */}
-                  <tr key={field.id}>
+                  <tr>
                     <td className="border border-slate-300 px-1 py-2 align-top">
                       <input
                         {...register(`items.${index}.sno`)}
@@ -246,7 +244,9 @@ export function LineItemsTable({
                             type="number"
                             min={0}
                             step="0.01"
-                            {...register(`items.${index}.totalOverride`, { valueAsNumber: true })}
+                            {...register(`items.${index}.totalOverride`, {
+                              setValueAs: v => parseLineTotalOverride(v),
+                            })}
                             placeholder="Override $"
                             className="w-full rounded border border-slate-200 px-1 py-0.5 text-xs placeholder-slate-400"
                           />
@@ -286,7 +286,7 @@ export function LineItemsTable({
                       </div>
                     </td>
                   </tr>
-                </>
+                </Fragment>
               )
             })}
           </tbody>

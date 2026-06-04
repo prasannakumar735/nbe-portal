@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test lib/calendar/overlap.test.ts",
+    "test": "tsx --test lib/calendar/overlap.test.ts lib/serviceReminders/dueDate.test.ts lib/quotes/quoteCalendarDates.test.ts lib/quotes/lineItemTotal.test.ts",
+    "preprod:local": "npm run build && npm run lint && npm run test",
     "security:pen-test": "node scripts/security-pen-test.mjs",
     "security:test": "tsx scripts/security-tests.ts",
     "backup:check": "tsx scripts/backup-check.ts"

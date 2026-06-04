@@ -5,6 +5,8 @@ import { ChevronLeft, ChevronRight, CalendarPlus, Loader2 } from 'lucide-react'
 import { CalendarGrid, type CalendarViewMode } from '@/components/calendar/CalendarGrid'
 import { EventCard } from '@/components/calendar/EventCard'
 import { EventModal } from '@/components/calendar/EventModal'
+import { EventTypeChooserModal } from '@/components/calendar/EventTypeChooserModal'
+import { ClientReminderModal } from '@/components/calendar/ClientReminderModal'
 import { useCalendarEvents } from '@/hooks/useCalendarEvents'
 import type { CalendarEventRow } from '@/lib/calendar/types'
 import { addDays, endOfCalendarMonth, formatIsoDate, getMonthCalendarGridDates, startOfCalendarMonth, startOfWeekMonday, WEEKDAY_SHORT } from '@/lib/calendar/dates'
@@ -66,7 +68,9 @@ export function CalendarPageClient({ userId, canManage }: Props) {
     typeof window !== 'undefined' && window.innerWidth < 768
   )
 
+  const [createChooserOpen, setCreateChooserOpen] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
+  const [clientReminderOpen, setClientReminderOpen] = useState(false)
   const [modalEvent, setModalEvent] = useState<CalendarEventRow | null>(null)
 
   // Keep isMobile + view in sync with viewport — desktop view mode persists (day/week/month)
@@ -215,7 +219,11 @@ export function CalendarPageClient({ userId, canManage }: Props) {
 
   const openCreate = () => {
     setModalEvent(null)
-    setModalOpen(true)
+    if (canManage) {
+      setCreateChooserOpen(true)
+    } else {
+      setModalOpen(true)
+    }
   }
 
   const openEvent = (ev: CalendarEventRow) => {
@@ -534,6 +542,22 @@ export function CalendarPageClient({ userId, canManage }: Props) {
           </div>
         )}
       </div>
+
+      <EventTypeChooserModal
+        open={createChooserOpen}
+        onClose={() => setCreateChooserOpen(false)}
+        showClientReminder={canManage}
+        onSelectEmployee={() => {
+          setModalEvent(null)
+          setModalOpen(true)
+        }}
+        onSelectClientReminder={() => setClientReminderOpen(true)}
+      />
+
+      <ClientReminderModal
+        open={clientReminderOpen}
+        onClose={() => setClientReminderOpen(false)}
+      />
 
       <EventModal
         open={modalOpen}

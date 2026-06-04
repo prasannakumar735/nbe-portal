@@ -1,13 +1,11 @@
 import type { RapidDoorQuoteFormValues, ServiceLineItem } from '@/components/quotes/types'
+import {
+  addCalendarDaysIso,
+  quoteTodayMelbourneIso,
+} from '@/lib/quotes/quoteCalendarDates'
 
 export const RAPID_DOOR_INTRO_DEFAULT =
   'This quotation is based on the NBE Standard Door comprising a galvanized frame, PVC curtain (900 g/m²), and a zinc-coated control box (RAL 7035). Optional extras (e.g. powder coating, light curtain, remote control, radar, traffic light, induction loop, contactless exit button) are available at additional cost. All other matters shall be subject to our standard Terms and Conditions (T&C). The electrical scope is limited to the connection between the control panel and the doors only. Power supply and isolator shall be provided by others.'
-
-function addDaysIso(isoDate: string, days: number): string {
-  const d = new Date(`${isoDate}T12:00:00`)
-  d.setDate(d.getDate() + days)
-  return d.toISOString().slice(0, 10)
-}
 
 /** Preset schedule rows aligned with the Industrial Rapid Door PDF template. */
 export function defaultRapidDoorLineItems(): ServiceLineItem[] {
@@ -97,8 +95,8 @@ export function defaultRapidDoorLineItems(): ServiceLineItem[] {
 }
 
 export function emptyRapidDoorFormValues(): RapidDoorQuoteFormValues {
-  const serviceDate = new Date().toISOString().split('T')[0]
-  const validUntil = addDaysIso(serviceDate, 30)
+  const serviceDate = quoteTodayMelbourneIso()
+  const validUntil = addCalendarDaysIso(serviceDate, 30)
   return {
     quoteNumber: '',
     serviceDate,

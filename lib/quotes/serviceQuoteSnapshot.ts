@@ -9,6 +9,12 @@ import {
   subCategoryAllowed,
   type QuoteTypeSlug,
 } from '@/lib/quotes/quoteTaxonomy'
+import { quoteTodayMelbourneIso } from '@/lib/quotes/quoteCalendarDates'
+import {
+  lineItemRowTotal,
+  parseLineTotalOverride,
+  sanitizeServiceLineItemForSnapshot,
+} from '@/lib/quotes/lineItemTotal'
 
 const DEFAULT_COMPANY_EMAIL = 'accountsreceivable@nbeaustralia.com.au'
 
@@ -83,7 +89,7 @@ function mapDbItemToLine(row: QuoteItemRow): ServiceLineItem {
 function serviceBaseFromQuote(quote: QuoteRow, items: QuoteItemRow[]): ServiceQuoteFormValues {
   const lines = items.length ? items.map(mapDbItemToLine) : [defaultLineItem()]
   const tax = taxonomyForQuoteRow(quote)
-  const today = new Date().toISOString().split('T')[0]
+  const today = quoteTodayMelbourneIso()
 
   return {
     quoteNumber: quote.quote_number,
@@ -190,20 +196,21 @@ export function quoteRowsToFormValues(
 }
 
 function normalizeLine(line: Partial<ServiceLineItem>): ServiceLineItem {
-  const title = line.itemTitle?.trim()
-  const overrideRaw = Number(line.totalOverride)
-  return {
-    itemTitle: title ? String(line.itemTitle) : undefined,
-    sno: line.sno?.trim() ? String(line.sno) : undefined,
+  return sanitizeServiceLineItemForSnapshot({
+    itemTitle: line.itemTitle,
+    sno: line.sno,
     description: String(line.description ?? ''),
     width: String(line.width ?? ''),
     height: String(line.height ?? ''),
     qty: Number.isFinite(Number(line.qty)) ? Number(line.qty) : 1,
     unitPrice: Number.isFinite(Number(line.unitPrice)) ? Number(line.unitPrice) : 0,
-    totalOverride: Number.isFinite(overrideRaw) && line.totalOverride !== undefined ? overrideRaw : undefined,
-    itemNotes: line.itemNotes?.trim() ? String(line.itemNotes) : undefined,
-  }
+    totalOverride: parseLineTotalOverride(line.totalOverride),
+    itemNotes: line.itemNotes,
+  })
 }
+
+/** @internal Exported for unit tests. */
+export { normalizeLine as normalizeServiceLineItemForTest }
 
 export function computeServiceQuoteTotals(values: ServiceQuoteFormValues): {
   subtotal: number
@@ -211,16 +218,7 @@ export function computeServiceQuoteTotals(values: ServiceQuoteFormValues): {
   gst: number
   grandTotal: number
 } {
-  const subtotal = values.items.reduce((sum, row) => {
-    const q = Number(row?.qty ?? 0)
-    const u = Number(row?.unitPrice ?? 0)
-    const qty = Number.isFinite(q) ? q : 0
-    const unit = Number.isFinite(u) ? u : 0
-    const computed = qty * unit
-    const override = Number(row?.totalOverride)
-    const rowTotal = !isNaN(override) && row?.totalOverride !== undefined ? override : computed
-    return sum + rowTotal
-  }, 0)
+  const subtotal = values.items.reduce((sum, row) => sum + lineItemRowTotal(row), 0)
   const pctRaw = Number(values.discountPercent ?? 0)
   const pct = Number.isFinite(pctRaw) && pctRaw > 0 ? Math.min(pctRaw, 100) : 0
   const discount = subtotal * (pct / 100)

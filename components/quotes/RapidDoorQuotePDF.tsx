@@ -1,6 +1,8 @@
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import { registerRobotoForReactPdf } from '@/lib/pdf/reactPdfRoboto'
 import type { RapidDoorQuoteFormValues } from './types'
+import { formatQuoteDisplayDate } from '@/lib/quotes/quoteCalendarDates'
+import { lineItemRowTotal } from '@/lib/quotes/lineItemTotal'
 import { RAPID_DOOR_TERMS_SECTIONS } from '@/lib/quotes/rapidDoorTermsPdf'
 
 type RapidDoorQuotePDFProps = {
@@ -178,6 +180,9 @@ const styles = StyleSheet.create({
     fontSize: 8,
     lineHeight: 1.35,
   },
+  tdCellAmount: {
+    textAlign: 'right',
+  },
   tdLast: {
     borderRightWidth: 0,
   },
@@ -329,14 +334,6 @@ const currency = new Intl.NumberFormat('en-AU', {
   minimumFractionDigits: 2,
 })
 
-function fmtDate(s: string) {
-  const t = String(s ?? '').slice(0, 10)
-  if (!t) return '—'
-  const [y, m, d] = t.split('-')
-  if (!y || !m || !d) return t
-  return `${d}/${m}/${y}`
-}
-
 function PdfLogo() {
   return <Image style={styles.logo} src={PDF_LOGO_SRC} />
 }
@@ -381,9 +378,9 @@ export function RapidDoorQuotePDF({ data }: RapidDoorQuotePDFProps) {
       <Text style={styles.quoteMega}>QUOTE</Text>
       <Text style={styles.quoteSubtitle}>{values.quoteSubtitle}</Text>
       <Text style={styles.headerDates}>
-        DATE: {fmtDate(values.serviceDate)}
+        DATE: {formatQuoteDisplayDate(values.serviceDate)}
         {'\n'}
-        VALID UNTIL: {fmtDate(values.validUntil)}
+        VALID UNTIL: {formatQuoteDisplayDate(values.validUntil)}
         {'\n'}
         Quote No: {values.quoteNumber}
       </Text>
@@ -493,7 +490,7 @@ export function RapidDoorQuotePDF({ data }: RapidDoorQuotePDFProps) {
           </View>
 
           {values.items.map((item, index) => {
-            const rowTotal = Number(item.qty || 0) * Number(item.unitPrice || 0)
+            const rowTotal = lineItemRowTotal(item)
             const alt = index % 2 === 1
             return (
               <View
@@ -516,14 +513,16 @@ export function RapidDoorQuotePDF({ data }: RapidDoorQuotePDFProps) {
                 <View style={[styles.tdCell, styles.cHt]}>
                   <Text>{item.height?.trim() || ''}</Text>
                 </View>
-                <View style={[styles.tdCell, styles.cQty]}>
-                  <Text>{String(item.qty ?? '')}</Text>
+                <View style={[styles.tdCell, styles.tdCellAmount, styles.cQty]}>
+                  <Text style={styles.tdCellAmount}>{String(item.qty ?? '')}</Text>
                 </View>
-                <View style={[styles.tdCell, styles.cUnit]}>
-                  <Text>{currency.format(Number(item.unitPrice || 0))}</Text>
+                <View style={[styles.tdCell, styles.tdCellAmount, styles.cUnit]}>
+                  <Text style={styles.tdCellAmount}>
+                    {currency.format(Number(item.unitPrice || 0))}
+                  </Text>
                 </View>
-                <View style={[styles.tdCell, styles.cTot, styles.tdLast]}>
-                  <Text>{currency.format(rowTotal)}</Text>
+                <View style={[styles.tdCell, styles.tdCellAmount, styles.cTot, styles.tdLast]}>
+                  <Text style={styles.tdCellAmount}>{currency.format(rowTotal)}</Text>
                 </View>
               </View>
             )
@@ -559,7 +558,9 @@ export function RapidDoorQuotePDF({ data }: RapidDoorQuotePDFProps) {
               <Text style={{ fontSize: 9 }}>{values.printedName || ' '}</Text>
             </View>
             <View style={styles.sigUnderCol}>
-              <Text style={{ fontSize: 9 }}>{values.signatureDate ? fmtDate(values.signatureDate) : ' '}</Text>
+              <Text style={{ fontSize: 9 }}>
+                {values.signatureDate ? formatQuoteDisplayDate(values.signatureDate) : ' '}
+              </Text>
             </View>
           </View>
         </View>
