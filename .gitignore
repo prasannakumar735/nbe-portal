@@ -40,6 +40,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-NBE_Account_Book_WIP_Main.csv
-
-docs/SESSION_SUMMARY_*docs/pre-prod-evidence.local.md 
+# docs, database scripts, spreadsheets (local only)
+*.md
+*.sql
+*.csv
+*.xlsx
