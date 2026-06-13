@@ -45,3 +45,25 @@ next-env.d.ts
 *.sql
 *.csv
 *.xlsx
+
+# Cursor IDE (internal rules — not for public repo)
+.cursor/
+*.mdc
+
+# Local-only artifacts
+*.local
+*.local.*
+**/*evidence*
+
+# OS / IDE
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Keys and Supabase CLI temp state
+*.key
+*.p12
+*.pfx
+supabase/.branches
+supabase/.temp
