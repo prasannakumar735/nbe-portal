@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test lib/calendar/overlap.test.ts lib/serviceReminders/dueDate.test.ts lib/quotes/quoteCalendarDates.test.ts lib/quotes/lineItemTotal.test.ts",
+    "test": "tsx --test lib/calendar/overlap.test.ts lib/serviceReminders/dueDate.test.ts lib/quotes/quoteCalendarDates.test.ts lib/quotes/lineItemTotal.test.ts lib/officeClock/forgottenSyntheticClose.test.ts lib/officeClock/breakPolicy.test.ts lib/timecard/formatDuration.test.ts lib/timecard/weeklyReminderSchedule.test.ts",
     "preprod:local": "npm run build && npm run lint && npm run test",
     "security:pen-test": "node scripts/security-pen-test.mjs",
     "security:test": "tsx scripts/security-tests.ts",

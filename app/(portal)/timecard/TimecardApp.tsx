@@ -24,6 +24,7 @@ import {
 } from '@/components/timecard'
 import type { BillableFilterValue } from '@/components/timecard'
 import { mergeLastUsedIntoEntry, writeLastUsedEntryPrefs } from '@/lib/timecard/lastUsedDefaults'
+import { computeTimesheetBannerState } from '@/lib/timecard/submissionBannerState'
 
 type ClientOpt = { id: string; name: string }
 type LocOpt = { id: string; name: string }
@@ -309,6 +310,26 @@ export default function TimecardApp() {
     [timesheetOwnerId, weekStartIso, tc],
   )
 
+  const submissionBanner = useMemo(() => {
+    if (tc.isManagerView) return null
+    return computeTimesheetBannerState({
+      viewedWeekStart: weekStartIso,
+      status: tc.timesheet?.status,
+      totalHours: Number(tc.timesheet?.total_hours ?? 0) || 0,
+      submittedVia: tc.timesheet?.submitted_via,
+      autoSubmittedAt: tc.timesheet?.auto_submitted_at,
+    })
+  }, [tc.isManagerView, tc.timesheet, weekStartIso])
+
+  const bannerClass =
+    submissionBanner?.kind === 'overdue'
+      ? 'border-red-200 bg-red-50 text-red-900'
+      : submissionBanner?.kind === 'due_friday'
+        ? 'border-amber-200 bg-amber-50 text-amber-950'
+        : submissionBanner?.kind === 'auto_submitted'
+          ? 'border-sky-200 bg-sky-50 text-sky-950'
+          : ''
+
   if (authLoading) {
     return <TimecardSkeleton />
   }
@@ -410,7 +431,15 @@ export default function TimecardApp() {
         ) : null}
 
         <div className="flex flex-col gap-4 xl:flex-row xl:items-stretch xl:justify-between xl:gap-6">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 space-y-3">
+            {submissionBanner?.kind ? (
+              <div
+                className={`rounded-lg border px-3 py-2 text-sm ${bannerClass}`}
+                role="status"
+              >
+                {submissionBanner.message}
+              </div>
+            ) : null}
             <TimecardHeader
               subtitle={weekSubtitle}
               timesheetStatus={timesheetStatus}
@@ -419,7 +448,7 @@ export default function TimecardApp() {
               onNextWeek={nextWeek}
               onExportCsv={exportCsv}
               onSubmitWeek={handleSubmitWeek}
-              submitDisabled={tc.entries.length === 0}
+              submitDisabled={tc.isReadOnly}
               readOnly={tc.isReadOnly}
             />
           </div>

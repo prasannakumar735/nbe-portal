@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { notifyTimesheetSubmittedEmail } from '@/lib/notifications/portalGraphNotifications'
 import type { PortalNotifyResult } from '@/lib/notifications/portalGraphNotifications'
+import { submitWeeklyTimesheet } from '@/lib/timecard/submitWeeklyTimesheet'
 import { weekEndFromStart } from '@/lib/timecard/weekDates'
 
 export const runtime = 'nodejs'
@@ -23,43 +24,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { data: sheet, error: findErr } = await supabase
-      .from('employee_weekly_timesheets')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('week_start_date', weekStart)
-      .maybeSingle()
+    const admin = createServiceRoleClient()
+    const result = await submitWeeklyTimesheet(admin, {
+      userId: user.id,
+      weekStart,
+      mode: 'employee',
+    })
 
-    if (findErr) {
-      throw findErr
-    }
-    if (!sheet) {
-      return NextResponse.json({ error: 'No timesheet for this week' }, { status: 404 })
-    }
-    if (sheet.status !== 'draft' && sheet.status !== 'rejected') {
-      return NextResponse.json({ error: 'Timesheet is not editable' }, { status: 409 })
+    if (!result.ok) {
+      return NextResponse.json({ error: result.message }, { status: result.status })
     }
 
-    const { data: updated, error: upErr } = await supabase
-      .from('employee_weekly_timesheets')
-      .update({
-        status: 'submitted',
-        submitted_at: new Date().toISOString(),
-        rejected_at: null,
-        rejected_by: null,
-      })
-      .eq('id', sheet.id)
-      .select()
-      .single()
+    const updated = result.sheet
 
-    if (upErr) {
-      throw upErr
-    }
-
-    /** Notify managers + service inbox (Microsoft Graph). Failure does not roll back submit. */
     let notification: PortalNotifyResult | undefined
     try {
-      const admin = createServiceRoleClient()
       const { data: profile } = await admin
         .from('profiles')
         .select('full_name, first_name, last_name')

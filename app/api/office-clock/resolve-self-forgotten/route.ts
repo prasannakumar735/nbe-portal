@@ -1,21 +1,17 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
+import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { jsonError500 } from '@/lib/security/safeApiError'
 import { isOfficeSiteRowConfigured, resolveOfficeSiteRowFully } from '@/lib/officeClock/envSiteFallback'
-import {
-  isForgottenOfficeSessionSyntheticEligible,
-  runForgottenSyntheticCloseForSession,
-} from '@/lib/officeClock/forgottenSyntheticClose'
+import { processForgottenOfficeSessionClose } from '@/lib/officeClock/forgottenSyntheticClose'
 import type { ProfileFromTable } from '@/lib/auth/roles'
 
 export const runtime = 'nodejs'
 
 /**
  * Allows the signed-in portal user (non-client) to close their **own** open office attendance
- * session using the forgotten synthetic schedule when eligibility matches (prior Melbourne calendar
- * day, or today after 17:00 Melbourne).
- *
- * Complements cron + covers localhost/dev where CRON_SECRET jobs never run.
+ * session using the forgotten synthetic schedule when eligibility matches.
+ * Uses service role for close steps (same as cron).
  */
 export async function POST() {
   try {
@@ -57,33 +53,26 @@ export async function POST() {
     }
 
     const clockInAt = new Date(String(sess.clock_in_at))
-    const now = new Date()
-    if (!isForgottenOfficeSessionSyntheticEligible(clockInAt, now)) {
-      return NextResponse.json({ ok: true, resolved: false })
+    if (Number.isNaN(clockInAt.getTime())) {
+      return NextResponse.json({ error: 'Invalid sign-in time.' }, { status: 500 })
     }
 
+    let siteRow: Record<string, unknown> | null = null
     const { data: site, error: siteErr } = await supabase
       .from('office_clock_sites')
       .select('*')
       .eq('id', String(sess.site_id))
       .maybeSingle()
 
-    if (siteErr || !site) {
-      return NextResponse.json({ error: 'Office site not found.' }, { status: 500 })
+    if (!siteErr && site) {
+      const resolved = await resolveOfficeSiteRowFully(supabase, site as Record<string, unknown>)
+      if (isOfficeSiteRowConfigured(resolved)) {
+        siteRow = resolved
+      }
     }
 
-    const siteRow = await resolveOfficeSiteRowFully(supabase, site as Record<string, unknown>)
-    if (!isOfficeSiteRowConfigured(siteRow)) {
-      return NextResponse.json(
-        {
-          error:
-            'Office site is not configured for timesheets. Set office_clock_sites or OFFICE_CLOCK_* env vars.',
-        },
-        { status: 503 },
-      )
-    }
-
-    const result = await runForgottenSyntheticCloseForSession(supabase, {
+    const admin = createServiceRoleClient()
+    const result = await processForgottenOfficeSessionClose(admin, {
       sessionId: String(sess.id),
       userId: user.id,
       profile,
@@ -92,15 +81,20 @@ export async function POST() {
     })
 
     if (!result.ok) {
-      return NextResponse.json({ error: result.message }, { status: result.status })
+      return NextResponse.json({ error: result.message }, { status: 400 })
     }
+
+    const modeNote =
+      result.mode === 'attendance_only'
+        ? ' Attendance was closed at 16:00 Melbourne; add timesheet hours manually if needed.'
+        : ''
 
     return NextResponse.json({
       ok: true,
       resolved: true,
       closedDate: result.closedDate,
       message:
-        `Your unattended office session for ${result.closedDate} was closed automatically (7:00–16:00 Melbourne, break 30 min). Check your timecard.`,
+        `Your unattended office session for ${result.closedDate} was closed automatically (7:00–16:00 Melbourne, break 30 min). Check your timecard.${modeNote}`,
     })
   } catch (e) {
     return jsonError500(e, 'office-clock-resolve-self-forgotten')

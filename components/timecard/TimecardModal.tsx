@@ -6,6 +6,7 @@ import { ClipboardPaste, Copy, X } from 'lucide-react'
 import type { EmployeeTimesheetEntry } from '@/lib/types/employee-timesheet.types'
 import { defaultBillableFromLevel1Code } from '@/lib/timecard/billableDefaults'
 import { computeEntryTotalHours } from '@/lib/timecard/computeHours'
+import { officeClockBreakForTimeRange } from '@/lib/officeClock/breakPolicy'
 import { getCurrentLocation } from '@/lib/timecard/getCurrentLocation'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 
@@ -13,6 +14,12 @@ type ClientOpt = { id: string; name: string }
 type LocOpt = { id: string; name: string }
 type L1 = { id: string; code: string; name: string }
 type L2 = { id: string; name: string; billable: boolean }
+
+function draftWithTierBreak<T extends { start_time: string; end_time: string; break_minutes: number }>(
+  d: T,
+): T {
+  return { ...d, break_minutes: officeClockBreakForTimeRange(d.start_time, d.end_time) }
+}
 
 type CreateClientPayload = {
   clientName: string
@@ -689,7 +696,9 @@ export function TimecardModal({
                       disabled={readOnly}
                       className={fieldClass}
                       value={draft.start_time.length > 5 ? draft.start_time.slice(0, 5) : draft.start_time}
-                      onChange={e => setDraft(d => (d ? { ...d, start_time: e.target.value } : d))}
+                      onChange={e =>
+                        setDraft(d => (d ? draftWithTierBreak({ ...d, start_time: e.target.value }) : d))
+                      }
                     />
                   </label>
                   <label className={labelClass}>
@@ -699,7 +708,9 @@ export function TimecardModal({
                       disabled={readOnly}
                       className={fieldClass}
                       value={draft.end_time.length > 5 ? draft.end_time.slice(0, 5) : draft.end_time}
-                      onChange={e => setDraft(d => (d ? { ...d, end_time: e.target.value } : d))}
+                      onChange={e =>
+                        setDraft(d => (d ? draftWithTierBreak({ ...d, end_time: e.target.value }) : d))
+                      }
                     />
                   </label>
                 </div>

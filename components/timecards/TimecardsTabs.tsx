@@ -6,11 +6,13 @@ import { useBrowserPathname } from '@/lib/app/useBrowserPathname'
 import { useBrowserSearchParams } from '@/lib/app/useBrowserSearchParams'
 import { MyTimecardTab } from '@/components/timecards/MyTimecardTab'
 import { TeamApprovalsTab } from '@/components/timecards/TeamApprovalsTab'
+import { AttendanceTab } from '@/components/timecards/AttendanceTab'
 
-export type TimecardTabId = 'my' | 'team'
+export type TimecardTabId = 'my' | 'team' | 'attendance'
 
 function tabFromSearchParam(raw: string | null, canViewTeam: boolean): TimecardTabId {
   if (raw === 'team' && canViewTeam) return 'team'
+  if (raw === 'attendance' && canViewTeam) return 'attendance'
   return 'my'
 }
 
@@ -31,7 +33,7 @@ export function TimecardsTabs({ initialTab, canViewTeam }: TimecardsTabsProps) {
 
   const selectTab = useCallback(
     (next: TimecardTabId) => {
-      if (next === 'team' && !canViewTeam) return
+      if ((next === 'team' || next === 'attendance') && !canViewTeam) return
       setTab(next)
       const params = new URLSearchParams(searchParams.toString())
       params.set('tab', next)
@@ -60,7 +62,7 @@ export function TimecardsTabs({ initialTab, canViewTeam }: TimecardsTabsProps) {
         <h1 className="text-lg font-semibold tracking-tight text-slate-900">Timecards</h1>
         <p className="mt-0.5 text-xs text-slate-500">Your timesheet and team approval queue.</p>
         <div
-          className="mt-3 inline-flex w-full max-w-md gap-0.5 rounded-lg bg-slate-100 p-0.5 sm:w-auto"
+          className="mt-3 inline-flex w-full max-w-xl gap-0.5 rounded-lg bg-slate-100 p-0.5 sm:w-auto"
           role="tablist"
           aria-label="Timecards sections"
         >
@@ -90,6 +92,19 @@ export function TimecardsTabs({ initialTab, canViewTeam }: TimecardsTabsProps) {
           >
             Team Approvals
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'attendance'}
+            id="timecards-tab-attendance"
+            aria-controls="timecards-panel-attendance"
+            onClick={() => selectTab('attendance')}
+            className={`min-w-0 flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors sm:flex-none ${
+              tab === 'attendance' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Attendance
+          </button>
         </div>
       </header>
 
@@ -109,6 +124,14 @@ export function TimecardsTabs({ initialTab, canViewTeam }: TimecardsTabsProps) {
           hidden={tab !== 'team'}
         >
           <TeamApprovalsTab />
+        </section>
+        <section
+          id="timecards-panel-attendance"
+          role="tabpanel"
+          aria-labelledby="timecards-tab-attendance"
+          hidden={tab !== 'attendance'}
+        >
+          <AttendanceTab />
         </section>
       </div>
     </div>

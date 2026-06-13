@@ -12,6 +12,7 @@ import {
   completeOfficeClockTimesheet,
   officeClockBreakMinutes,
 } from '@/lib/officeClock/completeOfficeClockTimesheet'
+import { officeClockBreakForTimeRange } from '@/lib/officeClock/breakPolicy'
 import type { ProfileFromTable } from '@/lib/auth/roles'
 
 export const runtime = 'nodejs'
@@ -101,8 +102,6 @@ export async function POST(request: Request) {
     const entryDate = dateIn
     const startTime = melbourneHHMM(clockInAt)
     const endTime = melbourneHHMM(clockOutAt)
-    const rawBreak = Number(siteRow.default_break_minutes ?? 30) || 0
-
     const startM = timeStringToMinutes(startTime)
     const endM = timeStringToMinutes(endTime)
     if (!Number.isFinite(startM) || !Number.isFinite(endM) || endM <= startM) {
@@ -112,7 +111,8 @@ export async function POST(request: Request) {
       )
     }
 
-    const breakMinutes = officeClockBreakMinutes(rawBreak, startTime, endTime)
+    const tierBreak = officeClockBreakForTimeRange(startTime, endTime)
+    const breakMinutes = officeClockBreakMinutes(tierBreak, startTime, endTime)
 
     const workTypeLevel2IdFromBody =
       typeof raw.workTypeLevel2Id === 'string' || raw.workTypeLevel2Id === null
@@ -132,6 +132,7 @@ export async function POST(request: Request) {
       endTimeMelbourne: endTime,
       breakMinutes,
       workTypeLevel2IdFromBody,
+      closeKind: 'user',
     })
 
     if (!done.ok) {

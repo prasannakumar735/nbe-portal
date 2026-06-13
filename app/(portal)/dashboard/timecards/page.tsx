@@ -10,6 +10,8 @@ export const metadata = {
 function tabFromSearch(raw: string | undefined, canViewTeam: boolean): TimecardTabId {
     if (raw === 'team' && canViewTeam)
         return 'team';
+    if (raw === 'attendance' && canViewTeam)
+        return 'attendance';
     return 'my';
 }
 function TimecardsFallback() {
@@ -34,7 +36,7 @@ export default async function DashboardTimecardsPage({ searchParams, }: {
     const raw = await searchParams;
     const tab = pickSearchParam(raw.tab);
     const initialTab = tabFromSearch(tab, canViewTeam);
-    if (tab === 'team' && !canViewTeam) {
+    if ((tab === 'team' || tab === 'attendance') && !canViewTeam) {
         redirect('/dashboard/timecards?tab=my');
     }
     return (<div>

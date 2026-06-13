@@ -63,6 +63,10 @@ export type EmployeeWeeklyTimesheet = {
   approved_by: string | null
   rejected_at?: string | null
   rejected_by?: string | null
+  reminder_1_sent_at?: string | null
+  reminder_2_sent_at?: string | null
+  auto_submitted_at?: string | null
+  submitted_via?: 'employee' | 'system' | null
   updated_at: string
 }
 

@@ -25,6 +25,8 @@ export type CompleteOfficeClockParams = {
   endTimeMelbourne: string
   breakMinutes: number
   workTypeLevel2IdFromBody?: string | null
+  /** Stored on office_attendance_sessions.close_kind (default user). */
+  closeKind?: 'user' | 'system'
 }
 
 function normalizeTimeForDb(t: string): string {
@@ -172,11 +174,13 @@ export async function completeOfficeClockTimesheet(
 
   await recalcWeeklyTimesheetTotals(p.supabase, sheetId)
 
+  const closeKind = p.closeKind ?? 'user'
   const { data: updatedRows, error: upSessErr } = await p.supabase
     .from('office_attendance_sessions')
     .update({
       clock_out_at: p.clockOutInstant.toISOString(),
       timesheet_entry_id: entryId,
+      close_kind: closeKind,
     })
     .eq('id', p.sessionId)
     .eq('user_id', p.userId)
