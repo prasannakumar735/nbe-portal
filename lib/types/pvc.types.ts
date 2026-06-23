@@ -21,6 +21,12 @@ export interface PVCCalculatorInput {
   overlapMm: PVCOverlapMm
   headrailType: PVCHeadrailType
   installationType: PVCInstallationType
+  /** Site installation price (AUD); excluded from markup when supply + install */
+  manualInstallationPrice?: number
+  /** Freight (AUD); excluded from markup */
+  manualFreightPrice?: number
+  /** Supply + install only: when false, freight is not added */
+  freightRequired?: boolean
 }
 
 export interface PVCStripLayoutResult {
@@ -90,6 +96,9 @@ export interface PVCCalculationBreakdown {
   labourCost: number
   packagingCost: number
   subtotal: number
+  retailBeforeInstallation: number
+  installationCost: number
+  freightCost: number
   finalPrice: number
 
   // Backward-compatible fields used by current UI
@@ -100,6 +109,9 @@ export interface PVCCalculationBreakdown {
 export interface PVCCalculationTotals {
   subtotal: number
   marginPercent: number
+  retailBeforeInstallation: number
+  installationPrice: number
+  freightPrice: number
   finalPrice: number
 }
 

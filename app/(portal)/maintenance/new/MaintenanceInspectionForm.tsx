@@ -49,6 +49,11 @@ import {
   maintenanceFormSubmitSchema,
 } from '@/lib/validation/maintenance'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
+import { InlineCreateClientPanel } from '@/components/clients/InlineCreateClientPanel'
+import {
+  createMaintenanceClientWithOptionalLocation,
+  type CreateClientWithLocationResult,
+} from '@/lib/clients/createMaintenanceClient'
 import { downloadFile, type DownloadProgress } from '@/lib/browser/downloadFile'
 
 const STORAGE_KEY = 'nbe-maintenance-draft'
@@ -486,6 +491,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     ['submitted', 'reviewing', 'approved'].includes(effectiveReportStatus)
 
   const { isOnline, isOffline } = useOnlineStatus()
+  const canCreateClientInline = isOnline && !(isLocked && !isAdminMode)
   const [pendingSyncCount, setPendingSyncCount] = useState(0)
   const [isSyncingPending, setIsSyncingPending] = useState(false)
   /** Avoid putting `isSyncingPending` in `syncPendingReports` deps (would retrigger the isOnline effect every toggle). */
@@ -760,6 +766,43 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     }
   }, [])
 
+  const handleMaintenanceClientCreated = useCallback(
+    async (created: CreateClientWithLocationResult) => {
+      setClients(prev => {
+        const next = [...prev, created.client].sort((a, b) => a.name.localeCompare(b.name))
+        void offlineCacheClients(next)
+        return next
+      })
+
+      setValue('client_id', created.client.id, { shouldDirty: true, shouldValidate: true })
+      setValue('client_sub_project_id', '', { shouldDirty: true, shouldValidate: true })
+
+      if (created.location) {
+        const loc: ClientLocationOption = {
+          id: created.location.id,
+          client_id: created.location.client_id,
+          name: created.location.name,
+          address: created.location.address,
+          suburb: created.location.suburb,
+        }
+        setLocations([loc])
+        locationsForClientIdRef.current = created.client.id
+        void offlineCacheLocations(created.client.id, [loc])
+        setValue('client_location_id', loc.id, { shouldDirty: true, shouldValidate: true })
+        setValue('address', loc.address, { shouldDirty: true, shouldValidate: true })
+        void offlineSetLastSelection({ client_id: created.client.id, client_location_id: loc.id })
+      } else {
+        setValue('client_location_id', '', { shouldDirty: true, shouldValidate: true })
+        setValue('address', '', { shouldDirty: true, shouldValidate: true })
+        void offlineSetLastSelection({ client_id: created.client.id, client_location_id: '' })
+        await loadLocationsForClient(created.client.id)
+      }
+
+      toast.success('Client created')
+    },
+    [loadLocationsForClient, setValue],
+  )
+
   const loadLocationsForClientRef = useRef(loadLocationsForClient)
   loadLocationsForClientRef.current = loadLocationsForClient
 
@@ -1030,33 +1073,40 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       setClients(list)
       void offlineCacheClients(list)
 
+      /** Warm offline cache for last-used site only — not every client (avoids hundreds of API calls / 429). */
       void (async () => {
-        for (const c of list) {
-          if (!navigator.onLine) break
-          try {
-            const res = await fetch(`/api/maintenance/locations?clientId=${encodeURIComponent(c.id)}`)
-            const payload = (await res.json().catch(() => ({}))) as { locations?: ClientLocationOption[] }
-            if (res.ok && Array.isArray(payload.locations)) {
-              await offlineCacheLocations(c.id, payload.locations)
+        try {
+          const last = await offlineGetLastSelection()
+          const clientId = String(last?.client_id ?? '').trim()
+          const locationId = String(last?.client_location_id ?? '').trim()
+          if (!clientId || !navigator.onLine) return
 
-              for (const loc of payload.locations) {
-                if (!navigator.onLine) break
-                try {
-                  const doorsRes = await fetch(`/api/maintenance/doors?locationId=${encodeURIComponent(loc.id)}`)
-                  const doorsPayload = (await doorsRes.json().catch(() => ({}))) as {
-                    doors?: Array<{ id: string; door_label: string; door_type: string }>
-                  }
-                  if (doorsRes.ok && Array.isArray(doorsPayload.doors)) {
-                    await offlineCacheDoors(loc.id, doorsPayload.doors)
-                  }
-                } catch {
-                  // ignore
-                }
+          const res = await fetch(`/api/maintenance/locations?clientId=${encodeURIComponent(clientId)}`)
+          const payload = (await res.json().catch(() => ({}))) as { locations?: ClientLocationOption[] }
+          if (!res.ok || !Array.isArray(payload.locations)) return
+
+          await offlineCacheLocations(clientId, payload.locations)
+
+          const locIds = locationId
+            ? payload.locations.filter(l => l.id === locationId).map(l => l.id)
+            : payload.locations.slice(0, 1).map(l => l.id)
+
+          for (const locId of locIds) {
+            if (!navigator.onLine) break
+            try {
+              const doorsRes = await fetch(`/api/maintenance/doors?locationId=${encodeURIComponent(locId)}`)
+              const doorsPayload = (await doorsRes.json().catch(() => ({}))) as {
+                doors?: Array<{ id: string; door_label: string; door_type: string }>
               }
+              if (doorsRes.ok && Array.isArray(doorsPayload.doors)) {
+                await offlineCacheDoors(locId, doorsPayload.doors)
+              }
+            } catch {
+              // ignore
             }
-          } catch {
-            // ignore
           }
+        } catch {
+          // ignore
         }
       })()
     } catch {
@@ -2060,6 +2110,13 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
               />
               {errors.client_id ? (
                 <span className="mt-1 block text-xs text-red-600">{errors.client_id.message}</span>
+              ) : null}
+              {canCreateClientInline ? (
+                <InlineCreateClientPanel
+                  requireLocation
+                  onCreate={createMaintenanceClientWithOptionalLocation}
+                  onCreated={handleMaintenanceClientCreated}
+                />
               ) : null}
             </div>
 

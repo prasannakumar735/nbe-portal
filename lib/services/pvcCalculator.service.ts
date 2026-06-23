@@ -69,36 +69,53 @@ export async function getCalculatorSettings(supabase: SupabaseClient): Promise<P
     ((data || []) as SettingRow[]).map(setting => [setting.setting_key, Number(setting.setting_value)]),
   ) as Record<string, number>
 
-  const pickPositive = (key: string, fallbackKey?: string): number => {
+  const stringSettings = Object.fromEntries(
+    ((data || []) as SettingRow[]).map(setting => [setting.setting_key, String(setting.setting_value ?? '')]),
+  ) as Record<string, string>
+
+  const pickPositive = (key: string, fallbackKey?: string, fallbackValue?: number): number => {
     const primary = settingsMap[key]
     const fallback = fallbackKey ? settingsMap[fallbackKey] : NaN
     const value = Number.isFinite(primary) ? primary : fallback
 
-    if (!Number.isFinite(value) || value <= 0) {
-      throw new Error(`Missing or invalid calculator setting in Supabase: ${key}`)
+    if (Number.isFinite(value) && value > 0) {
+      return value
     }
 
-    return value
+    if (fallbackValue !== undefined) {
+      return fallbackValue
+    }
+
+    throw new Error(`Missing or invalid calculator setting in Supabase: ${key}`)
   }
 
-  const labourMinutesPerStrip = pickPositive('labour_minutes_per_strip', 'minutes_per_strip')
-  const minutesPerHeadrail = pickPositive('minutes_per_headrail', 'headrail_minutes')
-  const labourRatePerHour = pickPositive('labour_rate_per_hour', 'labour_hourly_rate')
-  const markupMultiplier = pickPositive('markup_multiplier')
-  const installSetupMinutes = Number.isFinite(settingsMap.install_setup_minutes)
-    ? settingsMap.install_setup_minutes
-    : 6
-
-  if (!Number.isFinite(installSetupMinutes) || installSetupMinutes < 0) {
-    throw new Error('Missing or invalid calculator setting in Supabase: install_setup_minutes')
+  const pickNonNegative = (key: string, fallbackValue: number): number => {
+    const value = settingsMap[key]
+    return Number.isFinite(value) && value >= 0 ? value : fallbackValue
   }
+
+  const materialBillingMode =
+    stringSettings.material_billing_mode === 'full_materials'
+      ? 'full_materials'
+      : settingsMap.part_materials_billing === 0
+        ? 'full_materials'
+        : 'part_materials'
+
+  const markupPercent = pickNonNegative('markup_percent', 130)
 
   return {
-    labour_minutes_per_strip: labourMinutesPerStrip,
-    minutes_per_headrail: minutesPerHeadrail,
-    install_setup_minutes: installSetupMinutes,
-    labour_rate_per_hour: labourRatePerHour,
-    markup_multiplier: markupMultiplier,
+    door_cover_mm: pickNonNegative('door_cover_mm', 50),
+    headrail_allowance_mm: pickNonNegative('headrail_allowance_mm', 0),
+    height_adjust_mm: pickNonNegative('height_adjust_mm', 0),
+    strip_loading_waste_percent: pickNonNegative('strip_loading_waste_percent', 5),
+    roll_length_m: pickPositive('roll_length_m', undefined, 50),
+    material_billing_mode: materialBillingMode,
+    labour_minutes_per_strip: pickPositive('labour_minutes_per_strip', 'minutes_per_strip', 2),
+    minutes_per_headrail: pickPositive('minutes_per_headrail', 'headrail_minutes', 12.5),
+    ribbed_minutes_per_strip: pickNonNegative('ribbed_minutes_per_strip', 1),
+    install_setup_minutes: pickNonNegative('install_setup_minutes', 0),
+    labour_rate_per_hour: pickPositive('labour_rate_per_hour', 'labour_hourly_rate', 30),
+    markup_percent: markupPercent,
   }
 }
 
@@ -116,7 +133,6 @@ function getStripTraits(stripType: PVCStripType): { material: string; surface: s
       return { material: 'polar', surface: 'smooth' }
     case 'ribbed_polar':
       return { material: 'polar', surface: 'ribbed' }
-    case 'standard':
     default:
       return { material: 'standard', surface: 'smooth' }
   }
@@ -288,6 +304,10 @@ export async function fetchProductPrices(
   const hangerProductByCode = hangerSku ? selectByProductCode(products, [hangerSku]) : null
 
   const bracketRow =
+    bracketRows.find(row => {
+      const hangerWidth = toNumber(getValueFromRow(row, ['hanger_width_mm', 'hanger_width', 'width_mm', 'strip_width_mm']), NaN)
+      return Number.isFinite(hangerWidth) && hangerWidth === input.hangerWidthMm
+    }) ||
     bracketRows.find(row => rowMatches(row, ['headrail_type', 'type', 'material'], input.headrailType)) ||
     bracketRows[0] ||
     null
@@ -297,8 +317,16 @@ export async function fetchProductPrices(
 
   const fittingRow =
     fittingRows.find(row => {
-      const width = toNumber(getValueFromRow(row, ['strip_width_mm', 'strip_width', 'width_mm', 'width']), NaN)
-      return Number.isFinite(width) && width === input.stripWidth
+      const hangerWidth = toNumber(getValueFromRow(row, ['hanger_width_mm', 'hanger_width', 'width_mm']), NaN)
+      if (Number.isFinite(hangerWidth) && hangerWidth === input.hangerWidthMm) {
+        return true
+      }
+      const stripWidth = toNumber(getValueFromRow(row, ['strip_width_mm', 'strip_width', 'width_mm', 'width']), NaN)
+      return Number.isFinite(stripWidth) && stripWidth === input.hangerWidthMm
+    }) ||
+    fittingRows.find(row => {
+      const stripWidth = toNumber(getValueFromRow(row, ['strip_width_mm', 'strip_width', 'width_mm', 'width']), NaN)
+      return Number.isFinite(stripWidth) && stripWidth === input.stripWidth
     }) ||
     fittingRows[0] ||
     null
@@ -319,9 +347,45 @@ export async function fetchProductPrices(
     getProductFromRow(labourRow, products) ||
     selectByCategory(products, ['labour', 'install'])
 
-  const stripUnitPrice = toNumber(stripProduct?.sell_price, NaN)
+  let rivetsPerStrip = toNumber(
+    getValueFromRow(fittingRow, [
+      'rivets_per_strip',
+      'rivet_qty_per_strip',
+      'fittings_per_strip',
+      'qty_per_strip',
+      'quantity_per_strip',
+    ]),
+    NaN,
+  )
+
+  if (!Number.isFinite(rivetsPerStrip)) {
+    const { data: rivetSettingRow } = await supabase
+      .from('pvc_calculator_settings')
+      .select('setting_value')
+      .eq('setting_key', `rivets_per_hanger_${input.hangerWidthMm}`)
+      .maybeSingle()
+    rivetsPerStrip = toNumber(rivetSettingRow?.setting_value, NaN)
+  }
+
+  if (!Number.isFinite(rivetsPerStrip)) {
+    const defaultRivetsByHangerWidth: Partial<Record<number, number>> = {
+      100: 2,
+      150: 3,
+      200: 4,
+      300: 5,
+      400: 5,
+      1200: 20,
+      1370: 25,
+    }
+    rivetsPerStrip = toNumber(defaultRivetsByHangerWidth[input.hangerWidthMm], NaN)
+  }
+
+  let stripUnitPrice = toNumber(stripProduct?.cost_price, NaN)
   if (!Number.isFinite(stripUnitPrice) || stripUnitPrice <= 0) {
-    throw new Error('Missing sell_price in Supabase for PVC Strip Material')
+    stripUnitPrice = toNumber(stripProduct?.sell_price, NaN)
+  }
+  if (!Number.isFinite(stripUnitPrice) || stripUnitPrice <= 0) {
+    throw new Error('Missing cost_price in Supabase for PVC Strip Material')
   }
   const headrailUnitPrice = resolveUnitPrice(headrailProduct, headrailRow, 'Headrail', ['cost_price', 'unit_price', 'price', 'rate'], true)
   const bracketUnitPrice = toNumber(bracketProduct?.cost_price, NaN)
@@ -332,16 +396,6 @@ export async function fetchProductPrices(
     throw new Error(`Hanger price missing in Supabase for selected hanger width ${input.hangerWidthMm}mm`)
   }
   const rivetUnitPrice = resolveUnitPrice(fittingProduct, fittingRow, 'Rivets', ['cost_price', 'unit_price', 'price', 'rate'], true)
-  const rivetsPerStrip = toNumber(
-    getValueFromRow(fittingRow, [
-      'rivets_per_strip',
-      'rivet_qty_per_strip',
-      'fittings_per_strip',
-      'qty_per_strip',
-      'quantity_per_strip',
-    ]),
-    NaN,
-  )
   const packagingUnitPrice = resolveUnitPrice(packagingProduct, packagingRow, 'Packaging', ['cost_price', 'unit_price', 'price', 'rate'], true)
   return {
     stripProductId: stripProduct?.id ?? null,

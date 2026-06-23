@@ -96,6 +96,13 @@ function validateQuoteData(quoteData: QuoteData): void {
         ['final_door_price', door.final_door_price],
       ]
 
+      if (door.quantity !== undefined) {
+        const q = door.quantity
+        if (!Number.isFinite(q) || q < 1 || q > 99 || Math.trunc(q) !== q) {
+          throw new Error(`Invalid quote payload: doors[${index}].quantity must be an integer from 1 to 99.`)
+        }
+      }
+
       numbers.forEach(([key, value]) => {
         if (!Number.isFinite(value)) {
           throw new Error(`Invalid quote payload: doors[${index}].${key} must be a finite number.`)

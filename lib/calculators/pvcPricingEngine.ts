@@ -3,16 +3,16 @@ import type {
   PVCCalculatorInput,
   PVCHardwareResult,
   PVCLabourResult,
+  PVCHeadrailType,
   PVCQuoteLineItem,
   PVCStripLayoutResult,
+  PVCStripType,
 } from '@/lib/types/pvc.types'
 
-export const PVC_CALCULATOR_VERSION = '1.0.0'
+export const PVC_CALCULATOR_VERSION = '2.0.0'
 
 /**
  * Item labels used in `calculatePVCQuote` line items and the PVC quote PDF (Material & Cost table).
- * Use for service-quote checklists so they stay aligned with the PVC Strip Calculator output.
- * Labour is only added in the calculator when installation type is supply & install — keep or delete that row for supply-only quotes.
  */
 export const PVC_STRIP_QUOTE_LINE_MATERIAL_LABELS = [
   'PVC Strip Material',
@@ -20,26 +20,33 @@ export const PVC_STRIP_QUOTE_LINE_MATERIAL_LABELS = [
   'Hanger / Brackets',
   'Rivets / Fittings',
   'Packaging Tube',
-  'Labour',
+  'Manufacturing / Cutting Labour',
+  'Installation',
+  'Freight',
 ] as const
 
-const DOOR_COVER_MM = 50
-const HEADRAIL_ALLOWANCE_MM = 50
-const ROLL_LENGTH_M = 50
-
-const RIVETS_PER_STRIP: Record<number, number> = {
-  100: 2,
-  150: 3,
-  200: 4,
-  300: 5,
+function resolveFreightAmount(input: PVCCalculatorInput): number {
+  const amount = round2(Math.max(0, input.manualFreightPrice ?? 0))
+  if (amount <= 0) return 0
+  if (input.installationType === 'supply_only') return amount
+  return input.freightRequired ? amount : 0
 }
 
+export type PVCMaterialBillingMode = 'part_materials' | 'full_materials'
+
 export type PVCPricingSettings = {
+  door_cover_mm: number
+  headrail_allowance_mm: number
+  height_adjust_mm: number
+  strip_loading_waste_percent: number
+  roll_length_m: number
+  material_billing_mode: PVCMaterialBillingMode
   labour_minutes_per_strip: number
   minutes_per_headrail: number
+  ribbed_minutes_per_strip: number
   install_setup_minutes: number
   labour_rate_per_hour: number
-  markup_multiplier: number
+  markup_percent: number
 }
 
 export type PVCPricingPriceSelection = {
@@ -57,8 +64,37 @@ export type PVCPricingPriceSelection = {
   packagingUnitPrice: number
 }
 
+const STRIP_MINUTES_BY_HEADRAIL: Record<PVCHeadrailType, number> = {
+  stainless: 2,
+  galvanized: 2,
+  aluminium: 2.5,
+  plastic: 2.25,
+}
+
 function round2(value: number): number {
   return Math.round(value * 100) / 100
+}
+
+function getHeightAdjustMm(input: PVCCalculatorInput, settings: PVCPricingSettings): number {
+  if (settings.height_adjust_mm > 0) {
+    return settings.height_adjust_mm
+  }
+
+  switch (input.headrailType) {
+    case 'stainless':
+      return -15
+    case 'galvanized':
+    case 'aluminium':
+      return 40
+    case 'plastic':
+      return 20
+    default:
+      return 40
+  }
+}
+
+function isRibbedProfile(stripType: PVCStripType): boolean {
+  return stripType === 'ribbed' || stripType === 'ribbed_polar'
 }
 
 function createLineItem(
@@ -80,44 +116,73 @@ function createLineItem(
   }
 }
 
-export function calculateStripLayout(input: PVCCalculatorInput): PVCStripLayoutResult {
-  const stripsPerHanger = input.stripWidth === 100
-    ? (input.stripsPerHanger || (input.hangerWidthMm === 150 ? 2 : 1))
-    : 1
+function getDoorCoverPerSideMm(input: PVCCalculatorInput, settings: PVCPricingSettings): number {
+  if (input.stripWidth === 100) {
+    return settings.door_cover_mm
+  }
+  return input.stripWidth / 2
+}
 
-  const adjustedDoorWidthMm = input.openingWidthMm + (DOOR_COVER_MM * 2) + input.hangerWidthMm
-  const effectiveStripWidthMm = input.stripWidth - input.overlapMm
-
-  if (effectiveStripWidthMm <= 0) {
-    throw new Error('Invalid overlap_mm: effective strip width must be greater than zero.')
+/** Excel: 100 mm curtains use hanger spacing; wider strips use overlap advance (strip width − overlap). */
+export function calculateExcelStripCount(totalDoorWidthMm: number, input: PVCCalculatorInput): number {
+  if (input.stripWidth === 100) {
+    const stripSpacingMm = input.hangerWidthMm
+    const firstStripWidthMm = input.hangerWidthMm
+    const remainingWidthMm = Math.max(totalDoorWidthMm - firstStripWidthMm, 0)
+    const leadingStripUnits = firstStripWidthMm / stripSpacingMm
+    const remainingStripUnits = remainingWidthMm / stripSpacingMm
+    return Math.ceil(leadingStripUnits + remainingStripUnits)
   }
 
-  const rawStripCount = Math.ceil(adjustedDoorWidthMm / effectiveStripWidthMm)
-  const effectiveStripCount = Math.ceil(rawStripCount / stripsPerHanger)
-  const stripCount = Math.ceil(effectiveStripCount / 3) * 3
-  const hangerCount = Math.ceil(stripCount / stripsPerHanger)
+  const stripCoverMm = input.stripWidth - input.overlapMm
+  if (stripCoverMm <= 0) {
+    return Math.ceil(totalDoorWidthMm / Math.max(input.stripWidth, 1))
+  }
 
-  const stripLengthMm = input.openingHeightMm + DOOR_COVER_MM
-  const stripLengthM = stripLengthMm / 1000
-  const requiredStripMeters = (stripCount * stripLengthMm) / 1000
-  const billableStripMeters = round2(stripCount * stripLengthM)
+  const firstStripMm = input.stripWidth
+  const remainingWidthMm = Math.max(totalDoorWidthMm - firstStripMm, 0)
+  return 1 + Math.ceil(remainingWidthMm / stripCoverMm)
+}
 
-  const stripMeters = requiredStripMeters
-  const rollCount = Math.ceil(requiredStripMeters / ROLL_LENGTH_M)
-  const actualStripMeters = requiredStripMeters
+export function calculateStripLayout(
+  input: PVCCalculatorInput,
+  settings: PVCPricingSettings,
+): PVCStripLayoutResult {
+  const stripsPerHanger =
+    input.stripWidth === 100 ? (input.stripsPerHanger || (input.hangerWidthMm === 150 ? 2 : 1)) : 1
+
+  const doorCoverPerSideMm = getDoorCoverPerSideMm(input, settings)
+  const totalDoorWidthMm = input.openingWidthMm + doorCoverPerSideMm * 2
+  const stripSpacingMm = input.hangerWidthMm
+  const stripCount = calculateExcelStripCount(totalDoorWidthMm, input)
+  const stripCoverMm = input.stripWidth === 100 ? stripSpacingMm : input.stripWidth - input.overlapMm
+
+  const heightAdjustMm = getHeightAdjustMm(input, settings)
+  const stripLengthMm = input.openingHeightMm + heightAdjustMm
+  const actualStripMeters = round2((stripCount * stripLengthMm) / 1000)
+
+  const partMaterialMultiplier =
+    settings.material_billing_mode === 'part_materials' ? stripsPerHanger : 1
+  const projectedStripMeters = round2(actualStripMeters * partMaterialMultiplier)
+
+  const wasteFactor = 1 + settings.strip_loading_waste_percent / 100
+  const billableStripMeters = round2(projectedStripMeters * wasteFactor)
+
+  const rollLengthM = settings.roll_length_m
+  const rollCount = Math.ceil(projectedStripMeters / rollLengthM)
 
   return {
-    doorCoverMm: DOOR_COVER_MM,
-    adjustedDoorWidthMm,
-    effectiveStripWidthMm,
+    doorCoverMm: doorCoverPerSideMm,
+    adjustedDoorWidthMm: totalDoorWidthMm,
+    effectiveStripWidthMm: stripCoverMm > 0 ? stripCoverMm : stripSpacingMm,
     stripCount,
-    hangerCount,
+    hangerCount: Math.ceil(stripCount / stripsPerHanger),
     stripsPerHanger,
     stripLengthMm,
-    stripMeters,
-    requiredStripMeters,
+    stripMeters: actualStripMeters,
+    requiredStripMeters: projectedStripMeters,
     billableStripMeters,
-    rollLengthM: ROLL_LENGTH_M,
+    rollLengthM,
     rollCount,
     actualStripMeters,
   }
@@ -125,56 +190,57 @@ export function calculateStripLayout(input: PVCCalculatorInput): PVCStripLayoutR
 
 export function calculateHardware(
   input: PVCCalculatorInput,
-  stripCount: number,
-  hangerCount: number,
+  stripLayout: PVCStripLayoutResult,
+  settings: PVCPricingSettings,
   rivetsPerStripOverride?: number | null,
 ): PVCHardwareResult {
+  const stripSpacingMm = input.hangerWidthMm
+  const remainingWidthMm = Math.max(stripLayout.adjustedDoorWidthMm - input.hangerWidthMm, 0)
+  const remainingStripUnits = remainingWidthMm / stripSpacingMm
+  const roundedRemainingStrips = Math.ceil(remainingStripUnits)
+  const excelHeadrailLengthMm = input.hangerWidthMm + stripSpacingMm * roundedRemainingStrips
+
   const rivetsPerStrip = Number.isFinite(rivetsPerStripOverride)
     ? Number(rivetsPerStripOverride)
-    : RIVETS_PER_STRIP[input.stripWidth]
+    : null
 
-  if (!rivetsPerStrip) {
-    throw new Error(`Unsupported strip width for rivet mapping: ${input.stripWidth}`)
+  if (rivetsPerStrip === null || rivetsPerStrip <= 0) {
+    throw new Error(`Missing rivets_per_strip mapping for hanger width ${input.hangerWidthMm}mm`)
   }
 
   return {
-    headrailLengthMm: input.openingWidthMm + HEADRAIL_ALLOWANCE_MM,
-    bracketCount: stripCount,
+    headrailLengthMm: excelHeadrailLengthMm,
+    bracketCount: stripLayout.stripCount,
     rivetsPerStrip,
-    rivetCount: hangerCount * rivetsPerStrip,
+    rivetCount: stripLayout.stripCount * rivetsPerStrip,
   }
 }
 
 export function calculateLabour(
   input: PVCCalculatorInput,
-  hangerCount: number,
+  stripCount: number,
   settings: PVCPricingSettings,
 ): PVCLabourResult {
-  if (input.installationType === 'supply_only') {
-    return {
-      stripMinutes: 0,
-      ribbedMinutes: 0,
-      labourFactor: 0,
-      labourHours: 0,
-      labourCost: 0,
-      ribbedLabourCost: 0,
-    }
-  }
-
-  const stripMinutes = hangerCount * settings.labour_minutes_per_strip
+  const stripMinutesPerStrip =
+    STRIP_MINUTES_BY_HEADRAIL[input.headrailType] ?? settings.labour_minutes_per_strip
+  const stripMinutes = stripCount * stripMinutesPerStrip
+  const ribbedMinutes = isRibbedProfile(input.stripType)
+    ? stripCount * settings.ribbed_minutes_per_strip
+    : 0
   const headrailMinutes = settings.minutes_per_headrail
-  const setupMinutes = settings.install_setup_minutes ?? 6
-  const totalMinutes = stripMinutes + headrailMinutes + setupMinutes
-  const labourHours = round2(totalMinutes / 60)
+  const setupMinutes = settings.install_setup_minutes ?? 0
+  const totalMinutes = stripMinutes + ribbedMinutes + headrailMinutes + setupMinutes
+  const labourHours = totalMinutes / 60
   const labourCost = round2(labourHours * settings.labour_rate_per_hour)
+  const ribbedLabourCost = round2((ribbedMinutes / 60) * settings.labour_rate_per_hour)
 
   return {
     stripMinutes,
-    ribbedMinutes: 0,
+    ribbedMinutes,
     labourFactor: settings.labour_rate_per_hour,
     labourHours,
     labourCost,
-    ribbedLabourCost: 0,
+    ribbedLabourCost,
   }
 }
 
@@ -183,11 +249,10 @@ export function calculatePVCQuote(
   settings: PVCPricingSettings,
   prices: PVCPricingPriceSelection,
 ): PVCCalculationResponse {
-  const stripLayout = calculateStripLayout(input)
-  const hardware = calculateHardware(input, stripLayout.stripCount, stripLayout.hangerCount, prices.rivetsPerStrip)
-  const labour = calculateLabour(input, stripLayout.hangerCount, settings)
+  const stripLayout = calculateStripLayout(input, settings)
+  const hardware = calculateHardware(input, stripLayout, settings, prices.rivetsPerStrip)
+  const labour = calculateLabour(input, stripLayout.stripCount, settings)
 
-  const projectedStripMeters = stripLayout.requiredStripMeters
   const stripMeters = stripLayout.billableStripMeters
   const stripCost = round2(stripMeters * prices.stripUnitPrice)
   const headrailMetersRaw = hardware.headrailLengthMm / 1000
@@ -195,40 +260,51 @@ export function calculatePVCQuote(
   const bracketCost = round2(hardware.bracketCount * prices.bracketUnitPrice)
   const rivetCost = round2(hardware.rivetCount * prices.rivetUnitPrice)
   const labourCost = round2(labour.labourCost)
-  const totalLabourCost = round2(labourCost)
   const packagingCost = round2(prices.packagingUnitPrice)
 
   const materialTotal = round2(stripCost + headrailCost + bracketCost + rivetCost + packagingCost)
-  const subtotal = round2(materialTotal + totalLabourCost)
-  const finalPrice = round2(subtotal * settings.markup_multiplier)
+  const subtotal = round2(materialTotal + labourCost)
+  const markupMultiplier = 1 + settings.markup_percent / 100
+  const ribbedLabourCost = round2(labour.ribbedLabourCost)
+  const subtotalSubjectToMarkup = round2(subtotal - ribbedLabourCost)
+  const retailBeforeInstallation = round2(subtotalSubjectToMarkup * markupMultiplier + ribbedLabourCost)
+  const manualInstallation =
+    input.installationType === 'supply_install' && Number.isFinite(input.manualInstallationPrice)
+      ? round2(Math.max(0, input.manualInstallationPrice ?? 0))
+      : 0
+  const freightAmount = resolveFreightAmount(input)
+  const finalPrice = round2(retailBeforeInstallation + manualInstallation + freightAmount)
 
   const lineItems: PVCQuoteLineItem[] = [
-    {
-      key: 'strip',
-      material: 'PVC Strip Material',
-      productId: prices.stripProductId,
-      quantity: round2(stripMeters),
-      unitPrice: round2(prices.stripUnitPrice),
-      lineTotal: round2(stripCost),
-      unit: 'm',
-    },
-    {
-      key: 'headrail',
-      material: 'Headrail',
-      productId: prices.headrailProductId,
-      quantity: round2(headrailMetersRaw),
-      unitPrice: round2(prices.headrailUnitPrice),
-      lineTotal: round2(headrailMetersRaw * prices.headrailUnitPrice),
-      unit: 'm',
-    },
+    createLineItem('strip', 'PVC Strip Material', prices.stripProductId, stripMeters, prices.stripUnitPrice, 'm'),
+    createLineItem('headrail', 'Headrail', prices.headrailProductId, headrailMetersRaw, prices.headrailUnitPrice, 'm'),
     createLineItem('bracket', 'Hanger / Brackets', prices.bracketProductId, hardware.bracketCount, prices.bracketUnitPrice, 'ea'),
     createLineItem('fitting', 'Rivets / Fittings', prices.fittingProductId, hardware.rivetCount, prices.rivetUnitPrice, 'ea'),
     createLineItem('packaging', 'Packaging Tube', prices.packagingProductId, 1, prices.packagingUnitPrice, 'ea'),
   ]
 
-  if (input.installationType === 'supply_install') {
+  if (labourCost > 0) {
     lineItems.push(
-      createLineItem('labour', 'Labour', prices.labourProductId, labour.labourHours, settings.labour_rate_per_hour, 'hr'),
+      createLineItem(
+        'labour',
+        'Manufacturing / Cutting Labour',
+        prices.labourProductId,
+        round2(labour.labourHours),
+        settings.labour_rate_per_hour,
+        'hr',
+      ),
+    )
+  }
+
+  if (manualInstallation > 0) {
+    lineItems.push(
+      createLineItem('installation', 'Installation', null, 1, manualInstallation, 'ea'),
+    )
+  }
+
+  if (freightAmount > 0) {
+    lineItems.push(
+      createLineItem('freight', 'Freight', null, 1, freightAmount, 'ea'),
     )
   }
 
@@ -239,32 +315,38 @@ export function calculatePVCQuote(
       stripsPerHanger: stripLayout.stripsPerHanger,
       hangerCount: stripLayout.hangerCount,
       stripLength: round2(stripLayout.stripLengthMm),
-      stripMeters: round2(stripLayout.billableStripMeters),
+      stripMeters: round2(stripLayout.actualStripMeters),
       requiredStripMeters: round2(stripLayout.requiredStripMeters),
       billableStripMeters: round2(stripLayout.billableStripMeters),
-      projectedStripMeters: round2(projectedStripMeters),
+      projectedStripMeters: round2(stripLayout.requiredStripMeters),
       rollCount: stripLayout.rollCount,
       actualStripMeters: round2(stripLayout.actualStripMeters),
       headrailLength: round2(hardware.headrailLengthMm),
       bracketCount: hardware.bracketCount,
       rivetCount: hardware.rivetCount,
       labourHours: round2(labour.labourHours),
-      ribbedLabourCost: 0,
+      ribbedLabourCost: round2(labour.ribbedLabourCost),
       stripCost: round2(stripCost),
       headrailCost: round2(headrailCost),
       bracketCost: round2(bracketCost),
       hangerCost: round2(bracketCost),
       rivetCost: round2(rivetCost),
-      labourCost: totalLabourCost,
+      labourCost,
       packagingCost: round2(packagingCost),
       subtotal,
+      retailBeforeInstallation,
+      installationCost: manualInstallation,
+      freightCost: freightAmount,
       finalPrice,
       stripMaterialCost: round2(stripCost),
       fittingCost: round2(rivetCost),
     },
     totals: {
       subtotal,
-      marginPercent: round2((settings.markup_multiplier - 1) * 100),
+      marginPercent: round2(settings.markup_percent),
+      retailBeforeInstallation,
+      installationPrice: manualInstallation,
+      freightPrice: freightAmount,
       finalPrice,
     },
     lineItems,

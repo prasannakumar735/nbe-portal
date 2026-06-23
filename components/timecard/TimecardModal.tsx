@@ -9,6 +9,11 @@ import { computeEntryTotalHours } from '@/lib/timecard/computeHours'
 import { officeClockBreakForTimeRange } from '@/lib/officeClock/breakPolicy'
 import { getCurrentLocation } from '@/lib/timecard/getCurrentLocation'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
+import { InlineCreateClientPanel } from '@/components/clients/InlineCreateClientPanel'
+import type {
+  CreateClientWithLocationPayload,
+  CreateClientWithLocationResult,
+} from '@/lib/clients/createMaintenanceClient'
 
 type ClientOpt = { id: string; name: string }
 type LocOpt = { id: string; name: string }
@@ -21,15 +26,8 @@ function draftWithTierBreak<T extends { start_time: string; end_time: string; br
   return { ...d, break_minutes: officeClockBreakForTimeRange(d.start_time, d.end_time) }
 }
 
-type CreateClientPayload = {
-  clientName: string
-  location?: { locationName: string; companyAddress: string; suburb?: string }
-}
-
-type CreateClientResult = {
-  client: { id: string; name: string }
-  location?: { id: string; name: string }
-}
+type CreateClientPayload = CreateClientWithLocationPayload
+type CreateClientResult = CreateClientWithLocationResult
 
 export type TimecardModalProps = {
   open: boolean
@@ -76,14 +74,6 @@ export function TimecardModal({
   /** UX for automatic gps_start when modal opens (not shown in read-only). */
   const [gpsStartUi, setGpsStartUi] = useState<'idle' | 'loading' | 'captured' | 'unavailable'>('idle')
 
-  const [createClientOpen, setCreateClientOpen] = useState(false)
-  const [createBusy, setCreateBusy] = useState(false)
-  const [createErr, setCreateErr] = useState<string | null>(null)
-  const [newClientName, setNewClientName] = useState('')
-  const [addFirstLocation, setAddFirstLocation] = useState(true)
-  const [newLocationName, setNewLocationName] = useState('')
-  const [newCompanyAddress, setNewCompanyAddress] = useState('')
-  const [newSuburb, setNewSuburb] = useState('')
   const [subProjectOpts, setSubProjectOpts] = useState<Array<{ id: string; name: string }>>([])
   const [subProjectsLoading, setSubProjectsLoading] = useState(false)
 
@@ -106,15 +96,6 @@ export function TimecardModal({
     setDraft({ ...entry })
     setError(null)
     setGpsStartUi('idle')
-    setCreateClientOpen(false)
-    setCreateBusy(false)
-    setCreateErr(null)
-    setNewClientName('')
-    setAddFirstLocation(true)
-    setNewLocationName('')
-    setNewCompanyAddress('')
-    setNewSuburb('')
-    /** Load cascades from `entry` (not `draft` state): draft updates after this effect runs, so draft-based effects miss the first open and skip when client_id is unchanged after parent cleared lists. */
     const cid = entry.client_id ? String(entry.client_id) : ''
     const l1 = entry.work_type_level1_id ? String(entry.work_type_level1_id) : ''
     void onClientChange(cid)
@@ -290,61 +271,6 @@ export function TimecardModal({
     return null
   }
 
-  const submitCreateClient = async () => {
-    if (!onCreateClient || !canCreateClient) return
-    const clientName = newClientName.trim()
-    if (!clientName) {
-      setCreateErr('Client name is required.')
-      return
-    }
-    if (addFirstLocation) {
-      if (!newLocationName.trim()) {
-        setCreateErr('Location name is required.')
-        return
-      }
-      if (!newCompanyAddress.trim()) {
-        setCreateErr('Address is required.')
-        return
-      }
-    }
-
-    setCreateBusy(true)
-    setCreateErr(null)
-    try {
-      const payload: CreateClientPayload = { clientName }
-      if (addFirstLocation) {
-        payload.location = {
-          locationName: newLocationName.trim(),
-          companyAddress: newCompanyAddress.trim(),
-          ...(newSuburb.trim() ? { suburb: newSuburb.trim() } : {}),
-        }
-      }
-      const created = await onCreateClient(payload)
-
-      await onClientChange(created.client.id)
-      setDraft(prev =>
-        prev
-          ? {
-              ...prev,
-              client_id: created.client.id,
-              client_sub_project_id: null,
-              location_id: created.location?.id ?? null,
-            }
-          : prev,
-      )
-      setCreateClientOpen(false)
-      setNewClientName('')
-      setNewLocationName('')
-      setNewCompanyAddress('')
-      setNewSuburb('')
-      setCreateErr(null)
-    } catch (e) {
-      setCreateErr(e instanceof Error ? e.message : 'Failed to create client.')
-    } finally {
-      setCreateBusy(false)
-    }
-  }
-
   const submit = async () => {
     const { hours, error: er } = computeEntryTotalHours(draft.start_time, draft.end_time, draft.break_minutes)
     if (er) {
@@ -473,107 +399,22 @@ export function TimecardModal({
                   </label>
 
                   {!readOnly && canCreateClient && onCreateClient ? (
-                    <div className="mt-1">
-                      <button
-                        type="button"
-                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:underline"
-                        onClick={() => {
-                          setCreateClientOpen(v => !v)
-                          setCreateErr(null)
-                        }}
-                      >
-                        {createClientOpen ? 'Cancel new client' : 'Add new client…'}
-                      </button>
-
-                      {createClientOpen ? (
-                        <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
-                          {createErr ? (
-                            <p className="mb-2 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-800">
-                              {createErr}
-                            </p>
-                          ) : null}
-
-                          <label className={labelClass}>
-                            Client name
-                            <input
-                              disabled={createBusy}
-                              className={fieldClass}
-                              value={newClientName}
-                              onChange={e => setNewClientName(e.target.value)}
-                              placeholder="e.g. Confoil"
-                            />
-                          </label>
-
-                          <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-slate-700">
-                            <input
-                              type="checkbox"
-                              checked={addFirstLocation}
-                              disabled={createBusy}
-                              onChange={e => setAddFirstLocation(e.target.checked)}
-                              className="size-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                            />
-                            Add first location now (recommended)
-                          </label>
-
-                          {addFirstLocation ? (
-                            <div className="mt-3 space-y-3">
-                              <label className={labelClass}>
-                                Location name
-                                <input
-                                  disabled={createBusy}
-                                  className={fieldClass}
-                                  value={newLocationName}
-                                  onChange={e => setNewLocationName(e.target.value)}
-                                  placeholder="e.g. Factory / Head Office"
-                                />
-                              </label>
-                              <label className={labelClass}>
-                                Address
-                                <input
-                                  disabled={createBusy}
-                                  className={fieldClass}
-                                  value={newCompanyAddress}
-                                  onChange={e => setNewCompanyAddress(e.target.value)}
-                                  placeholder="Street address"
-                                />
-                              </label>
-                              <label className={labelClass}>
-                                Suburb (optional)
-                                <input
-                                  disabled={createBusy}
-                                  className={fieldClass}
-                                  value={newSuburb}
-                                  onChange={e => setNewSuburb(e.target.value)}
-                                  placeholder="Suburb"
-                                />
-                              </label>
-                            </div>
-                          ) : null}
-
-                          <div className="mt-3 flex items-center justify-end gap-2">
-                            <button
-                              type="button"
-                              disabled={createBusy}
-                              className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-                              onClick={() => {
-                                setCreateClientOpen(false)
-                                setCreateErr(null)
-                              }}
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              disabled={createBusy}
-                              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-40"
-                              onClick={() => void submitCreateClient()}
-                            >
-                              {createBusy ? 'Creating…' : 'Create'}
-                            </button>
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
+                    <InlineCreateClientPanel
+                      onCreate={onCreateClient}
+                      onCreated={async created => {
+                        await onClientChange(created.client.id)
+                        setDraft(prev =>
+                          prev
+                            ? {
+                                ...prev,
+                                client_id: created.client.id,
+                                client_sub_project_id: null,
+                                location_id: created.location?.id ?? null,
+                              }
+                            : prev,
+                        )
+                      }}
+                    />
                   ) : null}
 
                   {draft.client_id && subProjectOpts.length > 0 ? (

@@ -79,6 +79,25 @@ export async function generateQuotePdf(quoteData: QuoteData): Promise<Uint8Array
   page.drawText('Customer Details', { x: left, y, size: 13, font: boldFont })
   y -= 18
 
+  const details = quoteData.customerDetails
+  if (details && (details.customer || details.attn || details.address || details.refNo)) {
+    const headerRows = [
+      ['Customer', details.customer || ''],
+      ['Attn', details.attn || ''],
+      ['Address', details.address || ''],
+      ['Ref No', details.refNo || ''],
+    ]
+    headerRows.forEach(([label, value]) => {
+      page.drawText(label, { x: left, y, size: 10, font: boldFont })
+      page.drawText(value, { x: left + 72, y, size: 10, font: regularFont })
+      y -= 14
+    })
+    y -= 8
+  }
+
+  page.drawText('Door / Product Details', { x: left, y, size: 13, font: boldFont })
+  y -= 18
+
   const customerRows = [
     ['Width (mm)', String(quoteData.input.width_mm)],
     ['Height (mm)', String(quoteData.input.height_mm)],

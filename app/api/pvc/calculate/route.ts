@@ -50,6 +50,32 @@ function validateRequestBody(body: Record<string, unknown>): PVCCalculatorInput 
   const overlap = asNumber(body.overlapMm ?? body.overlap) as PVCOverlapMm
   const headrailType = body.headrailType as PVCHeadrailType
   const installType = body.installType as PVCInstallationType
+  const manualInstallationRaw = asNumber(body.manualInstallationPrice ?? body.installationPrice)
+
+  const manualFreightRaw = asNumber(body.manualFreightPrice ?? body.freightPrice)
+  const freightRequired = Boolean(body.freightRequired)
+
+  if (!Number.isFinite(manualInstallationRaw) || manualInstallationRaw < 0) {
+    if (installType === 'supply_install' && body.manualInstallationPrice !== undefined && body.manualInstallationPrice !== '') {
+      throw new Error('Installation price must be zero or a positive number.')
+    }
+  }
+
+  if (!Number.isFinite(manualFreightRaw) || manualFreightRaw < 0) {
+    const freightFieldSet =
+      body.manualFreightPrice !== undefined && body.manualFreightPrice !== ''
+    if (freightFieldSet || (installType === 'supply_only' && manualFreightRaw < 0)) {
+      throw new Error('Freight amount must be zero or a positive number.')
+    }
+  }
+
+  const manualInstallationPrice =
+    installType === 'supply_install' && Number.isFinite(manualInstallationRaw) && manualInstallationRaw > 0
+      ? manualInstallationRaw
+      : undefined
+
+  const manualFreightPrice =
+    Number.isFinite(manualFreightRaw) && manualFreightRaw > 0 ? manualFreightRaw : undefined
 
   if (!Number.isFinite(width) || width <= 0) {
     throw new Error('Width must be a positive number.')
@@ -99,6 +125,9 @@ function validateRequestBody(body: Record<string, unknown>): PVCCalculatorInput 
     overlapMm: overlap,
     headrailType,
     installationType: installType,
+    manualInstallationPrice,
+    manualFreightPrice,
+    freightRequired: installType === 'supply_install' ? freightRequired : undefined,
   }
 }
 

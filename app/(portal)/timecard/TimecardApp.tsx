@@ -25,16 +25,17 @@ import {
 import type { BillableFilterValue } from '@/components/timecard'
 import { mergeLastUsedIntoEntry, writeLastUsedEntryPrefs } from '@/lib/timecard/lastUsedDefaults'
 import { computeTimesheetBannerState } from '@/lib/timecard/submissionBannerState'
+import {
+  createMaintenanceClientWithOptionalLocation,
+  type CreateClientWithLocationPayload,
+} from '@/lib/clients/createMaintenanceClient'
 
 type ClientOpt = { id: string; name: string }
 type LocOpt = { id: string; name: string }
 type L1 = { id: string; code: string; name: string }
 type L2 = { id: string; name: string; billable: boolean }
 
-type CreateClientPayload = {
-  clientName: string
-  location?: { locationName: string; companyAddress: string; suburb?: string }
-}
+type CreateClientPayload = CreateClientWithLocationPayload
 
 export default function TimecardApp() {
   const searchParams = useBrowserSearchParams()
@@ -360,58 +361,16 @@ export default function TimecardApp() {
 
   const timesheetStatus = tc.timesheet?.status ?? 'draft'
 
-  const canCreateClient = !tc.isReadOnly && !tc.isManagerView && (isAdmin || isManager)
+  const canCreateClient = !tc.isReadOnly && !tc.isManagerView
 
   const createClient = async (payload: CreateClientPayload) => {
-    const name = payload.clientName.trim()
-    const res = await fetch('/api/admin/clients', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ client_name: name }),
-    })
-    const j = (await res.json().catch(() => ({}))) as {
-      ok?: boolean
-      error?: string
-      data?: { id?: string; name?: string | null }
-    }
-    if (!res.ok || !j.ok || !j.data?.id) {
-      throw new Error(j.error ?? 'Failed to create client.')
-    }
-    const createdClient = { id: String(j.data.id), name: String(j.data.name ?? name) }
-
-    let createdLocation: { id: string; name: string } | undefined
-    if (payload.location) {
-      const r2 = await fetch('/api/admin/client-locations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          client_id: createdClient.id,
-          location_name: payload.location.locationName,
-          Company_address: payload.location.companyAddress,
-          suburb: payload.location.suburb ?? null,
-        }),
-      })
-      const j2 = (await r2.json().catch(() => ({}))) as {
-        ok?: boolean
-        error?: string
-        data?: { id?: string; location_name?: string | null }
-      }
-      if (!r2.ok || !j2.ok || !j2.data?.id) {
-        throw new Error(j2.error ?? 'Client created, but failed to create location.')
-      }
-      createdLocation = {
-        id: String(j2.data.id),
-        name: String(j2.data.location_name ?? payload.location.locationName),
-      }
-    }
-
+    const created = await createMaintenanceClientWithOptionalLocation(payload)
     setClients(prev => {
-      const next = [...prev, createdClient]
+      const next = [...prev, created.client]
       next.sort((a, b) => a.name.localeCompare(b.name))
       return next
     })
-
-    return { client: createdClient, ...(createdLocation ? { location: createdLocation } : {}) }
+    return created
   }
 
   return (

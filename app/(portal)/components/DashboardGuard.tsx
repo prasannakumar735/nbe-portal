@@ -1,11 +1,25 @@
 'use client'
 
-import { useEffect, ReactNode } from 'react'
+import { useEffect, useState, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/app/providers/AuthProvider'
 
 type RouteGuardProps = {
   children: ReactNode
+}
+
+function AuthLoadingShell() {
+  return (
+    <div
+      className="flex items-center justify-center min-h-screen bg-slate-50"
+      suppressHydrationWarning
+    >
+      <div className="text-center">
+        <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-slate-600">Loading...</p>
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -37,31 +51,27 @@ type RouteGuardProps = {
 export function RouteGuard({ children }: RouteGuardProps) {
   const router = useRouter()
   const { session, isLoading } = useAuth()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Redirect to login if no session (after loading completes)
   useEffect(() => {
-    if (!isLoading && !session) {
+    if (!mounted || isLoading) return
+    if (!session) {
       router.replace('/login')
     }
-  }, [isLoading, session, router])
+  }, [mounted, isLoading, session, router])
 
-  // Show loading state while checking auth
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-slate-600">Loading...</p>
-        </div>
-      </div>
-    )
+  if (!mounted || isLoading) {
+    return <AuthLoadingShell />
   }
 
-  // If no session and not loading, don't render children (redirect will happen)
   if (!session) {
     return null
   }
 
-  // Session exists, render protected content
   return <>{children}</>
 }

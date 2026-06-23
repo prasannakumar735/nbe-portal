@@ -1,40 +1,25 @@
 'use client';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { PVCForm, type PVCFormValues } from './components/PVCForm';
 import { PVCResults } from './components/PVCResults';
 import { PVCQuoteSummary } from './components/PVCQuoteSummary';
+import { PVCQuoteLines } from './components/PVCQuoteLines';
 import { pvcCalculatorService } from './services/pvcCalculatorService';
 import type { PVCCalculationResponse } from '@/lib/types/pvc.types';
-import type { QuoteGenerateResponse } from '@/lib/types/quote.types';
+import type { QuoteData, QuoteGenerateResponse } from '@/lib/types/quote.types';
 import NBELogo from '@/components/common/NBELogo';
+import {
+    aggregateQuoteSupply,
+    clampDoorQuantity,
+    linesForQuotePdf,
+    makePendingQuoteLine,
+    pickDoorConfig,
+    quoteLineToProposalDoor,
+    type PVCQuoteLine,
+} from './pvcQuoteLines';
+
 async function callGenerateQuoteApi(payload: {
-    quoteData: {
-        input: {
-            width_mm: number;
-            height_mm: number;
-            strip_type: string;
-            strip_width_mm: number;
-            thickness_mm: number;
-            overlap_mm: number;
-            headrail_type: string;
-            install_type: string;
-        };
-        calculated: {
-            strip_count: number;
-            strip_length_mm: number;
-            strip_meters: number;
-            pvc_strip_cost: number;
-            headrail_cost: number;
-            bracket_cost: number;
-            fittings_cost: number;
-            packaging_cost: number;
-            labour_cost: number;
-            subtotal: number;
-            markup_percent: number;
-            final_quote_price: number;
-        };
-        result: PVCCalculationResponse;
-    };
+    quoteData: QuoteData;
 }): Promise<QuoteGenerateResponse> {
     const response = await fetch('/api/quotes/generate', {
         method: 'POST',
@@ -49,6 +34,11 @@ async function callGenerateQuoteApi(payload: {
     }
     return data as QuoteGenerateResponse;
 }
+
+function round2(value: number): number {
+    return Math.round(value * 100) / 100;
+}
+
 function triggerBrowserDownload(url: string, filename: string) {
     const anchor = document.createElement('a');
     anchor.href = url;
@@ -58,6 +48,7 @@ function triggerBrowserDownload(url: string, filename: string) {
     anchor.click();
     document.body.removeChild(anchor);
 }
+
 function triggerBrowserDownloadFromBase64(base64: string, filename: string) {
     const binary = window.atob(base64);
     const bytes = new Uint8Array(binary.length);
@@ -69,8 +60,13 @@ function triggerBrowserDownloadFromBase64(base64: string, filename: string) {
     triggerBrowserDownload(url, filename);
     URL.revokeObjectURL(url);
 }
-export default function PVCCalculatorPage() {
-    const [formValues, setFormValues] = useState<PVCFormValues>({
+
+function createInitialFormValues(): PVCFormValues {
+    return {
+        customer: '',
+        attn: '',
+        address: '',
+        refNo: '',
         width: 3000,
         height: 2500,
         stripType: 'standard',
@@ -81,12 +77,23 @@ export default function PVCCalculatorPage() {
         overlap: 50,
         headrailType: 'galvanized',
         installType: 'supply_install',
-    });
+        manualInstallationPrice: 0,
+        manualFreightPrice: 0,
+        freightRequired: false,
+        doorQuantity: 1,
+    };
+}
+
+export default function PVCCalculatorPage() {
+    const [formValues, setFormValues] = useState<PVCFormValues>(createInitialFormValues);
+    const [quoteLines, setQuoteLines] = useState<PVCQuoteLine[]>([]);
+    const [quoteExtras, setQuoteExtras] = useState({ installationPrice: 0, freightPrice: 0 });
     const [result, setCalculationResult] = useState<PVCCalculationResponse | null>(null);
     const [isCalculating, setIsCalculating] = useState(false);
     const [isSavingQuote, setIsSavingQuote] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
+
     const updateField = <K extends keyof PVCFormValues>(field: K, value: PVCFormValues[K]) => {
         setFormValues(current => {
             if (field === 'stripWidth') {
@@ -126,13 +133,18 @@ export default function PVCCalculatorPage() {
             };
         });
     };
+
     const handleCalculate = async () => {
         try {
             setError(null);
             setSuccess(null);
             setIsCalculating(true);
-            const result = await pvcCalculatorService.calculate(formValues);
-            setCalculationResult(result);
+            const calcResult = await pvcCalculatorService.calculate(formValues);
+            setCalculationResult(calcResult);
+            setQuoteExtras({
+                installationPrice: calcResult.totals.installationPrice,
+                freightPrice: calcResult.totals.freightPrice,
+            });
         }
         catch (apiError) {
             setError(apiError instanceof Error ? apiError.message : 'Calculation failed.');
@@ -141,44 +153,96 @@ export default function PVCCalculatorPage() {
             setIsCalculating(false);
         }
     };
-    const handleGenerateQuote = async () => {
+
+    const handleAddToQuote = useCallback(() => {
         if (!result) {
-            setError('Please run the calculation first.');
+            setError('Calculate this door first, then add it to the quote.');
+            return;
+        }
+        const line: PVCQuoteLine = {
+            id: crypto.randomUUID(),
+            doorQuantity: clampDoorQuantity(formValues.doorQuantity),
+            config: pickDoorConfig(formValues),
+            result,
+        };
+        setQuoteLines(current => [...current, line]);
+        setQuoteExtras({
+            installationPrice: result.totals.installationPrice,
+            freightPrice: result.totals.freightPrice,
+        });
+        setCalculationResult(null);
+        setFormValues(current => ({ ...current, doorQuantity: 1 }));
+        setError(null);
+        setSuccess('Door added to quote. Enter another size and calculate, or generate the PDF.');
+    }, [formValues, result]);
+
+    const handleRemoveQuoteLine = useCallback((id: string) => {
+        setQuoteLines(current => current.filter(line => line.id !== id));
+    }, []);
+
+    const handleGenerateQuote = async () => {
+        const effectiveLines = linesForQuotePdf(quoteLines, formValues, result);
+        if (effectiveLines.length === 0) {
+            setError('Calculate a door first, then generate the quote PDF.');
             return;
         }
         try {
             setError(null);
             setSuccess(null);
             setIsSavingQuote(true);
+
+            const extrasResult = result ?? await pvcCalculatorService.calculate(formValues);
+            const installationPrice = extrasResult.totals.installationPrice;
+            const freightPrice = extrasResult.totals.freightPrice;
+            const supplyTotal = aggregateQuoteSupply(quoteLines, result ? makePendingQuoteLine(formValues, result) : null);
+            const quoteFinalPrice = round2(supplyTotal + installationPrice + freightPrice);
+
+            const doors = effectiveLines.map(quoteLineToProposalDoor);
+            const first = effectiveLines[0];
+
             const generated = await callGenerateQuoteApi({
                 quoteData: {
                     input: {
-                        width_mm: formValues.width,
-                        height_mm: formValues.height,
-                        strip_type: formValues.stripType,
-                        strip_width_mm: formValues.stripWidth,
-                        thickness_mm: formValues.thickness,
-                        overlap_mm: formValues.overlap,
-                        headrail_type: formValues.headrailType,
+                        width_mm: first.config.width,
+                        height_mm: first.config.height,
+                        strip_type: first.config.stripType,
+                        strip_width_mm: first.config.stripWidth,
+                        thickness_mm: first.config.thickness,
+                        overlap_mm: first.config.overlap,
+                        headrail_type: first.config.headrailType,
                         install_type: formValues.installType,
+                        door_quantity: first.doorQuantity,
                     },
                     calculated: {
-                        strip_count: result.breakdown.stripCount,
-                        strip_length_mm: result.breakdown.stripLength,
-                        strip_meters: result.breakdown.stripMeters,
-                        pvc_strip_cost: result.breakdown.stripCost,
-                        headrail_cost: result.breakdown.headrailCost,
-                        bracket_cost: result.breakdown.bracketCost,
-                        fittings_cost: result.breakdown.fittingCost,
-                        packaging_cost: result.breakdown.packagingCost,
-                        labour_cost: result.breakdown.labourCost,
-                        subtotal: result.totals.subtotal,
-                        markup_percent: result.totals.marginPercent,
-                        final_quote_price: result.totals.finalPrice,
+                        strip_count: first.result.breakdown.stripCount,
+                        strip_length_mm: first.result.breakdown.stripLength,
+                        strip_meters: first.result.breakdown.stripMeters,
+                        pvc_strip_cost: first.result.breakdown.stripCost,
+                        headrail_cost: first.result.breakdown.headrailCost,
+                        bracket_cost: first.result.breakdown.bracketCost,
+                        fittings_cost: first.result.breakdown.fittingCost,
+                        packaging_cost: first.result.breakdown.packagingCost,
+                        labour_cost: first.result.breakdown.labourCost,
+                        subtotal: first.result.totals.subtotal,
+                        markup_percent: first.result.totals.marginPercent,
+                        final_quote_price: quoteFinalPrice,
+                        installation_price: installationPrice,
+                        freight_price: freightPrice,
+                        retail_before_installation: first.result.totals.retailBeforeInstallation,
                     },
-                    result,
+                    result: extrasResult,
+                    customerDetails: {
+                        customer: formValues.customer.trim() || undefined,
+                        attn: formValues.attn.trim() || undefined,
+                        address: formValues.address.trim() || undefined,
+                        refNo: formValues.refNo.trim() || undefined,
+                    },
+                    doors,
+                    freightCost: freightPrice > 0 ? freightPrice : undefined,
+                    installationCost: installationPrice > 0 ? installationPrice : undefined,
                 },
             });
+
             if (generated.pdfUrl) {
                 triggerBrowserDownload(generated.pdfUrl, generated.fileName);
             }
@@ -202,32 +266,68 @@ export default function PVCCalculatorPage() {
             setIsSavingQuote(false);
         }
     };
-    return (<div className="w-full space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <NBELogo />
-        <div className="text-right">
-          <h1 className="text-xl font-bold text-slate-900">PVC Strip Curtain Calculator</h1>
-          <p className="mt-0.5 text-xs text-slate-500">Estimate strip curtain quantities and generate a quote from Supabase pricing.</p>
+
+    const showQuotePanel = quoteLines.length > 0 || result !== null;
+    const pendingLine = result ? makePendingQuoteLine(formValues, result) : null;
+
+    return (
+        <div className="w-full space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+                <NBELogo />
+                <div className="text-right">
+                    <h1 className="text-xl font-bold text-slate-900">PVC Strip Curtain Calculator</h1>
+                    <p className="mt-0.5 text-xs text-slate-500">Estimate strip curtain quantities and generate a quote from Supabase pricing.</p>
+                </div>
+            </div>
+
+            {error && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {error}
+                </div>
+            )}
+
+            {success && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                    {success}
+                </div>
+            )}
+
+            <PVCQuoteLines lines={quoteLines} onRemove={handleRemoveQuoteLine} />
+
+            <PVCForm values={formValues} isLoading={isCalculating} onChange={updateField} onSubmit={handleCalculate} />
+
+            {showQuotePanel && (
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                    <div className="space-y-4 lg:col-span-2">
+                        {result && <PVCResults result={result} />}
+                        {result && (
+                            <div className="flex flex-wrap gap-3">
+                                <button
+                                    type="button"
+                                    onClick={handleAddToQuote}
+                                    className="rounded-lg border border-indigo-600 bg-white px-4 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50"
+                                >
+                                    Add door to quote
+                                </button>
+                                <p className="self-center text-xs text-slate-500">
+                                    Use again for each different opening size on the same quote.
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                    <div>
+                        <PVCQuoteSummary
+                            quoteLines={quoteLines}
+                            pendingLine={pendingLine}
+                            installationPrice={result?.totals.installationPrice ?? quoteExtras.installationPrice}
+                            freightPrice={result?.totals.freightPrice ?? quoteExtras.freightPrice}
+                            canGenerate={quoteLines.length > 0 || result !== null}
+                            isSavingQuote={isSavingQuote}
+                            onGenerateQuote={handleGenerateQuote}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
-      </div>
-
-      {error && (<div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>)}
-
-      {success && (<div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-          {success}
-        </div>)}
-
-      <PVCForm values={formValues} isLoading={isCalculating} onChange={updateField} onSubmit={handleCalculate}/>
-
-      {result && (<div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <PVCResults result={result}/>
-          </div>
-          <div>
-            <PVCQuoteSummary result={result} isSavingQuote={isSavingQuote} onGenerateQuote={handleGenerateQuote}/>
-          </div>
-        </div>)}
-    </div>);
+    );
 }

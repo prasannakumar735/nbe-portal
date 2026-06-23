@@ -9,6 +9,7 @@ export interface QuoteCalculatorInput {
   overlap_mm: number
   headrail_type: string
   install_type: string
+  door_quantity?: number
 }
 
 export interface QuoteCalculatedValues {
@@ -45,6 +46,8 @@ export interface ProposalDoor {
   number_of_strips: number
   final_door_price: number
   strip_type_label?: string
+  /** Same opening size and spec; unit cost is per door, line total = unit × quantity */
+  quantity?: number
 }
 
 export interface QuoteData {

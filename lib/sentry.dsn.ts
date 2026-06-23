@@ -17,7 +17,7 @@ export function getSentryTracesSampleRate(): number {
     const n = Number(raw)
     if (Number.isFinite(n) && n >= 0 && n <= 1) return n
   }
-  return process.env.NODE_ENV === 'production' ? 0.2 : 1
+  return process.env.NODE_ENV === 'production' ? 0.2 : 0
 }
 
 /**
@@ -30,5 +30,5 @@ export function getSentryProfileSessionSampleRate(): number {
     const n = Number(raw)
     if (Number.isFinite(n) && n >= 0 && n <= 1) return n
   }
-  return process.env.NODE_ENV === 'production' ? 0.1 : 1
+  return process.env.NODE_ENV === 'production' ? 0.1 : 0
 }

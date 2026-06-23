@@ -10,6 +10,10 @@ import type {
 } from '@/lib/types/pvc.types'
 
 export interface PVCFormValues {
+  customer: string
+  attn: string
+  address: string
+  refNo: string
   width: number
   height: number
   stripType: PVCStripType
@@ -20,6 +24,11 @@ export interface PVCFormValues {
   overlap: PVCOverlapMm
   headrailType: PVCHeadrailType
   installType: PVCInstallationType
+  manualInstallationPrice: number
+  manualFreightPrice: number
+  freightRequired: boolean
+  /** Identical doors at the same width × height (Excel qty column). */
+  doorQuantity: number
 }
 
 interface PVCFormProps {
@@ -61,6 +70,48 @@ export function PVCForm({ values, isLoading, onChange, onSubmit }: PVCFormProps)
       <h2 className="text-lg font-semibold text-slate-900">PVC Strip Curtain Calculator</h2>
       <p className="mt-1 text-sm text-slate-500">Enter opening and product settings to calculate material and quote pricing.</p>
 
+      <div className="mt-6 grid grid-cols-1 gap-4 border-b border-slate-200 pb-10 mb-2 md:grid-cols-2">
+        <label className="space-y-1">
+          <span className="text-sm font-medium text-slate-700">Customer</span>
+          <input
+            type="text"
+            className={inputBaseClassName()}
+            value={values.customer}
+            onChange={(event) => onChange('customer', event.target.value)}
+          />
+        </label>
+
+        <label className="space-y-1">
+          <span className="text-sm font-medium text-slate-700">Attn</span>
+          <input
+            type="text"
+            className={inputBaseClassName()}
+            value={values.attn}
+            onChange={(event) => onChange('attn', event.target.value)}
+          />
+        </label>
+
+        <label className="space-y-1 md:col-span-2">
+          <span className="text-sm font-medium text-slate-700">Address</span>
+          <textarea
+            rows={2}
+            className={`${inputBaseClassName()} resize-y min-h-[2.75rem]`}
+            value={values.address}
+            onChange={(event) => onChange('address', event.target.value)}
+          />
+        </label>
+
+        <label className="space-y-1">
+          <span className="text-sm font-medium text-slate-700">Ref No</span>
+          <input
+            type="text"
+            className={inputBaseClassName()}
+            value={values.refNo}
+            onChange={(event) => onChange('refNo', event.target.value)}
+          />
+        </label>
+      </div>
+
       <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         <label className="space-y-1">
           <span className="text-sm font-medium text-slate-700">Width (mm)</span>
@@ -82,6 +133,26 @@ export function PVCForm({ values, isLoading, onChange, onSubmit }: PVCFormProps)
             value={values.height}
             onChange={(event) => onChange('height', Number(event.target.value) || 0)}
           />
+        </label>
+
+        <label className="space-y-1">
+          <span className="text-sm font-medium text-slate-700">No. of identical doors</span>
+          <input
+            type="number"
+            min={1}
+            max={99}
+            step={1}
+            className={inputBaseClassName()}
+            value={values.doorQuantity}
+            onChange={(event) => {
+              const raw = Number.parseInt(event.target.value, 10)
+              const next = Number.isFinite(raw) ? Math.min(99, Math.max(1, raw)) : 1
+              onChange('doorQuantity', next)
+            }}
+          />
+          <span className="text-xs text-slate-500">
+            Same size and spec as above (e.g. 2 matching openings). Quote uses unit cost × quantity.
+          </span>
         </label>
 
         <label className="space-y-1">
@@ -199,6 +270,66 @@ export function PVCForm({ values, isLoading, onChange, onSubmit }: PVCFormProps)
             ))}
           </select>
         </label>
+
+        {values.installType === 'supply_only' && (
+          <label className="space-y-1 md:col-span-2">
+            <span className="text-sm font-medium text-slate-700">Freight</span>
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              className={inputBaseClassName()}
+              value={values.manualFreightPrice || ''}
+              placeholder="0.00"
+              onChange={(event) => onChange('manualFreightPrice', Number(event.target.value) || 0)}
+            />
+            <span className="text-xs text-slate-500">Added to the quote total without the material margin.</span>
+          </label>
+        )}
+
+        {values.installType === 'supply_install' && (
+          <>
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-sm font-medium text-slate-700">Installation price (manual)</span>
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                className={inputBaseClassName()}
+                value={values.manualInstallationPrice || ''}
+                placeholder="0.00"
+                onChange={(event) => onChange('manualInstallationPrice', Number(event.target.value) || 0)}
+              />
+              <span className="text-xs text-slate-500">Added to the quote total without the material margin.</span>
+            </label>
+
+            <label className="flex items-center gap-2 md:col-span-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                checked={values.freightRequired}
+                onChange={(event) => onChange('freightRequired', event.target.checked)}
+              />
+              <span className="text-sm font-medium text-slate-700">Freight required</span>
+            </label>
+
+            {values.freightRequired && (
+              <label className="space-y-1 md:col-span-2">
+                <span className="text-sm font-medium text-slate-700">Freight</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  className={inputBaseClassName()}
+                  value={values.manualFreightPrice || ''}
+                  placeholder="0.00"
+                  onChange={(event) => onChange('manualFreightPrice', Number(event.target.value) || 0)}
+                />
+                <span className="text-xs text-slate-500">Added to the quote total without the material margin.</span>
+              </label>
+            )}
+          </>
+        )}
       </div>
 
       <button

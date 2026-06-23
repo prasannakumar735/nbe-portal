@@ -32,11 +32,13 @@ Sentry.init({
   profileSessionSampleRate: getSentryProfileSessionSampleRate(),
   profileLifecycle: 'trace',
 
-  enableLogs: true,
+  enableLogs: process.env.NODE_ENV === 'production',
   integrations: [
     browserTracingIntegration(),
-    browserProfilingIntegration(),
-    Sentry.consoleLoggingIntegration({ levels: ['log', 'warn', 'error'] }),
+    ...(process.env.NODE_ENV === 'production' ? [browserProfilingIntegration()] : []),
+    ...(process.env.NODE_ENV === 'production'
+      ? [Sentry.consoleLoggingIntegration({ levels: ['warn', 'error'] })]
+      : []),
   ],
   tracePropagationTargets: clientTracePropagationTargets(),
 
@@ -47,8 +49,17 @@ Sentry.init({
   sendDefaultPii: false,
 
   beforeSend(event) {
-    // Drop if DSN was removed at runtime
     if (!getSentryDsn()) return null
+    if (process.env.NODE_ENV !== 'production') return null
+    const chunks: string[] = []
+    if (event.message) chunks.push(String(event.message))
+    for (const ex of event.exception?.values ?? []) {
+      if (ex.value) chunks.push(ex.value)
+    }
+    const blob = chunks.join(' ')
+    if (/hydrat/i.test(blob) && /didn't match|did not match|mismatch/i.test(blob)) {
+      return null
+    }
     return event
   },
 })

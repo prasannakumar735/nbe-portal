@@ -2,6 +2,10 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import type { ProposalDoor, QuoteData } from '@/lib/types/quote.types'
+import {
+  formatProposalHeadrailLabel,
+  formatProposalStripTypeLine,
+} from '@/lib/calculators/pvcQuoteLabels'
 import { embedRobotoForPdfLib } from '@/lib/pdf/robotoPdf'
 
 function currency(value: number): string {
@@ -16,30 +20,23 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100
 }
 
-function capitalize(value: string): string {
-  return value.length > 0 ? `${value[0].toUpperCase()}${value.slice(1).toLowerCase()}` : value
-}
-
 function toLegacyStripProfileLabel(door: ProposalDoor): string {
   if (door.strip_type_label && door.strip_type_label.trim().length > 0) {
     return door.strip_type_label.trim()
   }
 
-  if (door.strip_type.includes('ribbed')) {
-    return 'Coolroom Ambient Ribbed profile'
-  }
-
-  if (door.strip_type === 'polar') {
-    return 'Coolroom Polar Smooth profile'
-  }
-
-  return `${capitalize(door.strip_type)} profile`
+  return formatProposalStripTypeLine(door.strip_type)
 }
 
 function deriveDoors(quoteData: QuoteData): ProposalDoor[] {
   if (quoteData.doors && quoteData.doors.length > 0) {
     return quoteData.doors
   }
+
+  const quantity = Math.min(99, Math.max(1, Math.trunc(quoteData.input.door_quantity ?? 1) || 1))
+  const unitPrice =
+    quoteData.result?.totals?.retailBeforeInstallation ??
+    quoteData.calculated.final_quote_price
 
   return [
     {
@@ -51,9 +48,15 @@ function deriveDoors(quoteData: QuoteData): ProposalDoor[] {
       strip_type: quoteData.input.strip_type,
       headrail_type: quoteData.input.headrail_type,
       number_of_strips: quoteData.calculated.strip_count,
-      final_door_price: quoteData.calculated.final_quote_price,
+      final_door_price: unitPrice,
+      quantity,
     },
   ]
+}
+
+function doorLineTotal(door: ProposalDoor): number {
+  const qty = Math.min(99, Math.max(1, Math.trunc(door.quantity ?? 1) || 1))
+  return round2(door.final_door_price * qty)
 }
 
 export async function generateProposalPdf(quoteData: QuoteData): Promise<Uint8Array> {
@@ -119,12 +122,15 @@ export async function generateProposalPdf(quoteData: QuoteData): Promise<Uint8Ar
 
   y -= 10
 
-  const descriptionColX = left
+  const qtyColX = left + 6
+  const descriptionColX = left + 36
+  const calcColX = 398
   const unitColX = 430
   const totalColX = 510
+  const calcGrey = rgb(0.55, 0.55, 0.55)
 
   page.drawRectangle({ x: left, y: y - 3, width: right - left, height: 18, color: rgb(0.94, 0.95, 0.99) })
-  page.drawText('Description Of The Item', { x: descriptionColX + 4, y: y + 1, size: 10, font: boldFont })
+  page.drawText('Description Of The Item', { x: descriptionColX, y: y + 1, size: 10, font: boldFont })
   page.drawText('Unit Cost', { x: unitColX, y: y + 1, size: 10, font: boldFont })
   page.drawText('Total Cost', { x: totalColX, y: y + 1, size: 10, font: boldFont })
 
@@ -133,24 +139,36 @@ export async function generateProposalPdf(quoteData: QuoteData): Promise<Uint8Ar
   const doors = deriveDoors(quoteData)
 
   doors.forEach(door => {
-    const headrailLabel = capitalize(door.headrail_type)
+    const headrailLabel = formatProposalHeadrailLabel(door.headrail_type)
     const profileLabel = toLegacyStripProfileLabel(door)
+    const qty = Math.min(99, Math.max(1, Math.trunc(door.quantity ?? 1) || 1))
+    const unitPrice = door.final_door_price
+    const lineTotal = doorLineTotal(door)
 
-    const lines = [
-      `1 PVC Strip Door ${door.height_mm} mm Height x ${door.width_mm} mm Width`,
+    const detailLines = [
+      `PVC Strip Door ${door.height_mm} mm Height x ${door.width_mm} mm Width`,
       `Headrail ${headrailLabel} ${door.overlap_mm} mm overlap`,
       `PVC Strips ${door.strip_width_mm} mm Width x ${door.thickness_mm} mm Thick`,
       `Strip Type ${profileLabel}`,
-      `${door.number_of_strips}`,
     ]
 
-    lines.forEach((line, index) => {
-      page.drawText(line, { x: descriptionColX + 4, y, size: 10, font: regularFont })
-
+    detailLines.forEach((line, index) => {
       if (index === 0) {
-        const price = currency(door.final_door_price)
-        page.drawText(price, { x: unitColX, y, size: 10, font: regularFont })
-        page.drawText(price, { x: totalColX, y, size: 10, font: regularFont })
+        page.drawText(String(qty), { x: qtyColX, y, size: 10, font: regularFont })
+        page.drawText(currency(unitPrice), { x: unitColX, y, size: 10, font: regularFont })
+        page.drawText(currency(lineTotal), { x: totalColX, y, size: 10, font: regularFont })
+      }
+
+      page.drawText(line, { x: descriptionColX, y, size: 10, font: regularFont })
+
+      if (index === detailLines.length - 1) {
+        page.drawText(String(door.number_of_strips), {
+          x: calcColX,
+          y,
+          size: 10,
+          font: regularFont,
+          color: calcGrey,
+        })
       }
 
       y -= 13
@@ -163,13 +181,15 @@ export async function generateProposalPdf(quoteData: QuoteData): Promise<Uint8Ar
   const installationCost = Number.isFinite(quoteData.installationCost) ? Number(quoteData.installationCost) : undefined
 
   if (freightCost !== undefined) {
-    page.drawText('1 Freight', { x: descriptionColX + 4, y, size: 10, font: regularFont })
+    page.drawText('1', { x: qtyColX, y, size: 10, font: regularFont })
+    page.drawText('Freight', { x: descriptionColX, y, size: 10, font: regularFont })
     page.drawText(currency(freightCost), { x: totalColX, y, size: 10, font: regularFont })
     y -= 14
   }
 
   if (installationCost !== undefined) {
-    page.drawText('1 Installation Of PVC Strip Door/s', { x: descriptionColX + 4, y, size: 10, font: regularFont })
+    page.drawText('1', { x: qtyColX, y, size: 10, font: regularFont })
+    page.drawText('Installation Of PVC Strip Door/s', { x: descriptionColX, y, size: 10, font: regularFont })
     page.drawText(currency(installationCost), { x: totalColX, y, size: 10, font: regularFont })
     y -= 14
   }
@@ -178,7 +198,7 @@ export async function generateProposalPdf(quoteData: QuoteData): Promise<Uint8Ar
   page.drawLine({ start: { x: left, y }, end: { x: right, y }, thickness: 1, color: rgb(0.8, 0.8, 0.8) })
   y -= 18
 
-  const doorsTotal = round2(doors.reduce((sum, door) => sum + door.final_door_price, 0))
+  const doorsTotal = round2(doors.reduce((sum, door) => sum + doorLineTotal(door), 0))
   const subtotalCost = round2(doorsTotal + (freightCost || 0) + (installationCost || 0))
   const gst = round2(subtotalCost * 0.1)
   const totalCost = round2(subtotalCost + gst)
