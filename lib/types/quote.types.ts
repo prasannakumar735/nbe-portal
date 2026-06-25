@@ -25,6 +25,9 @@ export interface QuoteCalculatedValues {
   subtotal: number
   markup_percent: number
   final_quote_price: number
+  installation_price?: number
+  freight_price?: number
+  retail_before_installation?: number
 }
 
 export interface ProposalCustomerDetails {
