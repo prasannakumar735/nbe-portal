@@ -17,6 +17,7 @@ import type { ProjectPieDatum } from '@/components/dashboard/charts/ProjectPieCh
 import type { TrendLineDatum } from '@/components/dashboard/charts/TrendLineChart';
 import type { BillableStackedDatum } from '@/components/dashboard/charts/BillableStackedBar';
 import { pickSearchParam, type AppSearchParams } from '@/lib/app/searchParams';
+import { PvcWorkflowDashboardBanner } from '@/components/pvc/PvcWorkflowDashboardBanner';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 type DashboardQuery = {
@@ -367,6 +368,7 @@ export default async function DashboardPage({ searchParams, }: {
           </div>
 
           <div className="space-y-6 pt-4">
+            <PvcWorkflowDashboardBanner />
             {errorMessage ? (<DashboardErrorState message={errorMessage}/>) : isCustomIncomplete ? (<DashboardErrorState message="Select a custom date range to view analytics."/>) : (<Suspense fallback={<LoadingSkeleton rows={3}/>}>
                 {role === 'admin' || role === 'manager' ? (<AdminDashboard data={adminData} charts={charts} entriesCount={entries.length} employeeLeaderboard={employeeLeaderboard} recentEntries={recentEntries}/>) : (<EmployeeDashboard data={employeeData} charts={charts} entriesCount={entries.length}/>)}
               </Suspense>)}

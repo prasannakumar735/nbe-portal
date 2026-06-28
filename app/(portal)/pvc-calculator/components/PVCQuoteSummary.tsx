@@ -9,7 +9,13 @@ interface PVCQuoteSummaryProps {
   installationPrice: number
   freightPrice: number
   canGenerate: boolean
-  isSavingQuote: boolean
+  canSave?: boolean
+  isSavingDraft?: boolean
+  isGeneratingPdf?: boolean
+  /** @deprecated use isGeneratingPdf */
+  isSavingQuote?: boolean
+  saveLabel?: string
+  onSaveQuote?: () => void
   onGenerateQuote: () => void
 }
 
@@ -27,9 +33,15 @@ export function PVCQuoteSummary({
   installationPrice,
   freightPrice,
   canGenerate,
-  isSavingQuote,
+  canSave = false,
+  isSavingDraft = false,
+  isGeneratingPdf = false,
+  isSavingQuote = false,
+  saveLabel = 'Save quote',
+  onSaveQuote,
   onGenerateQuote,
 }: PVCQuoteSummaryProps) {
+  const pdfBusy = isGeneratingPdf || isSavingQuote
   const supplyTotal = aggregateQuoteSupply(quoteLines, pendingLine)
   const sizeCount = quoteLines.length + (pendingLine ? 1 : 0)
   const finalTotal = supplyTotal + installationPrice + freightPrice
@@ -65,13 +77,24 @@ export function PVCQuoteSummary({
         </div>
       </dl>
 
+      {onSaveQuote && (
+        <button
+          type="button"
+          onClick={onSaveQuote}
+          disabled={!canSave || isSavingDraft || pdfBusy}
+          className="mt-4 w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isSavingDraft ? 'Saving…' : saveLabel}
+        </button>
+      )}
+
       <button
         type="button"
         onClick={onGenerateQuote}
-        disabled={!canGenerate || isSavingQuote}
-        className="mt-4 w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={!canGenerate || pdfBusy || isSavingDraft}
+        className="mt-3 w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {isSavingQuote ? 'Generating Quote...' : 'Generate Quote PDF'}
+        {pdfBusy ? 'Generating Quote...' : 'Generate Quote PDF'}
       </button>
       {!canGenerate && (
         <p className="mt-2 text-xs text-slate-500">Calculate a door to see pricing, then generate the PDF.</p>

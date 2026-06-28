@@ -3,10 +3,12 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { generateProposalPdf } from '@/lib/pdf/generateProposalPdf'
 import { uploadPdfToOneDrive } from '@/lib/onedrive/uploadPdf'
 import { sendQuoteEmail } from '@/lib/email/sendQuoteEmail'
-import { PVC_CALCULATOR_VERSION } from '@/lib/calculators/pvcPricingEngine'
+import { pvcQuoteFinalizeRowFromPdf } from '@/lib/pvc/pvcQuotesDb'
 import type { ProposalDoor, QuoteData, QuoteGenerateRequest, QuoteGenerateResponse } from '@/lib/types/quote.types'
 
 export const runtime = 'nodejs'
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function hasGraphCredentials(): boolean {
   return Boolean(
@@ -115,7 +117,6 @@ function validateQuoteData(quoteData: QuoteData): void {
 async function insertQuoteRecord(
   supabase: SupabaseClient,
   quoteData: QuoteData,
-  pdfUrl: string,
 ): Promise<string | null> {
   const requestedShape = {
     width_mm: quoteData.input.width_mm,
@@ -123,9 +124,7 @@ async function insertQuoteRecord(
     strip_type: quoteData.input.strip_type,
     strip_width_mm: quoteData.input.strip_width_mm,
     strip_count: quoteData.calculated.strip_count,
-    final_price: quoteData.calculated.final_quote_price,
-    calculator_version: PVC_CALCULATOR_VERSION,
-    pdf_url: pdfUrl,
+    total_price: quoteData.calculated.final_quote_price,
     created_at: new Date().toISOString(),
   }
 
@@ -149,9 +148,7 @@ async function insertQuoteRecord(
     headrail_type: quoteData.input.headrail_type,
     installation_type: quoteData.input.install_type,
     subtotal: quoteData.calculated.subtotal,
-    final_price: quoteData.calculated.final_quote_price,
-    calculator_version: PVC_CALCULATOR_VERSION,
-    pdf_url: pdfUrl,
+    total_price: quoteData.calculated.final_quote_price,
     created_at: new Date().toISOString(),
   }
 
@@ -168,10 +165,36 @@ async function insertQuoteRecord(
   return fallbackInsert.data?.id ? String(fallbackInsert.data.id) : null
 }
 
+async function finalizeDraftQuoteRecord(
+  supabase: SupabaseClient,
+  draftId: string,
+  quoteData: QuoteData,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('pvc_quotes')
+    .update(
+      pvcQuoteFinalizeRowFromPdf({
+        calculated: quoteData.calculated,
+        customerDetails: quoteData.customerDetails,
+      }),
+    )
+    .eq('id', draftId)
+    .select('id')
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  return data?.id ? String(data.id) : draftId
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as QuoteGenerateRequest
     const quoteData = body.quoteData
+    const draftIdRaw = typeof body.draftId === 'string' ? body.draftId.trim() : ''
+    const draftId = UUID_RE.test(draftIdRaw) ? draftIdRaw : null
 
     if (!quoteData) {
       throw new Error('Missing quoteData in request body.')
@@ -213,7 +236,11 @@ export async function POST(request: NextRequest) {
     if (hasSupabaseWriteCredentials()) {
       try {
         const supabase = createSupabaseWriteClient()
-        quoteId = await insertQuoteRecord(supabase, quoteData, oneDriveWebUrl || 'local-download')
+        if (draftId) {
+          quoteId = await finalizeDraftQuoteRecord(supabase, draftId, quoteData)
+        } else {
+          quoteId = await insertQuoteRecord(supabase, quoteData)
+        }
         databaseStatus = 'inserted'
       } catch (dbError) {
         databaseStatus = 'failed'

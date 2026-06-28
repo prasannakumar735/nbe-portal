@@ -1,6 +1,7 @@
 'use client'
 
 import type {
+  PVCDoorType,
   PVCHangerWidth,
   PVCHeadrailType,
   PVCInstallationType,
@@ -23,6 +24,7 @@ export interface PVCFormValues {
   thickness: number
   overlap: PVCOverlapMm
   headrailType: PVCHeadrailType
+  doorType: PVCDoorType
   installType: PVCInstallationType
   manualInstallationPrice: number
   manualFreightPrice: number
@@ -58,6 +60,10 @@ const HEADRAIL_TYPES: Array<{ value: PVCHeadrailType; label: string }> = [
 const INSTALL_TYPES: Array<{ value: PVCInstallationType; label: string }> = [
   { value: 'supply_only', label: 'Supply Only' },
   { value: 'supply_install', label: 'Supply + Install' },
+]
+const DOOR_TYPES: Array<{ value: PVCDoorType; label: string }> = [
+  { value: 'whole_door', label: 'Whole door' },
+  { value: 'strips_only', label: 'Strips only' },
 ]
 
 function inputBaseClassName() {
@@ -240,6 +246,24 @@ export function PVCForm({ values, isLoading, onChange, onSubmit }: PVCFormProps)
             </select>
           </label>
         )}
+
+        <label className="space-y-1">
+          <span className="text-sm font-medium text-slate-700">Door type</span>
+          <select
+            className={inputBaseClassName()}
+            value={values.doorType}
+            onChange={(event) => onChange('doorType', event.target.value as PVCDoorType)}
+          >
+            {DOOR_TYPES.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-slate-500">
+            Strips only prices PVC strip material (no headrail, hangers, or rivets). Whole door includes headrail assembly.
+          </span>
+        </label>
 
         <label className="space-y-1">
           <span className="text-sm font-medium text-slate-700">Headrail Type</span>

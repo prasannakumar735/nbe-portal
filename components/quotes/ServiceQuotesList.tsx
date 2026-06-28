@@ -6,6 +6,7 @@ import { downloadServiceQuotePdf } from '@/components/quotes/downloadServiceQuot
 import type { RapidDoorQuoteFormValues, ServiceQuoteFormValues } from '@/components/quotes/types'
 import { downloadRapidDoorQuotePdf } from '@/components/quotes/downloadRapidDoorQuotePdf'
 import { formatQuoteTaxonomyLine } from '@/lib/quotes/quoteTaxonomy'
+import { PVCQuotesList } from '@/components/pvc/PVCQuotesList'
 
 type QuoteListRow = {
   id: string
@@ -96,12 +97,25 @@ function ServiceQuotesList() {
             Your saved quotes. Search by company name or quote number. Create a new quote anytime.
           </p>
         </div>
-        <Link
-          href="/dashboard/quotes/service/new"
-          className="inline-flex items-center justify-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-        >
-          New Quote
-        </Link>
+        <div className="flex flex-col gap-2 sm:items-end">
+          <Link
+            href="/dashboard/quotes/service/new"
+            className="inline-flex items-center justify-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            New Quote
+          </Link>
+          <div className="flex flex-wrap justify-end gap-3 text-sm">
+            <Link href="/pvc-calculator" className="font-medium text-slate-700 underline decoration-slate-300 underline-offset-2 hover:text-slate-900">
+              PVC strip calculator
+            </Link>
+            <Link
+              href="/pvc-calculator/new"
+              className="font-medium text-slate-700 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
+            >
+              New PVC quote
+            </Link>
+          </div>
+        </div>
       </div>
 
       <form
@@ -259,6 +273,10 @@ function ServiceQuotesList() {
           </div>
         </>
       )}
+
+      <section id="saved-pvc-quotes" className="border-t border-slate-200 pt-8">
+        <PVCQuotesList embedded />
+      </section>
     </div>
   )
 }

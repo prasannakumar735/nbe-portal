@@ -34,20 +34,7 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 /** Select value when technician adds a door not listed in the site registry. */
 const OPTION_ADD_DOOR_MANUALLY = '__adhoc_manual__'
 
-function extractDoorSerial(label: string): string | null {
-  const raw = String(label ?? '')
-  if (!raw.trim()) return null
-
-  // Prefer current-style IDs like P0823; otherwise fall back to older PJ####; otherwise any P####.
-  const pLeadingZero = raw.match(/\bP0\d+\b/i)?.[0]
-  if (pLeadingZero) return pLeadingZero.toUpperCase()
-
-  const pj = raw.match(/\bPJ\d+\b/i)?.[0]
-  if (pj) return pj.toUpperCase()
-
-  const p = raw.match(/\bP\d+\b/i)?.[0]
-  return p ? p.toUpperCase() : null
-}
+import { extractDoorSerial } from '@/lib/door/doorSerial'
 
 function emptyDoorMaster(): DoorMasterSnapshot {
   return {

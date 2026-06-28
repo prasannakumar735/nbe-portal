@@ -1,5 +1,10 @@
 import { ZodError } from 'zod'
 import { fail, ok, requireManagerOrAdminApi } from '@/app/api/admin/_utils'
+import {
+  doorLabelExistsAtLocation,
+  DUPLICATE_LABEL_MESSAGE,
+  isDoorsUniqueViolation,
+} from '@/lib/admin/doorRegistryUnique'
 import { upsertDoorSchema } from '@/lib/validation/admin-clients'
 
 export const runtime = 'nodejs'
@@ -23,6 +28,15 @@ export async function POST(request: Request) {
       install_date: parsed.install_date,
     }
 
+    const duplicate = await doorLabelExistsAtLocation(
+      auth.supabase,
+      parsed.client_location_id,
+      parsed.door_label,
+    )
+    if (duplicate) {
+      return fail(DUPLICATE_LABEL_MESSAGE, 409)
+    }
+
     const { data, error } = await auth.supabase
       .from('doors')
       .insert(insertRow)
@@ -30,6 +44,9 @@ export async function POST(request: Request) {
       .single()
 
     if (error) {
+      if (isDoorsUniqueViolation(error)) {
+        return fail(DUPLICATE_LABEL_MESSAGE, 409)
+      }
       return fail(error.message, 400)
     }
 

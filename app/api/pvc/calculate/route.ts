@@ -7,6 +7,7 @@ import type {
   PVCHangerWidth,
   PVCHeadrailType,
   PVCInstallationType,
+  PVCDoorType,
   PVCOverlapMm,
   PVCStripType,
   PVCStripWidth,
@@ -18,6 +19,7 @@ const HANGER_WIDTHS: PVCHangerWidth[] = [100, 150, 200, 300, 400, 1200, 1370]
 const OVERLAP_VALUES: number[] = [0, 10, 15, 20, 25, 33, 50, 66, 100]
 const HEADRAILS: PVCHeadrailType[] = ['stainless', 'galvanized', 'aluminium', 'plastic']
 const INSTALL_TYPES: PVCInstallationType[] = ['supply_only', 'supply_install']
+const DOOR_TYPES: PVCDoorType[] = ['whole_door', 'strips_only']
 
 function createPricingClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -50,6 +52,7 @@ function validateRequestBody(body: Record<string, unknown>): PVCCalculatorInput 
   const overlap = asNumber(body.overlapMm ?? body.overlap) as PVCOverlapMm
   const headrailType = body.headrailType as PVCHeadrailType
   const installType = body.installType as PVCInstallationType
+  const doorTypeRaw = String(body.doorType ?? 'whole_door').trim() as PVCDoorType
   const manualInstallationRaw = asNumber(body.manualInstallationPrice ?? body.installationPrice)
 
   const manualFreightRaw = asNumber(body.manualFreightPrice ?? body.freightPrice)
@@ -113,6 +116,7 @@ function validateRequestBody(body: Record<string, unknown>): PVCCalculatorInput 
   if (!INSTALL_TYPES.includes(installType)) {
     throw new Error('Invalid installType.')
   }
+  const doorType = DOOR_TYPES.includes(doorTypeRaw) ? doorTypeRaw : 'whole_door'
 
   return {
     openingWidthMm: width,
@@ -125,6 +129,7 @@ function validateRequestBody(body: Record<string, unknown>): PVCCalculatorInput 
     overlapMm: overlap,
     headrailType,
     installationType: installType,
+    doorType,
     manualInstallationPrice,
     manualFreightPrice,
     freightRequired: installType === 'supply_install' ? freightRequired : undefined,

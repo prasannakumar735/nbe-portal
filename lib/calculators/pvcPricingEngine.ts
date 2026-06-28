@@ -116,6 +116,10 @@ function createLineItem(
   }
 }
 
+function isWholeDoorSupply(input: PVCCalculatorInput): boolean {
+  return (input.doorType ?? 'whole_door') !== 'strips_only'
+}
+
 function getDoorCoverPerSideMm(input: PVCCalculatorInput, settings: PVCPricingSettings): number {
   if (input.stripWidth === 100) {
     return settings.door_cover_mm
@@ -227,8 +231,8 @@ export function calculateLabour(
   const ribbedMinutes = isRibbedProfile(input.stripType)
     ? stripCount * settings.ribbed_minutes_per_strip
     : 0
-  const headrailMinutes = settings.minutes_per_headrail
-  const setupMinutes = settings.install_setup_minutes ?? 0
+  const headrailMinutes = isWholeDoorSupply(input) ? settings.minutes_per_headrail : 0
+  const setupMinutes = isWholeDoorSupply(input) ? (settings.install_setup_minutes ?? 0) : 0
   const totalMinutes = stripMinutes + ribbedMinutes + headrailMinutes + setupMinutes
   const labourHours = totalMinutes / 60
   const labourCost = round2(labourHours * settings.labour_rate_per_hour)
@@ -252,13 +256,14 @@ export function calculatePVCQuote(
   const stripLayout = calculateStripLayout(input, settings)
   const hardware = calculateHardware(input, stripLayout, settings, prices.rivetsPerStrip)
   const labour = calculateLabour(input, stripLayout.stripCount, settings)
+  const includeHeadrail = isWholeDoorSupply(input)
 
   const stripMeters = stripLayout.billableStripMeters
   const stripCost = round2(stripMeters * prices.stripUnitPrice)
-  const headrailMetersRaw = hardware.headrailLengthMm / 1000
-  const headrailCost = round2(headrailMetersRaw * prices.headrailUnitPrice)
-  const bracketCost = round2(hardware.bracketCount * prices.bracketUnitPrice)
-  const rivetCost = round2(hardware.rivetCount * prices.rivetUnitPrice)
+  const headrailMetersRaw = includeHeadrail ? hardware.headrailLengthMm / 1000 : 0
+  const headrailCost = includeHeadrail ? round2(headrailMetersRaw * prices.headrailUnitPrice) : 0
+  const bracketCost = includeHeadrail ? round2(hardware.bracketCount * prices.bracketUnitPrice) : 0
+  const rivetCost = includeHeadrail ? round2(hardware.rivetCount * prices.rivetUnitPrice) : 0
   const labourCost = round2(labour.labourCost)
   const packagingCost = round2(prices.packagingUnitPrice)
 
@@ -277,9 +282,30 @@ export function calculatePVCQuote(
 
   const lineItems: PVCQuoteLineItem[] = [
     createLineItem('strip', 'PVC Strip Material', prices.stripProductId, stripMeters, prices.stripUnitPrice, 'm'),
-    createLineItem('headrail', 'Headrail', prices.headrailProductId, headrailMetersRaw, prices.headrailUnitPrice, 'm'),
-    createLineItem('bracket', 'Hanger / Brackets', prices.bracketProductId, hardware.bracketCount, prices.bracketUnitPrice, 'ea'),
-    createLineItem('fitting', 'Rivets / Fittings', prices.fittingProductId, hardware.rivetCount, prices.rivetUnitPrice, 'ea'),
+    createLineItem(
+      'headrail',
+      'Headrail',
+      prices.headrailProductId,
+      includeHeadrail ? headrailMetersRaw : 0,
+      prices.headrailUnitPrice,
+      'm',
+    ),
+    createLineItem(
+      'bracket',
+      'Hanger / Brackets',
+      prices.bracketProductId,
+      includeHeadrail ? hardware.bracketCount : 0,
+      prices.bracketUnitPrice,
+      'ea',
+    ),
+    createLineItem(
+      'fitting',
+      'Rivets / Fittings',
+      prices.fittingProductId,
+      includeHeadrail ? hardware.rivetCount : 0,
+      prices.rivetUnitPrice,
+      'ea',
+    ),
     createLineItem('packaging', 'Packaging Tube', prices.packagingProductId, 1, prices.packagingUnitPrice, 'ea'),
   ]
 

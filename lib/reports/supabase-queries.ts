@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { mergeGpsPointFromRow } from '@/lib/timecard/gpsDbColumns'
 import { getErrorMessage, toThrownError } from '@/lib/reports/errorMessage'
+import { readPvcQuoteTotal } from '@/lib/pvc/pvcQuoteTotalPrice'
 import type {
   FilterOptions,
   GpsReportRow,
@@ -395,7 +396,7 @@ export async function fetchReportsSummary(supabase: SupabaseClient, filters: Rep
 
   const pvcRes = await supabase
     .from('pvc_quotes')
-    .select('final_price, created_at')
+    .select('total_price, created_at')
     .gte('created_at', `${filters.dateFrom}T00:00:00.000Z`)
     .lte('created_at', `${filters.dateTo}T23:59:59.999Z`)
 
@@ -415,7 +416,7 @@ export async function fetchReportsSummary(supabase: SupabaseClient, filters: Rep
     revenueByDayMap.set(d, (revenueByDayMap.get(d) ?? 0) + v)
   })
   ;(pvcRows ?? []).forEach(q => {
-    const v = Number((q as { final_price?: number }).final_price) || 0
+    const v = readPvcQuoteTotal(q as { total_price?: number; final_price?: number })
     revenueTotal += v
     const d = String((q as { created_at: string }).created_at).slice(0, 10)
     revenueByDayMap.set(d, (revenueByDayMap.get(d) ?? 0) + v)
@@ -905,7 +906,7 @@ export async function fetchQuotesReport(
 
   const pvcRes = await supabase
     .from('pvc_quotes')
-    .select('id, final_price, created_at')
+    .select('id, total_price, created_at')
     .gte('created_at', `${filters.dateFrom}T00:00:00.000Z`)
     .lte('created_at', `${filters.dateTo}T23:59:59.999Z`)
     .order('created_at', { ascending: true })
@@ -920,7 +921,10 @@ export async function fetchQuotesReport(
   const serviceQuotesCount = quotesRows.length
   const serviceQuotesTotal = (quotesRows ?? []).reduce((s, q) => s + (Number((q as { total?: number }).total) || 0), 0)
   const pvcQuotesCount = (pvcRows ?? []).length
-  const pvcQuotesTotal = (pvcRows ?? []).reduce((s, q) => s + (Number((q as { final_price?: number }).final_price) || 0), 0)
+  const pvcQuotesTotal = (pvcRows ?? []).reduce(
+    (s, q) => s + readPvcQuoteTotal(q as { total_price?: number; final_price?: number }),
+    0,
+  )
 
   const byWeek = new Map<string, { service: number; pvc: number }>()
   const addWeek = (iso: string, field: 'service' | 'pvc', v: number) => {
@@ -940,7 +944,11 @@ export async function fetchQuotesReport(
     addWeek(String((q as { created_at: string }).created_at), 'service', Number((q as { total?: number }).total) || 0)
   )
   ;(pvcRows ?? []).forEach(q =>
-    addWeek(String((q as { created_at: string }).created_at), 'pvc', Number((q as { final_price?: number }).final_price) || 0)
+    addWeek(
+      String((q as { created_at: string }).created_at),
+      'pvc',
+      readPvcQuoteTotal(q as { total_price?: number; final_price?: number }),
+    )
   )
 
   const trends: QuoteTrendRow[] = [...byWeek.entries()]
@@ -969,10 +977,11 @@ export async function fetchQuotesReport(
   })
 
   const pvcLines: QuotePvcLine[] = (pvcRows ?? []).map(q => {
-    const row = q as { id: string; final_price?: number | null; created_at: string }
+    const row = q as { id: string; total_price?: number | null; final_price?: number | null; created_at: string }
+    const total = readPvcQuoteTotal(row)
     return {
       id: String(row.id),
-      finalPrice: Math.round((Number(row.final_price) || 0) * 100) / 100,
+      finalPrice: Math.round(total * 100) / 100,
       createdAtLabel: String(row.created_at ?? '').slice(0, 10),
     }
   })

@@ -5,6 +5,7 @@ import { createSupabaseClient } from '@/lib/supabase/client';
 import { canApproveMaintenanceReport } from '@/lib/auth/roles';
 import type { ClientLocationOption, ClientOption } from '@/lib/types/maintenance.types';
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
+import { composeDoorServiceQrLabelPngDataUrl } from '@/lib/door/doorServiceQrLabel'
 type DoorOption = {
     id: string;
     door_label: string;
@@ -20,6 +21,8 @@ export default function QrCodesPage() {
     const [locationId, setLocationId] = useState('');
     const [doorId, setDoorId] = useState('');
     const [error, setError] = useState('');
+    const [generatedLabelUrl, setGeneratedLabelUrl] = useState('');
+    const [isGenerating, setIsGenerating] = useState(false);
     const isAllowed = canApproveMaintenanceReport(profile ?? undefined);
     const selectedDoor = doors.find(item => item.id === doorId);
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
@@ -91,68 +94,41 @@ export default function QrCodesPage() {
             }));
             setDoors(options);
             setDoorId('');
+            setGeneratedLabelUrl('');
             setError('');
         };
         void loadDoors();
     }, [locationId, supabase]);
-    const handleDownload = async () => {
-        if (!doorId || !qrImageUrl)
+    useEffect(() => {
+        setGeneratedLabelUrl('');
+    }, [doorId]);
+    const handleGenerate = async () => {
+        if (!doorId || !qrImageUrl || !selectedDoor)
+            return;
+        setIsGenerating(true);
+        setError('');
+        try {
+            const pngDataUrl = await composeDoorServiceQrLabelPngDataUrl({
+                qrImageSrc: qrImageUrl,
+                doorLabel: selectedDoor.door_label,
+            });
+            setGeneratedLabelUrl(pngDataUrl);
+        }
+        catch {
+            setError('Failed to generate door QR label.');
+            setGeneratedLabelUrl('');
+        }
+        finally {
+            setIsGenerating(false);
+        }
+    };
+    const handleDownload = () => {
+        if (!generatedLabelUrl)
             return;
         try {
-            const loadImage = (src: string) => new Promise<HTMLImageElement>((resolve, reject) => {
-                const img = new Image();
-                img.onload = () => resolve(img);
-                img.onerror = () => reject(new Error('Failed to load image.'));
-                img.src = src;
-            });
-            const [logoImage, qrImage] = await Promise.all([
-                loadImage('/NBE_LOGO_BK_PL.png'),
-                loadImage(qrImageUrl),
-            ]);
-            const canvas = document.createElement('canvas');
-            const width = 900;
-            const height = 1260;
-            canvas.width = width;
-            canvas.height = height;
-            const context = canvas.getContext('2d');
-            if (!context)
-                throw new Error('Failed to generate QR code image.');
-            context.fillStyle = '#ffffff';
-            context.fillRect(0, 0, width, height);
-            const logoWidth = 480;
-            const logoHeight = 250;
-            const logoX = (width - logoWidth) / 2;
-            const logoY = 50;
-            context.drawImage(logoImage, logoX, logoY, logoWidth, logoHeight);
-            context.fillStyle = '#0f172a';
-            context.textAlign = 'center';
-            context.font = 'bold 66px Arial';
-            context.fillText('(03) 9357 5858', width / 2, 390);
-            context.font = 'bold 60px Arial';
-            context.fillText('service@nbeaustralia.com.au', width / 2, 470);
-            const qrWrapperX = 140;
-            const qrWrapperY = 530;
-            const qrWrapperSize = 620;
-            const radius = 14;
-            context.fillStyle = '#ffffff';
-            context.beginPath();
-            context.moveTo(qrWrapperX + radius, qrWrapperY);
-            context.lineTo(qrWrapperX + qrWrapperSize - radius, qrWrapperY);
-            context.quadraticCurveTo(qrWrapperX + qrWrapperSize, qrWrapperY, qrWrapperX + qrWrapperSize, qrWrapperY + radius);
-            context.lineTo(qrWrapperX + qrWrapperSize, qrWrapperY + qrWrapperSize - radius);
-            context.quadraticCurveTo(qrWrapperX + qrWrapperSize, qrWrapperY + qrWrapperSize, qrWrapperX + qrWrapperSize - radius, qrWrapperY + qrWrapperSize);
-            context.lineTo(qrWrapperX + radius, qrWrapperY + qrWrapperSize);
-            context.quadraticCurveTo(qrWrapperX, qrWrapperY + qrWrapperSize, qrWrapperX, qrWrapperY + qrWrapperSize - radius);
-            context.lineTo(qrWrapperX, qrWrapperY + radius);
-            context.quadraticCurveTo(qrWrapperX, qrWrapperY, qrWrapperX + radius, qrWrapperY);
-            context.closePath();
-            context.fill();
-            const qrInset = 36;
-            context.drawImage(qrImage, qrWrapperX + qrInset, qrWrapperY + qrInset, qrWrapperSize - qrInset * 2, qrWrapperSize - qrInset * 2);
-            const pngDataUrl = canvas.toDataURL('image/png');
             const link = document.createElement('a');
             const safeDoorName = (selectedDoor?.door_label || 'door').replace(/\s+/g, '-').toLowerCase();
-            link.href = pngDataUrl;
+            link.href = generatedLabelUrl;
             link.download = `door-qr-${safeDoorName}.png`;
             link.click();
         }
@@ -217,25 +193,47 @@ export default function QrCodesPage() {
       </section>
 
       {doorId && (<section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mx-auto flex max-w-sm flex-col items-center gap-3 rounded-xl border border-slate-300 bg-white p-4 text-center">
-            <img src="/NBE_LOGO_BK_PL.png" alt="NBE Australia" className="h-32 w-auto object-contain"/>
-
-            <div className="-mt-2 text-center leading-tight">
-              <p className="text-2xl font-bold text-slate-900">(03) 9357 5858</p>
-              <p className="text-[20px] font-bold text-slate-900">service@nbeaustralia.com.au</p>
-            </div>
-
-            <div className="rounded-md bg-white p-2">
-              <img src={qrImageUrl} alt="Door QR code" className="h-56 w-56"/>
-            </div>
+          <div className="mx-auto flex max-w-md flex-col items-center gap-4 text-center">
+            {generatedLabelUrl ? (
+              <img
+                src={generatedLabelUrl}
+                alt="Door service QR label"
+                className="max-h-[28rem] w-auto max-w-full rounded-lg border border-slate-200 shadow-sm"
+              />
+            ) : (
+              <p className="text-sm text-slate-600">
+                Generate a label to place the door QR code on the NBE service template and fill in the serial number.
+              </p>
+            )}
 
             <div className="flex w-full flex-col gap-2 sm:flex-row">
-              <a href={baseUrl} target="_blank" rel="noreferrer" className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                View QR Code
-              </a>
-              <button type="button" onClick={() => void handleDownload()} className="h-11 flex-1 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800">
-                Download QR Code
+              <button
+                type="button"
+                disabled={isGenerating}
+                onClick={() => void handleGenerate()}
+                className="h-11 flex-1 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isGenerating ? 'Generating…' : 'Generate QR Code'}
               </button>
+              {generatedLabelUrl ? (
+                <>
+                  <a
+                    href={qrTargetUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Open door link
+                  </a>
+                  <button
+                    type="button"
+                    onClick={handleDownload}
+                    className="h-11 flex-1 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Download label
+                  </button>
+                </>
+              ) : null}
             </div>
           </div>
         </section>)}

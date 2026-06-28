@@ -135,6 +135,61 @@ test('PVC pricing engine strip layout uses hanger spacing from Excel', () => {
   assert.ok(Math.abs(result.breakdown.headrailLength - 1650) < 0.01)
 })
 
+test('PVC strips only excludes headrail hardware and headrail labour from pricing', () => {
+  const settings = {
+    door_cover_mm: 50,
+    headrail_allowance_mm: 0,
+    height_adjust_mm: 40,
+    strip_loading_waste_percent: 5,
+    roll_length_m: 50,
+    material_billing_mode: 'part_materials' as const,
+    labour_minutes_per_strip: 2,
+    minutes_per_headrail: 12.5,
+    ribbed_minutes_per_strip: 1,
+    install_setup_minutes: 0,
+    labour_rate_per_hour: 30,
+    markup_percent: 130,
+  }
+  const prices = {
+    stripProductId: 'strip',
+    headrailProductId: 'headrail',
+    bracketProductId: 'bracket',
+    fittingProductId: 'rivet',
+    labourProductId: 'labour',
+    packagingProductId: 'packaging',
+    stripUnitPrice: 1.45,
+    headrailUnitPrice: 17,
+    bracketUnitPrice: 2.15,
+    rivetUnitPrice: 0.0388,
+    rivetsPerStrip: 3,
+    packagingUnitPrice: 3.81,
+  }
+  const baseInput = {
+    openingWidthMm: 1500,
+    openingHeightMm: 2100,
+    stripType: 'ribbed_polar' as const,
+    stripWidth: 100 as const,
+    stripThicknessMm: 2,
+    overlapMm: 50 as const,
+    hangerWidthMm: 150 as const,
+    stripsPerHanger: 2 as const,
+    headrailType: 'galvanized' as const,
+    installationType: 'supply_install' as const,
+  }
+
+  const wholeDoor = calculatePVCQuote({ ...baseInput, doorType: 'whole_door' }, settings, prices)
+  const stripsOnly = calculatePVCQuote({ ...baseInput, doorType: 'strips_only' }, settings, prices)
+
+  assert.ok(wholeDoor.breakdown.headrailCost > 0)
+  assert.ok(wholeDoor.breakdown.bracketCost > 0)
+  assert.ok(wholeDoor.breakdown.rivetCost > 0)
+  assert.equal(stripsOnly.breakdown.headrailCost, 0)
+  assert.equal(stripsOnly.breakdown.bracketCost, 0)
+  assert.equal(stripsOnly.breakdown.rivetCost, 0)
+  assert.equal(stripsOnly.breakdown.stripCount, wholeDoor.breakdown.stripCount)
+  assert.ok(stripsOnly.totals.finalPrice < wholeDoor.totals.finalPrice)
+})
+
 test('PVC pricing engine matches Excel overlap layout (1800 x 3100, 150 mm strip)', () => {
   const result = calculatePVCQuote(
     {

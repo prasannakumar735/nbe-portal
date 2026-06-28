@@ -10,6 +10,9 @@ export type PVCHeadrailType = 'stainless' | 'galvanized' | 'aluminium' | 'plasti
 
 export type PVCInstallationType = 'supply_only' | 'supply_install'
 
+/** Whole door = strips + headrail hardware/labour; strips only = strip material (+ packaging, strip labour). */
+export type PVCDoorType = 'whole_door' | 'strips_only'
+
 export interface PVCCalculatorInput {
   openingWidthMm: number
   openingHeightMm: number
@@ -21,6 +24,7 @@ export interface PVCCalculatorInput {
   overlapMm: PVCOverlapMm
   headrailType: PVCHeadrailType
   installationType: PVCInstallationType
+  doorType?: PVCDoorType
   /** Site installation price (AUD); excluded from markup when supply + install */
   manualInstallationPrice?: number
   /** Freight (AUD); excluded from markup */

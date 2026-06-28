@@ -83,6 +83,8 @@ export default function AdminClientsPage() {
     const [csvPreview, setCsvPreview] = useState<CsvImportPreview | null>(null);
     const [csvLoading, setCsvLoading] = useState(false);
     const [csvCreateMissing, setCsvCreateMissing] = useState(false);
+    const [doorModalClientId, setDoorModalClientId] = useState('');
+    const [doorModalLocations, setDoorModalLocations] = useState<ClientLocationRecord[]>([]);
     const clientForm = useForm<z.infer<typeof createClientSchema>>({
         resolver: zodResolver(createClientSchema),
         defaultValues: { client_name: '' },
@@ -176,16 +178,15 @@ export default function AdminClientsPage() {
         }));
         setClients(list);
     }
-    async function loadLocations(clientId: string) {
+    async function fetchLocationsForClient(clientId: string): Promise<ClientLocationRecord[]> {
         if (!clientId) {
-            setLocations([]);
-            return;
+            return [];
         }
         const response = await fetch(`/api/maintenance/locations?clientId=${encodeURIComponent(clientId)}`, { cache: 'no-store' });
         const payload = (await response.json().catch(() => ({}))) as {
             locations?: ClientLocationOption[];
         };
-        const list = (payload.locations ?? []).map(item => ({
+        return (payload.locations ?? []).map(item => ({
             id: item.id,
             client_id: item.client_id,
             location_name: item.name,
@@ -193,6 +194,13 @@ export default function AdminClientsPage() {
             suburb: item.suburb ?? null,
             created_at: null,
         }));
+    }
+    async function loadLocations(clientId: string) {
+        if (!clientId) {
+            setLocations([]);
+            return;
+        }
+        const list = await fetchLocationsForClient(clientId);
         setLocations(list);
     }
     async function loadDoors(locationId: string) {
@@ -320,9 +328,8 @@ export default function AdminClientsPage() {
             toast.error(result.error ?? 'Failed to save door');
             return;
         }
-        toast.success(editingDoor ? 'Door updated' : 'Door created');
-        setShowDoorModal(false);
-        setEditingDoor(null);
+        toast.success(editingDoor ? 'Door updated (registry only; approved reports unchanged)' : 'Door created');
+        closeDoorModal();
         doorForm.reset({
             client_location_id: selectedLocationId || '',
             door_label: '',
@@ -400,9 +407,35 @@ export default function AdminClientsPage() {
             suburb: location.suburb ?? '',
         });
     }
-    function openCreateDoorModal() {
+    function closeDoorModal() {
+        setShowDoorModal(false);
         setEditingDoor(null);
+        setDoorModalClientId('');
+        setDoorModalLocations([]);
+    }
+    async function prepareDoorModal(clientId: string, formValues: z.infer<typeof doorFormSchema>) {
+        setDoorModalClientId(clientId);
+        const list = clientId ? await fetchLocationsForClient(clientId) : [];
+        setDoorModalLocations(list);
+        const locationId = formValues.client_location_id;
+        const validLocation = list.some(item => item.id === locationId);
         doorForm.reset({
+            ...formValues,
+            client_location_id: validLocation ? locationId : '',
+        });
+    }
+    async function onDoorModalClientChange(clientId: string) {
+        setDoorModalClientId(clientId);
+        const list = clientId ? await fetchLocationsForClient(clientId) : [];
+        setDoorModalLocations(list);
+        const currentLoc = doorForm.getValues('client_location_id');
+        if (!list.some(item => item.id === currentLoc)) {
+            doorForm.setValue('client_location_id', '', { shouldValidate: true });
+        }
+    }
+    async function openCreateDoorModal() {
+        setEditingDoor(null);
+        await prepareDoorModal(selectedClientId, {
             client_location_id: selectedLocationId || '',
             door_label: '',
             door_type: '',
@@ -414,9 +447,10 @@ export default function AdminClientsPage() {
         });
         setShowDoorModal(true);
     }
-    function openEditDoorModal(door: DoorRecord) {
+    async function openEditDoorModal(door: DoorRecord) {
         setEditingDoor(door);
-        doorForm.reset({
+        const clientId = locations.find(item => item.id === door.client_location_id)?.client_id ?? selectedClientId;
+        await prepareDoorModal(clientId, {
             client_location_id: door.client_location_id,
             door_label: door.door_label,
             door_type: door.door_type,
@@ -683,6 +717,7 @@ export default function AdminClientsPage() {
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
                   <th className="px-3 py-2">Door Label</th>
+                  <th className="px-3 py-2">Location</th>
                   <th className="px-3 py-2">Door Type</th>
                   <th className="px-3 py-2">Description</th>
                   <th className="px-3 py-2 text-right">Actions</th>
@@ -691,6 +726,7 @@ export default function AdminClientsPage() {
               <tbody>
                 {visibleDoors.map(door => (<tr key={door.id} className="border-b border-slate-100">
                     <td className="px-3 py-2 text-slate-800">{door.door_label}</td>
+                    <td className="px-3 py-2 text-slate-700">{locations.find(item => item.id === door.client_location_id)?.location_name ?? '—'}</td>
                     <td className="px-3 py-2 text-slate-700">{door.door_type}</td>
                     <td className="px-3 py-2 text-slate-700">{door.door_description ?? '-'}</td>
                     <td className="px-3 py-2 text-right">
@@ -707,10 +743,34 @@ export default function AdminClientsPage() {
           <div className="w-full max-w-3xl rounded-xl bg-white p-4 shadow-xl">
             <h3 className="text-lg font-semibold text-slate-900">{editingDoor ? 'Edit door' : 'Add door'}</h3>
             <form className="mt-3 grid gap-2 md:grid-cols-2" onSubmit={doorForm.handleSubmit(onSubmitDoor)}>
-              <select {...doorForm.register('client_location_id')} className="h-10 rounded-lg border border-slate-300 px-3 text-sm">
-                <option value="">Select location</option>
-                {filteredLocationsForClient.map(location => (<option key={location.id} value={location.id}>{location.name}</option>))}
-              </select>
+              <SearchableSelect
+                id="admin-door-modal-client"
+                label="Client"
+                value={doorModalClientId}
+                onChange={value => void onDoorModalClientChange(value)}
+                options={clientOptions.map(c => ({ value: c.id, label: c.name }))}
+                allowEmpty
+                emptyLabel="Select client"
+                placeholder="Search clients…"
+                className="md:col-span-2 [&_button]:h-10"
+              />
+              <div className="flex flex-col gap-1">
+                <label htmlFor="admin-door-modal-location" className="text-sm font-medium text-slate-700">Location</label>
+                <select
+                  id="admin-door-modal-location"
+                  {...doorForm.register('client_location_id')}
+                  disabled={!doorModalClientId}
+                  className="h-10 rounded-lg border border-slate-300 px-3 text-sm disabled:opacity-50"
+                >
+                  <option value="">Select location</option>
+                  {doorModalLocations.map(location => (<option key={location.id} value={location.id}>{location.location_name}</option>))}
+                </select>
+              </div>
+              {editingDoor && (
+                <p className="md:col-span-2 text-xs text-slate-600">
+                  Moving client/site updates the door registry and client portal gallery. Approved reports and PDFs are not changed. For portal photos, the report&apos;s site should match this client/location.
+                </p>
+              )}
               <input {...doorForm.register('door_label')} placeholder="Door label" className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
               <input {...doorForm.register('door_type')} placeholder="Door type" className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
               <input {...doorForm.register('install_date')} type="date" className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
@@ -719,7 +779,7 @@ export default function AdminClientsPage() {
               <input {...doorForm.register('cw')} placeholder="CW" className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
               <input {...doorForm.register('ch')} placeholder="CH" className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
               <div className="md:col-span-2 flex justify-end gap-2">
-                <button type="button" className="h-10 rounded-lg border border-slate-300 px-4 text-sm" onClick={() => setShowDoorModal(false)}>Cancel</button>
+                <button type="button" className="h-10 rounded-lg border border-slate-300 px-4 text-sm" onClick={closeDoorModal}>Cancel</button>
                 <button disabled={!canEdit} type="submit" className="h-10 rounded-lg bg-indigo-600 px-4 text-sm font-medium text-white disabled:opacity-50">{editingDoor ? 'Save changes' : 'Create door'}</button>
               </div>
             </form>

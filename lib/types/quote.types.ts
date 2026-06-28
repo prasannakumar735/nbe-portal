@@ -65,6 +65,8 @@ export interface QuoteData {
 
 export interface QuoteGenerateRequest {
   quoteData: QuoteData
+  /** When set, updates an existing pvc_quotes draft instead of inserting a new row. */
+  draftId?: string | null
 }
 
 export interface QuoteGenerateResponse {

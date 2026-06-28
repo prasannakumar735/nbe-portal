@@ -3,6 +3,7 @@ import { assertCronSecret } from '@/lib/cron/assertCronSecret'
 import { runCalendarRemindersJob } from '@/lib/cron/jobs/calendarRemindersJob'
 import { runForgottenOfficeCloseJob } from '@/lib/cron/jobs/forgottenOfficeCloseJob'
 import { runServiceDueRemindersJob } from '@/lib/cron/jobs/serviceDueRemindersJob'
+import { runPvcQuoteWorkflowRemindersJob } from '@/lib/cron/jobs/pvcQuoteWorkflowRemindersJob'
 import { runWeeklyTimesheetRemindersJob } from '@/lib/cron/jobs/weeklyTimesheetRemindersJob'
 import { jsonError500 } from '@/lib/security/safeApiError'
 
@@ -40,12 +41,17 @@ export async function GET(request: NextRequest) {
       'weeklyTimesheetReminders',
       runWeeklyTimesheetRemindersJob,
     )
+    const pvcQuoteWorkflowReminders = await runJobSafe(
+      'pvcQuoteWorkflowReminders',
+      runPvcQuoteWorkflowRemindersJob,
+    )
 
     const jobs = {
       forgottenOfficeClose,
       calendarReminders,
       serviceDueReminders,
       weeklyTimesheetReminders,
+      pvcQuoteWorkflowReminders,
     }
 
     const anyHardFail = Object.values(jobs).some(

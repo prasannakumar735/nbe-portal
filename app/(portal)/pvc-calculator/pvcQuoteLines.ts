@@ -13,6 +13,7 @@ export type PVCDoorQuoteConfig = Pick<
   | 'thickness'
   | 'overlap'
   | 'headrailType'
+  | 'doorType'
 >
 
 export interface PVCQuoteLine {
@@ -37,6 +38,7 @@ export function pickDoorConfig(values: PVCFormValues): PVCDoorQuoteConfig {
     thickness: values.thickness,
     overlap: values.overlap,
     headrailType: values.headrailType,
+    doorType: values.doorType === 'strips_only' ? 'strips_only' : 'whole_door',
   }
 }
 

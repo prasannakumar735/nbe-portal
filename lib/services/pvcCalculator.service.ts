@@ -441,7 +441,7 @@ export async function generateQuote(
       installation_type: input.installationType,
       calculator_version: PVC_CALCULATOR_VERSION,
       subtotal,
-      final_price: finalPrice,
+      total_price: finalPrice,
     }
 
     if (options.createdBy) {
