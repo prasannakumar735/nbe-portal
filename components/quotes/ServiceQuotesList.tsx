@@ -97,24 +97,19 @@ function ServiceQuotesList() {
             Your saved quotes. Search by company name or quote number. Create a new quote anytime.
           </p>
         </div>
-        <div className="flex flex-col gap-2 sm:items-end">
+        <div className="flex flex-wrap items-center gap-2">
           <Link
             href="/dashboard/quotes/service/new"
             className="inline-flex items-center justify-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
           >
             New Quote
           </Link>
-          <div className="flex flex-wrap justify-end gap-3 text-sm">
-            <Link href="/pvc-calculator" className="font-medium text-slate-700 underline decoration-slate-300 underline-offset-2 hover:text-slate-900">
-              PVC strip calculator
-            </Link>
-            <Link
-              href="/pvc-calculator/new"
-              className="font-medium text-slate-700 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
-            >
-              New PVC quote
-            </Link>
-          </div>
+          <Link
+            href="/pvc-calculator"
+            className="inline-flex items-center justify-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            PVC strip calculator
+          </Link>
         </div>
       </div>
 
