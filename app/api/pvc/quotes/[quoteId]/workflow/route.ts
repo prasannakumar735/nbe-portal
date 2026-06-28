@@ -25,7 +25,7 @@ type WorkflowBody = {
   approval_po_reference?: string
   approval_message?: string
   assigned_user_id?: string
-  job_card_headrail_length_mm?: number | null
+  job_card_headrail_length_mm?: number | string | null
   job_card_supply_scope?: PvcJobSupplyScope
   invoice_status?: PvcInvoiceStatus
   closure_note?: string
@@ -56,6 +56,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ qu
         headrailRaw === null || headrailRaw === undefined || headrailRaw === ''
           ? null
           : Number(headrailRaw)
+      if (headrailParsed !== null && !Number.isFinite(headrailParsed)) {
+        return NextResponse.json({ error: 'Invalid headrail length.' }, { status: 400 })
+      }
       await approvePvcQuote(admin, quoteId, user.id, actorName, {
         approval_po_reference: String(body.approval_po_reference ?? ''),
         approval_message: String(body.approval_message ?? ''),
