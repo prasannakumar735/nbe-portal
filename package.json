@@ -28,6 +28,7 @@
     "@upstash/redis": "^1.37.0",
     "bcryptjs": "^3.0.3",
     "browser-image-compression": "^2.0.2",
+    "cheerio": "^1.2.0",
     "groq-sdk": "^0.37.0",
     "html-to-image": "^1.11.13",
     "html2pdf.js": "^0.14.0",

@@ -215,7 +215,11 @@ export async function middleware(request: NextRequest) {
     return setCsp(NextResponse.redirect(new URL('/client', request.url)), csp)
   }
 
-  if (pathname.startsWith('/dashboard/users') || pathname.startsWith('/dashboard/people')) {
+  if (
+    pathname.startsWith('/dashboard/users') ||
+    pathname.startsWith('/dashboard/people') ||
+    pathname.startsWith('/dashboard/sales-engine')
+  ) {
     const role = profile.role
     if (role !== 'admin' && role !== 'manager') {
       return setCsp(NextResponse.redirect(new URL('/dashboard', request.url)), csp)
