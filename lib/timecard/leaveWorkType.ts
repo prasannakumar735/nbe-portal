@@ -10,7 +10,7 @@ export function isLeaveLegacyTimeEntry(entry: {
 }
 
 export function isLeaveTimesheetEntry(
-  entry: { work_type_level1_id: string | null | undefined },
+  entry: { work_type_level1_id?: string | null | undefined },
   l1CodeById: Map<string, string>,
 ): boolean {
   const id = entry.work_type_level1_id ? String(entry.work_type_level1_id) : ''
