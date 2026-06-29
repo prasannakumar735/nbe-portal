@@ -106,6 +106,12 @@ export default function TimecardApp() {
     return m
   }, [level1])
 
+  const l1CodeById = useMemo(() => {
+    const m = new Map<string, string>()
+    level1.forEach(l => m.set(l.id, l.code))
+    return m
+  }, [level1])
+
   const l2Map = useMemo(() => {
     const m = new Map<string, L2>()
     level2.forEach(l => m.set(l.id, l))
@@ -427,7 +433,7 @@ export default function TimecardApp() {
           ) : null}
         </div>
 
-        <TimecardSummary entries={tc.entries} />
+        <TimecardSummary entries={filteredEntries} l1CodeById={l1CodeById} />
 
         <TimecardFilters
           clients={clients}
@@ -466,6 +472,7 @@ export default function TimecardApp() {
           clientLabel={clientLabel}
           locationLabel={locationLabel}
           workTypeLabel={workTypeLabel}
+          l1CodeById={l1CodeById}
           onAdd={date => {
             const base = createEmptyEntry(date)
             const merged = mergeLastUsedIntoEntry(base)

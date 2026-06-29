@@ -18,6 +18,7 @@ import type { TrendLineDatum } from '@/components/dashboard/charts/TrendLineChar
 import type { BillableStackedDatum } from '@/components/dashboard/charts/BillableStackedBar';
 import { pickSearchParam, type AppSearchParams } from '@/lib/app/searchParams';
 import { PvcWorkflowDashboardBanner } from '@/components/pvc/PvcWorkflowDashboardBanner';
+import { isLeaveLegacyTimeEntry } from '@/lib/timecard/leaveWorkType';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 type DashboardQuery = {
@@ -35,6 +36,7 @@ type TimeEntryRow = {
     hours: number | null;
     billable: boolean | null;
     status: string | null;
+    work_type_level1_id: string | null;
 };
 function resolvePeriod(period?: string) {
     if (period === 'this_week' || period === 'last_week' || period === 'this_month' || period === 'custom') {
@@ -83,6 +85,7 @@ function getPreviousRange(start: Date, end: Date) {
 }
 function buildTrendLine(entries: TimeEntryRow[]): TrendLineDatum[] {
     const weeklyTotals = entries.reduce<Record<string, number>>((acc, entry) => {
+        if (isLeaveLegacyTimeEntry(entry)) return acc
         const date = new Date(entry.start_time);
         const day = date.getDay();
         const mondayOffset = day === 0 ? -6 : 1 - day;
@@ -106,6 +109,7 @@ function buildBillableStacked(entries: TimeEntryRow[]): BillableStackedDatum[] {
         billable: number;
         nonBillable: number;
     }>>((acc, entry) => {
+        if (isLeaveLegacyTimeEntry(entry)) return acc
         const date = new Date(entry.start_time);
         const day = date.getDay();
         const mondayOffset = day === 0 ? -6 : 1 - day;
@@ -192,7 +196,7 @@ export default async function DashboardPage({ searchParams, }: {
             const isPrivileged = role === 'admin' || role === 'manager';
             const baseQuery = supabase
                 .from('time_entries')
-                .select('id, employee_id, client_id, start_time, end_time, hours, billable, status')
+                .select('id, employee_id, client_id, start_time, end_time, hours, billable, status, work_type_level1_id')
                 .neq('status', 'active')
                 .gte('start_time', range.start.toISOString())
                 .lte('start_time', range.end.toISOString());
@@ -207,7 +211,7 @@ export default async function DashboardPage({ searchParams, }: {
             const previousRange = getPreviousRange(range.start, range.end);
             const previousQuery = supabase
                 .from('time_entries')
-                .select('id, employee_id, client_id, start_time, end_time, hours, billable, status')
+                .select('id, employee_id, client_id, start_time, end_time, hours, billable, status, work_type_level1_id')
                 .neq('status', 'active')
                 .gte('start_time', previousRange.start.toISOString())
                 .lte('start_time', previousRange.end.toISOString());
@@ -220,7 +224,7 @@ export default async function DashboardPage({ searchParams, }: {
             trendStart.setDate(trendStart.getDate() - 56);
             const trendQuery = supabase
                 .from('time_entries')
-                .select('id, employee_id, client_id, start_time, end_time, hours, billable, status')
+                .select('id, employee_id, client_id, start_time, end_time, hours, billable, status, work_type_level1_id')
                 .neq('status', 'active')
                 .gte('start_time', trendStart.toISOString())
                 .lte('start_time', range.end.toISOString());
@@ -269,6 +273,7 @@ export default async function DashboardPage({ searchParams, }: {
                 firstName: string | null;
                 lastName: string | null;
             }>>((acc, entry) => {
+                if (isLeaveLegacyTimeEntry(entry)) return acc
                 const hours = typeof entry.hours === 'number' && Number.isFinite(entry.hours)
                     ? entry.hours
                     : entry.end_time

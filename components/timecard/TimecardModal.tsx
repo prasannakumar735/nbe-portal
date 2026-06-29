@@ -6,6 +6,7 @@ import { ClipboardPaste, Copy, X } from 'lucide-react'
 import type { EmployeeTimesheetEntry } from '@/lib/types/employee-timesheet.types'
 import { defaultBillableFromLevel1Code } from '@/lib/timecard/billableDefaults'
 import { computeEntryTotalHours } from '@/lib/timecard/computeHours'
+import { isLeaveLevel1Code } from '@/lib/timecard/leaveWorkType'
 import { officeClockBreakForTimeRange } from '@/lib/officeClock/breakPolicy'
 import { getCurrentLocation } from '@/lib/timecard/getCurrentLocation'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
@@ -193,6 +194,11 @@ export function TimecardModal({
     return m
   }, [level1Options])
 
+  const draftIsLeave = useMemo(() => {
+    if (!draft?.work_type_level1_id) return false
+    return isLeaveLevel1Code(level1CodeById.get(String(draft.work_type_level1_id)))
+  }, [draft?.work_type_level1_id, level1CodeById])
+
   const handleLocationSelectChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const v = e.target.value || null
     setDraft(prev => (prev ? { ...prev, location_id: v } : prev))
@@ -213,7 +219,8 @@ export function TimecardModal({
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       const v = e.target.value || null
       const code = v ? level1CodeById.get(v) : undefined
-      const billable = defaultBillableFromLevel1Code(code)
+      const leave = isLeaveLevel1Code(code)
+      const billable = leave ? false : defaultBillableFromLevel1Code(code)
       setDraft(prev =>
         prev
           ? {
@@ -221,6 +228,13 @@ export function TimecardModal({
               work_type_level1_id: v,
               work_type_level2_id: null,
               billable: v ? billable : false,
+              ...(leave
+                ? {
+                    client_id: null,
+                    client_sub_project_id: null,
+                    location_id: null,
+                  }
+                : {}),
             }
           : prev,
       )
@@ -229,10 +243,22 @@ export function TimecardModal({
     [onLevel1Change, level1CodeById],
   )
 
-  const handleTaskSelectChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    const id = e.target.value || null
-    setDraft(prev => (prev ? { ...prev, work_type_level2_id: id } : prev))
-  }, [])
+  const handleTaskSelectChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const id = e.target.value || null
+      setDraft(prev => {
+        if (!prev) return prev
+        const l1 = prev.work_type_level1_id ? level1CodeById.get(String(prev.work_type_level1_id)) : undefined
+        const leave = isLeaveLevel1Code(l1)
+        return {
+          ...prev,
+          work_type_level2_id: id,
+          ...(leave ? { billable: false } : {}),
+        }
+      })
+    },
+    [level1CodeById],
+  )
 
   useEffect(() => {
     if (!open) return
@@ -372,6 +398,7 @@ export function TimecardModal({
 
             <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2">
               <div className="min-w-0 space-y-4">
+              {!draftIsLeave ? (
               <div className="min-w-0 overflow-hidden rounded-xl border border-slate-100 bg-gray-50 p-4">
                 <p className="mb-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">Client & place</p>
                 <div className="space-y-4">
@@ -470,6 +497,11 @@ export function TimecardModal({
                   </label>
                 </div>
               </div>
+              ) : (
+                <div className="rounded-xl border border-rose-100 bg-rose-50/80 px-4 py-3 text-sm text-rose-900">
+                  Leave entry — client and location are not required.
+                </div>
+              )}
 
               <div className="min-w-0 overflow-hidden rounded-xl border border-slate-100 bg-gray-50 p-4">
                 <p className="mb-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">Work</p>

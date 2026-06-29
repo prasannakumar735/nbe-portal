@@ -14,6 +14,7 @@ export type TimecardTableProps = {
   clientLabel: (clientId: string | null) => string
   locationLabel: (locationId: string | null) => string
   workTypeLabel: (level1Id: string | null, level2Id: string | null) => string
+  l1CodeById?: Map<string, string>
   onAdd: (dateIso: string) => void
   onEdit: (entry: EmployeeTimesheetEntry) => void
   onDelete: (id: string) => void
@@ -29,6 +30,7 @@ export function TimecardTable(props: TimecardTableProps) {
     clientLabel,
     locationLabel,
     workTypeLabel,
+    l1CodeById,
     onAdd,
     onEdit,
     onDelete,
@@ -36,8 +38,8 @@ export function TimecardTable(props: TimecardTableProps) {
   } = props
 
   const dayGroups = useMemo(
-    () => buildDayEntries(weekStartIso, entries, clientLabel, locationLabel, workTypeLabel),
-    [weekStartIso, entries, clientLabel, locationLabel, workTypeLabel],
+    () => buildDayEntries(weekStartIso, entries, clientLabel, locationLabel, workTypeLabel, l1CodeById),
+    [weekStartIso, entries, clientLabel, locationLabel, workTypeLabel, l1CodeById],
   )
 
   const flatRows = useMemo(() => dayGroups.flatMap(d => d.items), [dayGroups])

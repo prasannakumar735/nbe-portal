@@ -233,6 +233,8 @@ export interface ManagerAssignment {
 // ============================================
 export interface DashboardSummary {
   total_hours: number
+  work_hours: number
+  leave_hours: number
   billable_hours: number
   non_billable_hours: number
   billable_percentage: number

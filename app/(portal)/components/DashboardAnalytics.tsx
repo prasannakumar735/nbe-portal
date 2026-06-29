@@ -168,12 +168,17 @@ export default function DashboardAnalytics({ userId, userRole }: DashboardAnalyt
               <Clock className="text-blue-600" size={20} />
             </div>
             <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Total Hours
+              Work Hours
             </div>
           </div>
           <div className="text-3xl font-black text-slate-900">
-            {summary?.total_hours.toFixed(1) || '0.0'}
+            {summary?.work_hours.toFixed(1) || '0.0'}
           </div>
+          {(summary?.leave_hours ?? 0) > 0 ? (
+            <p className="mt-1 text-xs text-slate-500">
+              Leave {summary?.leave_hours.toFixed(1)} h · Total logged {summary?.total_hours.toFixed(1)} h
+            </p>
+          ) : null}
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
@@ -202,6 +207,7 @@ export default function DashboardAnalytics({ userId, userRole }: DashboardAnalyt
           <div className="text-3xl font-black text-purple-600">
             {summary?.billable_percentage.toFixed(1) || '0.0'}%
           </div>
+          <p className="mt-1 text-xs text-slate-500">Of work hours (excl. leave)</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">

@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import type { PeriodFilter } from './DashboardFilters'
 import type { WeeklyChartDatum } from './DashboardWeeklyChart'
 import type { ProjectPieDatum } from './DashboardProjectPie'
+import { isLeaveLegacyTimeEntry } from '@/lib/timecard/leaveWorkType'
 
 interface TimeEntryRow {
   id: string
@@ -13,6 +14,7 @@ interface TimeEntryRow {
   end_time: string | null
   hours: number | null
   status: string | null
+  work_type_level1_id?: string | null
 }
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
@@ -99,7 +101,7 @@ export function useDashboardAnalytics(userId: string) {
 
       const { data, error } = await supabase
         .from('time_entries')
-        .select('id, client_id, start_time, end_time, hours, status')
+        .select('id, client_id, start_time, end_time, hours, status, work_type_level1_id')
         .eq('employee_id', userId)
         .neq('status', 'active')
         .gte('start_time', start.toISOString())
@@ -167,13 +169,18 @@ export function useDashboardAnalytics(userId: string) {
     return entriesWithHours.filter(entry => entry.client_id === projectId)
   }, [entriesWithHours, projectId])
 
+  const workEntries = useMemo(
+    () => filteredEntries.filter(e => !isLeaveLegacyTimeEntry(e)),
+    [filteredEntries],
+  )
+
   const totalHours = useMemo(
-    () => filteredEntries.reduce((sum, entry) => sum + entry.computedHours, 0),
-    [filteredEntries]
+    () => workEntries.reduce((sum, entry) => sum + entry.computedHours, 0),
+    [workEntries],
   )
 
   const projectBreakdown = useMemo(() => {
-    return filteredEntries.reduce<Record<string, { name: string; hours: number }>>((acc, entry) => {
+    return workEntries.reduce<Record<string, { name: string; hours: number }>>((acc, entry) => {
       const name = projectLookup[entry.client_id] || 'Unnamed project'
 
       if (!acc[entry.client_id]) {
@@ -183,7 +190,7 @@ export function useDashboardAnalytics(userId: string) {
       acc[entry.client_id].hours += entry.computedHours
       return acc
     }, {})
-  }, [filteredEntries, projectLookup])
+  }, [workEntries, projectLookup])
 
   const dailyData = useMemo<WeeklyChartDatum[]>(() => {
     const initial = DAY_LABELS.reduce<Record<string, number>>((acc, label) => {
@@ -191,7 +198,7 @@ export function useDashboardAnalytics(userId: string) {
       return acc
     }, {})
 
-    const grouped = filteredEntries.reduce<Record<string, number>>((acc, entry) => {
+    const grouped = workEntries.reduce<Record<string, number>>((acc, entry) => {
       const date = new Date(entry.start_time)
       const dayIndex = (date.getDay() + 6) % 7
       const label = DAY_LABELS[dayIndex]
@@ -200,7 +207,7 @@ export function useDashboardAnalytics(userId: string) {
     }, initial)
 
     return DAY_LABELS.map(label => ({ day: label, hours: Number((grouped[label] || 0).toFixed(2)) }))
-  }, [filteredEntries])
+  }, [workEntries])
 
   const pieData = useMemo<ProjectPieDatum[]>(() => {
     return Object.values(projectBreakdown).map(project => ({

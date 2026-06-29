@@ -127,7 +127,8 @@ export function ManagerDashboard() {
                 <tr>
                   <th className="whitespace-nowrap px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Employee</th>
                   <th className="whitespace-nowrap px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Week</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Total hours</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Work hours</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Leave</th>
                   <th className="whitespace-nowrap px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Action</th>
                 </tr>
@@ -136,12 +137,16 @@ export function ManagerDashboard() {
                 {rows.map(row => {
                   const ts = row.timesheet
                   const weekLabel = formatWeekRange(ts.week_start_date, ts.week_end_date)
-                  const hours = Number(ts.total_hours ?? 0)
+                  const workHours = row.workHours
+                  const leaveHours = row.leaveHours
                   return (
                     <tr key={ts.id} className="transition-colors hover:bg-slate-50/90">
                       <td className="whitespace-nowrap px-3 py-2 text-sm font-medium text-slate-900">{row.employeeName}</td>
                       <td className="whitespace-nowrap px-3 py-2 text-sm text-slate-700">{weekLabel}</td>
-                      <td className="whitespace-nowrap px-3 py-2 text-sm tabular-nums text-slate-800">{hours.toFixed(2)}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-sm tabular-nums text-slate-800">{workHours.toFixed(2)}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-sm tabular-nums text-slate-600">
+                        {leaveHours > 0 ? leaveHours.toFixed(2) : '—'}
+                      </td>
                       <td className="px-3 py-2">
                         <StatusBadge status={ts.status} />
                       </td>

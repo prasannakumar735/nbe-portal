@@ -4,4 +4,6 @@ export type PendingTimecardRow = {
   timesheet: EmployeeWeeklyTimesheet
   employeeUserId: string
   employeeName: string
+  workHours: number
+  leaveHours: number
 }

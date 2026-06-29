@@ -1,3 +1,5 @@
+import { isLeaveLegacyTimeEntry } from '@/lib/timecard/leaveWorkType'
+
 export interface TimeEntryAnalyticsRow {
   employee_id: string
   client_id: string
@@ -6,10 +8,13 @@ export interface TimeEntryAnalyticsRow {
   hours: number | null
   billable: boolean | null
   status: string | null
+  work_type_level1_id?: string | null
 }
 
 export interface WeeklyStats {
+  /** Work hours excluding LVH leave. */
   totalHours: number
+  leaveHours: number
   billableHours: number
   nonBillableHours: number
   overworkDays: number
@@ -40,10 +45,16 @@ export function calculateWeeklyStats(entries: TimeEntryAnalyticsRow[]): WeeklySt
   }, {})
 
   let totalHours = 0
+  let leaveHours = 0
   let billableHours = 0
 
   entries.forEach(entry => {
     const hours = toHours(entry)
+    if (isLeaveLegacyTimeEntry(entry)) {
+      leaveHours += hours
+      return
+    }
+
     totalHours += hours
 
     if (entry.billable) {
@@ -67,6 +78,7 @@ export function calculateWeeklyStats(entries: TimeEntryAnalyticsRow[]): WeeklySt
 
   return {
     totalHours: Number(totalHours.toFixed(2)),
+    leaveHours: Number(leaveHours.toFixed(2)),
     billableHours: Number(billableHours.toFixed(2)),
     nonBillableHours: Number(nonBillableHours.toFixed(2)),
     overworkDays,
