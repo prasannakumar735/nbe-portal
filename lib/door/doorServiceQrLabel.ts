@@ -244,6 +244,7 @@ async function loadRobotoRegular(): Promise<FontFace | null> {
 export type ComposeDoorServiceQrLabelOptions = {
   qrImageSrc: string
   doorLabel: string
+  doorSerial?: string | null
   templateSrc?: string
 }
 
@@ -278,7 +279,7 @@ export async function composeDoorServiceQrLabelPngDataUrl(
   const qrDrawSize = qrBox.size - inset * 2
   context.drawImage(qrImage, qrBox.x + inset, qrBox.y + inset, qrDrawSize, qrDrawSize)
 
-  const serialSuffix = buildDoorSerialSuffix(options.doorLabel)
+  const serialSuffix = buildDoorSerialSuffix(options.doorLabel, options.doorSerial)
   const serialBox = resolveSerialFillBox(imageData.data, canvas.width, canvas.height, qrBox)
 
   if (serialBox && serialSuffix) {
