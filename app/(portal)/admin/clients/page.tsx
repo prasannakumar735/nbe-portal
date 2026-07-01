@@ -39,6 +39,7 @@ const csvTemplateHeaders = [
     'client_name',
     'location_name',
     'door_label',
+    'door_serial',
     'door_type',
     'door_description',
     'door_type_alt',

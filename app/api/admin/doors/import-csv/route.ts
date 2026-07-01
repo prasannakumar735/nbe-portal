@@ -11,6 +11,7 @@ type ImportError = { rowIndex: number; message: string }
 type ResolvedDoorRow = {
   client_location_id: string
   door_label: string
+  door_serial: string | null
   door_type: string
   door_description: string | null
   door_type_alt: string | null
@@ -136,6 +137,7 @@ export async function POST(request: Request) {
       resolvedRows.push({
         client_location_id: locationId,
         door_label: doorLabel,
+        door_serial: row.door_serial,
         door_type: doorType,
         door_description: row.door_description,
         door_type_alt: row.door_type_alt,
