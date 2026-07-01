@@ -36,7 +36,7 @@ export const updateLocationSchema = createLocationSchema.omit({ client_id: true 
 export const upsertDoorSchema = z.object({
   client_location_id: z.string().uuid('Location is required'),
   door_label: requiredText('Door label'),
-  door_serial: nullableText(32),
+  door_serial: nullableText(120),
   door_type: requiredText('Door type'),
   door_description: nullableText(1000),
   door_type_alt: nullableText(),
@@ -57,6 +57,7 @@ export const csvDoorRowSchema = z.object({
   client_name: requiredText('Client name'),
   location_name: requiredText('Location name'),
   door_label: requiredText('Door label'),
+  door_serial: nullableText(120),
   door_type: requiredText('Door type'),
   door_description: nullableText(1000),
   door_type_alt: nullableText(),

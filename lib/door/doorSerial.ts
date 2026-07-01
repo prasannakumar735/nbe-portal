@@ -33,15 +33,19 @@ function serialSuffixFromToken(serial: string): string {
 
   const extracted = extractDoorSerial(trimmed)
   const token = (extracted ?? trimmed).replace(/\s+/g, '').toUpperCase()
+  if (!token) return ''
   if (token.startsWith('P') && token.length > 1) {
     return token.slice(1)
+  }
+  if (/^\d+$/.test(token)) {
+    return token
   }
   return token
 }
 
 /** Digits (and legacy J…) after the leading P on the label; template already prints "Serial No. P". */
 export function buildDoorSerialSuffix(doorLabel: string, doorSerial?: string | null): string {
-  const fromField = doorSerial?.trim()
+  const fromField = String(doorSerial ?? '').trim()
   if (fromField) {
     return serialSuffixFromToken(fromField)
   }
@@ -52,8 +56,8 @@ export function buildDoorSerialSuffix(doorLabel: string, doorSerial?: string | n
   return serialSuffixFromToken(serial)
 }
 
-export function buildDoorSerialLine(doorLabel: string): string {
-  const suffix = buildDoorSerialSuffix(doorLabel)
+export function buildDoorSerialLine(doorLabel: string, doorSerial?: string | null): string {
+  const suffix = buildDoorSerialSuffix(doorLabel, doorSerial)
   if (!suffix) return ''
   return `Serial No. P ${suffix}`
 }

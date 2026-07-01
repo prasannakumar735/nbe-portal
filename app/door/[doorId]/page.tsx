@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@/lib/supabase/server';
 import { isEmployee, isManager, type ProfileFromTable } from '@/lib/auth/roles';
+import { formatMaintenanceNumericField } from '@/lib/maintenance/maintenanceDisplayFormat';
 const EMERGENCY_CONTACT_NUMBER = '(03) 9357 5858';
 type DoorPageProps = {
     params: Promise<{
@@ -13,7 +14,11 @@ type DoorPageProps = {
 type DoorRow = {
     id: string;
     door_label?: string | null;
+    door_serial?: string | null;
     door_type?: string | null;
+    door_description?: string | null;
+    cw?: string | null;
+    ch?: string | null;
     install_date?: string | null;
     client_location_id?: string | null;
     manufactured_by?: string | null;
@@ -39,6 +44,11 @@ type InspectionRow = {
     technician_notes?: string | null;
     ai_summary?: string | null;
 };
+function displayText(value?: string | null, fallback = 'Not available'): string {
+    const trimmed = String(value ?? '').trim();
+    return trimmed || fallback;
+}
+
 function formatDate(value?: string | null, fallback = 'Not available'): string {
     if (!value)
         return fallback;
@@ -135,8 +145,12 @@ export default async function DoorInfoPage({ params }: DoorPageProps) {
     const latestInspectionDate = formatDate(latestInspection?.created_at, 'NA');
     const latestTechnicianNotes = String(latestInspection?.technician_notes ?? '').trim() || 'NA';
     const latestAiSummary = String(latestInspection?.ai_summary ?? '').trim() || 'NA';
-    const doorNumberLabel = String(door.door_label ?? '').trim() || door.id;
-    const doorTypeLabel = String(door.door_type ?? '').trim() || 'Not available';
+    const doorLabel = displayText(door.door_label, door.id);
+    const doorSerialLabel = displayText(door.door_serial);
+    const doorTypeLabel = displayText(door.door_type);
+    const doorDescriptionLabel = displayText(door.door_description);
+    const clearWidthLabel = displayText(formatMaintenanceNumericField(door.cw));
+    const clearHeightLabel = displayText(formatMaintenanceNumericField(door.ch));
     const manufacturerLabel = String(door.manufactured_by ?? '').trim() || 'NBE Australia';
     const installDateLabel = formatDate(door.install_date);
     const lastServicedLabel = formatDate(latestInspection?.created_at, 'Not yet serviced');
@@ -163,16 +177,23 @@ export default async function DoorInfoPage({ params }: DoorPageProps) {
             <section className="space-y-2">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Door Details</h2>
               <div className="grid grid-cols-1 gap-2 text-sm text-slate-800">
-                <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Door Number</span><span>{doorNumberLabel}</span></div>
-                <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Door Type</span><span>{doorTypeLabel}</span></div>
-                <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Location</span><span>{locationLabel}</span></div>
-                <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Client Name</span><span>{clientLabel}</span></div>
-                <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Manufactured By</span><span>{manufacturerLabel}</span></div>
-                <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Installed Date</span><span>{installDateLabel}</span></div>
-                <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Last Serviced</span><span>{lastServicedLabel}</span></div>
-                <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Next Maintenance Service Date</span><span>{nextMaintenanceServiceDateLabel}</span></div>
-                <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Serviced By</span><span>{servicedBy}</span></div>
-                <div className="flex justify-between gap-4"><span className="font-semibold text-slate-600">Emergency Contact</span><span>{EMERGENCY_CONTACT_NUMBER}</span></div>
+                <div className="flex justify-between gap-4"><span className="shrink-0 font-semibold text-slate-600">Door Label</span><span className="text-right">{doorLabel}</span></div>
+                <div className="flex justify-between gap-4"><span className="shrink-0 font-semibold text-slate-600">Serial Number</span><span className="text-right">{doorSerialLabel}</span></div>
+                <div className="flex justify-between gap-4"><span className="shrink-0 font-semibold text-slate-600">Door Type</span><span className="text-right">{doorTypeLabel}</span></div>
+                <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4">
+                  <span className="shrink-0 font-semibold text-slate-600">Door Description</span>
+                  <span className="whitespace-pre-wrap text-slate-800 sm:max-w-[60%] sm:text-right">{doorDescriptionLabel}</span>
+                </div>
+                <div className="flex justify-between gap-4"><span className="shrink-0 font-semibold text-slate-600">Clear Width (CW)</span><span className="text-right">{clearWidthLabel}</span></div>
+                <div className="flex justify-between gap-4"><span className="shrink-0 font-semibold text-slate-600">Clear Height (CH)</span><span className="text-right">{clearHeightLabel}</span></div>
+                <div className="flex justify-between gap-4"><span className="shrink-0 font-semibold text-slate-600">Location</span><span className="text-right">{locationLabel}</span></div>
+                <div className="flex justify-between gap-4"><span className="shrink-0 font-semibold text-slate-600">Client Name</span><span className="text-right">{clientLabel}</span></div>
+                <div className="flex justify-between gap-4"><span className="shrink-0 font-semibold text-slate-600">Manufactured By</span><span className="text-right">{manufacturerLabel}</span></div>
+                <div className="flex justify-between gap-4"><span className="shrink-0 font-semibold text-slate-600">Installed Date</span><span className="text-right">{installDateLabel}</span></div>
+                <div className="flex justify-between gap-4"><span className="shrink-0 font-semibold text-slate-600">Last Serviced</span><span className="text-right">{lastServicedLabel}</span></div>
+                <div className="flex justify-between gap-4"><span className="shrink-0 font-semibold text-slate-600">Next Maintenance Service Date</span><span className="text-right">{nextMaintenanceServiceDateLabel}</span></div>
+                <div className="flex justify-between gap-4"><span className="shrink-0 font-semibold text-slate-600">Serviced By</span><span className="text-right">{servicedBy}</span></div>
+                <div className="flex justify-between gap-4"><span className="shrink-0 font-semibold text-slate-600">Emergency Contact</span><span className="text-right">{EMERGENCY_CONTACT_NUMBER}</span></div>
               </div>
             </section>
 
