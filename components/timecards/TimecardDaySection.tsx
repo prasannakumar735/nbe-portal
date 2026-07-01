@@ -31,7 +31,12 @@ export const TimecardDaySection = memo(function TimecardDaySection({
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{heading}</p>
           <p className="mt-0.5 text-sm font-semibold tabular-nums text-slate-900">
-            {block.dayTotalHours.toFixed(2)} h total
+            {block.dayTotalHours.toFixed(2)} h work
+            {block.dayLeaveHours > 0 ? (
+              <span className="ml-1 text-xs font-medium text-slate-500">
+                (+ {block.dayLeaveHours.toFixed(2)} leave)
+              </span>
+            ) : null}
           </p>
         </div>
         {!readOnly ? (

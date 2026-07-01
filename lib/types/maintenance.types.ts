@@ -321,6 +321,7 @@ export type DoorRecord = {
   id: string
   client_location_id: string
   door_label: string
+  door_serial?: string | null
   door_type: string
   door_description?: string | null
   door_type_alt?: string | null

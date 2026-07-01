@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { mergeGpsPointFromRow } from '@/lib/timecard/gpsDbColumns'
+import { resolveLvhLevel1Ids } from '@/lib/timecard/loadLevel1CodeMap'
 import { getErrorMessage, toThrownError } from '@/lib/reports/errorMessage'
 import { readPvcQuoteTotal } from '@/lib/pvc/pvcQuoteTotalPrice'
 import type {
@@ -352,22 +353,35 @@ export async function fetchReportsSummary(supabase: SupabaseClient, filters: Rep
     filters.billable
   )
 
+  const lvhLevel1Ids = await resolveLvhLevel1Ids(supabase)
+  const isLeaveRow = (r: { work_type_level1_id: string | null }) =>
+    r.work_type_level1_id != null && lvhLevel1Ids.has(String(r.work_type_level1_id))
+
   let totalHours = 0
+  let workHours = 0
+  let leaveHours = 0
   let billableHours = 0
   let nonBillableHours = 0
   const hoursByDayMap = new Map<string, number>()
   const techIds = new Set<string>()
 
   const hoursByUser = new Map<string, number>()
+  const allTechIds = new Set<string>()
   rows.forEach(r => {
     const h = Number(r.total_hours) || 0
     totalHours += h
+    allTechIds.add(r.user_id)
     if (r.billable) billableHours += h
     else nonBillableHours += h
-    techIds.add(r.user_id)
-    hoursByUser.set(r.user_id, (hoursByUser.get(r.user_id) ?? 0) + h)
-    const d = String(r.entry_date).slice(0, 10)
-    hoursByDayMap.set(d, (hoursByDayMap.get(d) ?? 0) + h)
+    const leave = isLeaveRow(r)
+    if (leave) leaveHours += h
+    else {
+      workHours += h
+      techIds.add(r.user_id)
+      hoursByUser.set(r.user_id, (hoursByUser.get(r.user_id) ?? 0) + h)
+      const d = String(r.entry_date).slice(0, 10)
+      hoursByDayMap.set(d, (hoursByDayMap.get(d) ?? 0) + h)
+    }
   })
 
   const maintRes = await supabase
@@ -431,7 +445,7 @@ export async function fetchReportsSummary(supabase: SupabaseClient, filters: Rep
     .map(([date, amount]) => ({ date, amount: Math.round(amount * 100) / 100 }))
 
   const billablePercent =
-    totalHours > 0 ? Math.round((billableHours / totalHours) * 1000) / 10 : 0
+    workHours > 0 ? Math.round((billableHours / workHours) * 1000) / 10 : 0
 
   const techIdsForNames = [...hoursByUser.keys()]
   let techProfiles = new Map<string, string>()
@@ -450,12 +464,14 @@ export async function fetchReportsSummary(supabase: SupabaseClient, filters: Rep
 
   return {
     totalHours: Math.round(totalHours * 100) / 100,
+    workHours: Math.round(workHours * 100) / 100,
+    leaveHours: Math.round(leaveHours * 100) / 100,
     billableHours: Math.round(billableHours * 100) / 100,
     nonBillableHours: Math.round(nonBillableHours * 100) / 100,
     billablePercent,
     jobsCompleted,
     revenueTotal: Math.round(revenueTotal * 100) / 100,
-    activeTechnicians: techIds.size,
+    activeTechnicians: allTechIds.size,
     hoursByDay,
     revenueByDay,
     hoursByTechnician,
@@ -674,8 +690,19 @@ export async function fetchTimecardReport(
 
   const groups = groupRows(flat, groupBy)
   const grandTotalHours = Math.round(flat.reduce((s, r) => s + r.total_hours, 0) * 100) / 100
+  const lvhLevel1Ids = await resolveLvhLevel1Ids(queryClient)
+  let grandWorkHours = 0
+  let grandLeaveHours = 0
+  for (const r of rows) {
+    const h = Number(r.total_hours) || 0
+    const w1 = r.work_type_level1_id ? String(r.work_type_level1_id) : ''
+    if (w1 && lvhLevel1Ids.has(w1)) grandLeaveHours += h
+    else grandWorkHours += h
+  }
+  grandWorkHours = Math.round(grandWorkHours * 100) / 100
+  grandLeaveHours = Math.round(grandLeaveHours * 100) / 100
 
-  return { groupBy, groups, grandTotalHours }
+  return { groupBy, groups, grandTotalHours, grandWorkHours, grandLeaveHours }
 }
 
 export async function fetchMaintenanceReport(

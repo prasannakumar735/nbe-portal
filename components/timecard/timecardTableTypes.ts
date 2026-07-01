@@ -25,6 +25,8 @@ export type DayEntry = {
   date: string
   dayShort: string
   datePretty: string
+  /** Work hours excluding LVH leave. */
   dayTotalHours: number
+  dayLeaveHours: number
   items: TimeEntryRow[]
 }

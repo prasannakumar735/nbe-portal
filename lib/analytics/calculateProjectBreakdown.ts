@@ -1,4 +1,5 @@
 import type { TimeEntryAnalyticsRow } from './calculateWeeklyStats'
+import { isLeaveLegacyTimeEntry } from '@/lib/timecard/leaveWorkType'
 
 export interface ProjectBreakdownItem {
   id: string
@@ -13,6 +14,7 @@ export function calculateProjectBreakdown(
   projectLookup: Record<string, string>
 ): ProjectBreakdownItem[] {
   const breakdown = entries.reduce<Record<string, ProjectBreakdownItem>>((acc, entry) => {
+    if (isLeaveLegacyTimeEntry(entry)) return acc
     const projectId = entry.client_id
     const name = projectLookup[projectId] || 'Unnamed project'
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
+import { compareDoorRecordsByLabel } from '@/lib/door/doorLabelSort'
 
 function strOrNull(row: Record<string, unknown>, key: string): string | null {
   const v = row[key]
@@ -13,6 +14,7 @@ function mapDoorRow(row: Record<string, unknown>) {
     id: String(row.id ?? ''),
     client_location_id: String(row.client_location_id ?? ''),
     door_label: String(row.door_label ?? row.door_number ?? '').trim(),
+    door_serial: strOrNull(row, 'door_serial'),
     door_type: String(row.door_type ?? '').trim(),
     install_date: row.install_date ? String(row.install_date) : null,
     door_description: strOrNull(row, 'door_description'),
@@ -44,6 +46,7 @@ export async function GET(request: NextRequest) {
     const doors = (data ?? [])
       .map(row => mapDoorRow(row as Record<string, unknown>))
       .filter(item => item.id)
+      .sort(compareDoorRecordsByLabel)
 
     return NextResponse.json({ doors })
   } catch {

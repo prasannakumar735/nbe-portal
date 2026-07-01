@@ -135,13 +135,16 @@ export default function TimeEntryStartForm({ user, onSuccess }: TimeEntryStartFo
       setSelectedLocation(location || null)
       setSelectedLevel1(level1 || null)
       if (level2) {
+        const l1Code =
+          (level1 as { code?: string } | undefined)?.code ??
+          workTypesLevel1.find(w => w.id === entry.work_type_level1_id)?.code
         setSelectedLevel2({
           id: level2.id,
           level1_id: entry.work_type_level1_id,
           code: level2.code,
           description: level2.name,
           billable: level2.billable,
-          is_leave_type: false,
+          is_leave_type: (l1Code ?? '').trim().toUpperCase() === 'LVH',
           active: true
         })
       }

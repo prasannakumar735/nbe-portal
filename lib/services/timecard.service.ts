@@ -2,6 +2,7 @@
 // Handles all database operations and business logic
 
 import { supabase } from '../supabase'
+import { isLeaveLegacyTimeEntry, isLeaveLevel1Code } from '../timecard/leaveWorkType'
 import { mapLocationDbRowToApi, type ClientLocationDbRow } from '../supabase/clientLocationsDb'
 import type {
   TimeEntry,
@@ -67,20 +68,25 @@ export class WorkTypeService {
       console.error('[getLevel2ByLevel1] level1_id is required but received:', level1Id)
       return []
     }
-    const { data, error } = await supabase
-      .from('work_type_level2')
-      .select('id, code, name, billable')
-      .eq('level1_id', level1Id)
-      .order('code')
-    
+    const [{ data: l1Row }, { data, error }] = await Promise.all([
+      supabase.from('work_type_level1').select('code').eq('id', level1Id).maybeSingle(),
+      supabase
+        .from('work_type_level2')
+        .select('id, code, name, billable')
+        .eq('level1_id', level1Id)
+        .order('code'),
+    ])
+
     if (error) throw error
+    const level1Code = String(l1Row?.code ?? '')
+    const isLeave = isLeaveLevel1Code(level1Code)
     return (data || []).map(l2 => ({
       id: l2.id,
       level1_id: level1Id,
       code: l2.code,
       description: l2.name,
       billable: l2.billable,
-      is_leave_type: false,
+      is_leave_type: isLeave,
       active: true
     }))
   }
@@ -820,7 +826,7 @@ export class DashboardService {
   static async getSummary(filters: DashboardFilters): Promise<DashboardSummary> {
     let query = supabase
       .from('time_entries')
-      .select('hours, billable, project_id')
+      .select('hours, billable, project_id, work_type_level1_id')
 
     query = this.applyFilters(query, filters)
 
@@ -829,16 +835,29 @@ export class DashboardService {
     if (error) throw error
 
     const entries = data || []
-    const totalHours = entries.reduce((sum, e) => sum + e.hours, 0)
-    const billableHours = entries.reduce((sum, e) => sum + (e.billable ? e.hours : 0), 0)
-    const nonBillableHours = totalHours - billableHours
-    const uniqueProjects = new Set(entries.map(e => e.project_id).filter(Boolean)).size
+    let total_hours = 0
+    let work_hours = 0
+    let leave_hours = 0
+    let billable_hours = 0
+    for (const e of entries) {
+      const h = Number(e.hours) || 0
+      total_hours += h
+      if (e.billable) billable_hours += h
+      if (isLeaveLegacyTimeEntry(e)) leave_hours += h
+      else work_hours += h
+    }
+    const non_billable_hours = total_hours - billable_hours
+    const uniqueProjects = new Set(
+      entries.filter(e => !isLeaveLegacyTimeEntry(e)).map(e => e.project_id).filter(Boolean),
+    ).size
 
     return {
-      total_hours: totalHours,
-      billable_hours: billableHours,
-      non_billable_hours: nonBillableHours,
-      billable_percentage: totalHours > 0 ? (billableHours / totalHours) * 100 : 0,
+      total_hours,
+      work_hours,
+      leave_hours,
+      billable_hours,
+      non_billable_hours,
+      billable_percentage: work_hours > 0 ? (billable_hours / work_hours) * 100 : 0,
       total_entries: entries.length,
       active_projects: uniqueProjects
     }
@@ -851,6 +870,7 @@ export class DashboardService {
         project_id,
         hours,
         billable,
+        work_type_level1_id,
         projects:project_id (
           project_code,
           project_name,
@@ -868,6 +888,7 @@ export class DashboardService {
     const projectMap = new Map<string, HoursByProject>()
 
     ;(data || []).forEach(entry => {
+      if (isLeaveLegacyTimeEntry(entry)) return
       if (!entry.project_id || !entry.projects) return
 
       const projectDetails = Array.isArray(entry.projects)
@@ -938,7 +959,10 @@ export class DashboardService {
 
     const workTypes = await WorkTypeService.getAll()
     const workTypeMap = new Map<string, WorkTypeMix>()
-    const totalHours = (data || []).reduce((sum, e) => sum + e.hours, 0)
+    const workHoursDenominator = (data || []).reduce(
+      (sum, e) => sum + (isLeaveLegacyTimeEntry(e) ? 0 : e.hours),
+      0,
+    )
 
     ;(data || []).forEach(entry => {
       const key = `${entry.work_type_level1_id}-${entry.work_type_level2_id}`
@@ -964,7 +988,7 @@ export class DashboardService {
 
     const result = Array.from(workTypeMap.values())
     result.forEach(wt => {
-      wt.percentage = totalHours > 0 ? (wt.total_hours / totalHours) * 100 : 0
+      wt.percentage = workHoursDenominator > 0 ? (wt.total_hours / workHoursDenominator) * 100 : 0
     })
 
     return result.sort((a, b) => b.total_hours - a.total_hours)
@@ -973,7 +997,7 @@ export class DashboardService {
   static async getStaffWorkTypeMatrix(filters: DashboardFilters): Promise<StaffWorkTypeMatrix[]> {
     let query = supabase
       .from('time_entries')
-      .select('employee_id, work_type_level2_id, hours')
+      .select('employee_id, work_type_level1_id, work_type_level2_id, hours')
 
     query = this.applyFilters(query, filters)
 
@@ -998,7 +1022,9 @@ export class DashboardService {
         staff.work_type_hours[entry.work_type_level2_id] = 0
       }
       staff.work_type_hours[entry.work_type_level2_id] += entry.hours
-      staff.total_hours += entry.hours
+      if (!isLeaveLegacyTimeEntry(entry)) {
+        staff.total_hours += entry.hours
+      }
     })
 
     return Array.from(staffMap.values()).sort((a, b) => b.total_hours - a.total_hours)

@@ -189,7 +189,11 @@ function TotalsBlock({ summary }: { summary: ReportsSummary }) {
       <Text style={styles.sectionTitle}>Totals</Text>
       <View style={styles.kpiRow}>
         <View style={styles.kpi}>
-          <Text style={styles.kpiLabel}>Total hours</Text>
+          <Text style={styles.kpiLabel}>Work hours</Text>
+          <Text style={styles.kpiValue}>{summary.workHours.toFixed(2)}</Text>
+        </View>
+        <View style={styles.kpi}>
+          <Text style={styles.kpiLabel}>Total (incl. leave)</Text>
           <Text style={styles.kpiValue}>{summary.totalHours.toFixed(2)}</Text>
         </View>
         <View style={styles.kpi}>

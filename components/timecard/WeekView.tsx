@@ -14,6 +14,7 @@ type Props = {
   clientLabel: (clientId: string | null) => string
   locationLabel: (locationId: string | null) => string
   workTypeLabel: (level1Id: string | null, level2Id: string | null) => string
+  l1CodeById?: Map<string, string>
   onAdd: (dateIso: string) => void
   onEdit: (entry: EmployeeTimesheetEntry) => void
   onDelete: (id: string) => void

@@ -455,7 +455,15 @@ export function ReportsPageClient() {
         <div className="relative min-h-[120px] space-y-4">
           {tab === 'timecards' && timecardData && !bundleLoading && !tabError ? (
             <p className="text-sm text-slate-600">
-              Grand total: <strong className="text-slate-900">{timecardData.grandTotalHours} h</strong>
+              Work total: <strong className="text-slate-900">{timecardData.grandWorkHours} h</strong>
+              {timecardData.grandLeaveHours > 0 ? (
+                <>
+                  {' '}
+                  · Leave <strong className="text-slate-900">{timecardData.grandLeaveHours} h</strong>
+                </>
+              ) : null}
+              {' '}
+              · All logged <strong className="text-slate-900">{timecardData.grandTotalHours} h</strong>
             </p>
           ) : null}
 

@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { Loader2, X } from 'lucide-react'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import type { EmployeeTimesheetEntry, EmployeeWeeklyTimesheet } from '@/lib/types/employee-timesheet.types'
+import { isLeaveTimesheetEntry, splitWorkAndLeaveHours } from '@/lib/timecard/leaveWorkType'
 import { TimecardTable } from '@/components/timecard/TimecardTable'
 
 type ClientOpt = { id: string; name: string }
@@ -158,6 +159,22 @@ export function TimecardReviewModal({
     return m
   }, [level1])
 
+  const l1CodeById = useMemo(() => {
+    const m = new Map<string, string>()
+    level1.forEach(l => m.set(l.id, l.code))
+    return m
+  }, [level1])
+
+  const entryHoursSplit = useMemo(
+    () =>
+      splitWorkAndLeaveHours(
+        entries,
+        e => isLeaveTimesheetEntry(e, l1CodeById),
+        e => Number(e.total_hours) || 0,
+      ),
+    [entries, l1CodeById],
+  )
+
   const clientLabel = useCallback(
     (id: string | null) => {
       if (!id) return '—'
@@ -246,7 +263,15 @@ export function TimecardReviewModal({
             </p>
             {timesheet ? (
               <p className="mt-1 text-sm tabular-nums text-slate-700">
-                Total {Number(timesheet.total_hours ?? 0).toFixed(2)} h
+                Work {entryHoursSplit.workHours.toFixed(2)} h
+                {entryHoursSplit.leaveHours > 0 ? (
+                  <>
+                    <span className="text-slate-400"> · </span>
+                    Leave {entryHoursSplit.leaveHours.toFixed(2)} h
+                  </>
+                ) : null}
+                <span className="text-slate-400"> · </span>
+                Total {entryHoursSplit.totalHours.toFixed(2)} h
                 <span className="text-slate-400"> · </span>
                 Billable {Number(timesheet.billable_hours ?? 0).toFixed(2)} h
               </p>
@@ -278,6 +303,7 @@ export function TimecardReviewModal({
               clientLabel={clientLabel}
               locationLabel={locationLabel}
               workTypeLabel={workTypeLabel}
+              l1CodeById={l1CodeById}
               onAdd={() => {}}
               onEdit={() => {}}
               onDelete={() => {}}

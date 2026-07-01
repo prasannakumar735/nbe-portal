@@ -9,6 +9,7 @@ import { composeDoorServiceQrLabelPngDataUrl } from '@/lib/door/doorServiceQrLab
 type DoorOption = {
     id: string;
     door_label: string;
+    door_serial?: string | null;
     door_type: string;
 };
 export default function QrCodesPage() {
@@ -79,7 +80,7 @@ export default function QrCodesPage() {
             }
             const { data, error: queryError } = await supabase
                 .from('doors')
-                .select('id, door_label, door_type')
+                .select('id, door_label, door_serial, door_type')
                 .eq('client_location_id', locationId)
                 .order('door_label', { ascending: true });
             if (queryError) {
@@ -90,6 +91,7 @@ export default function QrCodesPage() {
             const options = (data ?? []).map(row => ({
                 id: String(row.id ?? ''),
                 door_label: String(row.door_label ?? '').trim() || 'Unnamed door',
+                door_serial: row.door_serial != null ? String(row.door_serial).trim() || null : null,
                 door_type: String(row.door_type ?? '').trim() || 'Door',
             }));
             setDoors(options);
@@ -111,6 +113,7 @@ export default function QrCodesPage() {
             const pngDataUrl = await composeDoorServiceQrLabelPngDataUrl({
                 qrImageSrc: qrImageUrl,
                 doorLabel: selectedDoor.door_label,
+                doorSerial: selectedDoor.door_serial,
             });
             setGeneratedLabelUrl(pngDataUrl);
         }

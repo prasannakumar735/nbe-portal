@@ -20,6 +20,7 @@ export async function POST(request: Request) {
     const insertRow = {
       client_location_id: parsed.client_location_id,
       door_label: parsed.door_label,
+      door_serial: parsed.door_serial,
       door_type: parsed.door_type,
       door_description: parsed.door_description,
       door_type_alt: parsed.door_type_alt,
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
     const { data, error } = await auth.supabase
       .from('doors')
       .insert(insertRow)
-      .select('id, client_location_id, door_label, door_type, door_description, door_type_alt, cw, ch, install_date, created_at')
+      .select('id, client_location_id, door_label, door_serial, door_type, door_description, door_type_alt, cw, ch, install_date, created_at')
       .single()
 
     if (error) {

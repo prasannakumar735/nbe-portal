@@ -38,13 +38,13 @@ export function ReportsSummaryCards({ summary }: { summary: ReportsSummary | nul
   }
 
   const billableTrend: boolean | null =
-    summary.totalHours <= 0 ? null : summary.billablePercent >= 60 ? true : summary.billablePercent <= 35 ? false : null
+    summary.workHours <= 0 ? null : summary.billablePercent >= 60 ? true : summary.billablePercent <= 35 ? false : null
 
   const primary = [
     {
-      label: 'Total hours',
-      value: summary.totalHours.toLocaleString(undefined, { maximumFractionDigits: 2 }),
-      hint: 'All timesheet entries',
+      label: 'Work hours',
+      value: summary.workHours.toLocaleString(undefined, { maximumFractionDigits: 2 }),
+      hint: `Total incl. leave ${summary.totalHours.toLocaleString(undefined, { maximumFractionDigits: 2 })} h`,
       trend: null as boolean | null,
       large: true,
     },
@@ -67,7 +67,7 @@ export function ReportsSummaryCards({ summary }: { summary: ReportsSummary | nul
     {
       label: 'Billable %',
       value: `${summary.billablePercent.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`,
-      hint: 'Of total hours',
+      hint: 'Of work hours (excl. leave)',
       trend: billableTrend,
     },
     {

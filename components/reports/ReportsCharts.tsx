@@ -116,7 +116,7 @@ export function ReportsCharts({ summary }: { summary: ReportsSummary | null }) {
 
       <div className={card}>
         <h3 className="text-sm font-semibold text-slate-900">Hours over time</h3>
-        <p className="mt-0.5 text-xs text-slate-500">Total hours logged per day</p>
+        <p className="mt-0.5 text-xs text-slate-500">Work hours logged per day (excl. leave)</p>
         <div className="mt-3 h-56 w-full min-w-0 sm:h-64">
           {hasHoursSeries ? (
             <ResponsiveContainer width="100%" height="100%">
@@ -177,7 +177,7 @@ export function ReportsCharts({ summary }: { summary: ReportsSummary | null }) {
 
       <div className={card}>
         <h3 className="text-sm font-semibold text-slate-900">Technician performance</h3>
-        <p className="mt-0.5 text-xs text-slate-500">Total hours by technician (filtered range)</p>
+        <p className="mt-0.5 text-xs text-slate-500">Work hours by technician (excl. leave)</p>
         <div className="mt-3 h-56 w-full min-w-0 sm:h-64">
           {hasTech ? (
             <ResponsiveContainer width="100%" height="100%">

@@ -1,6 +1,7 @@
 import type { EmployeeTimesheetEntry } from '@/lib/types/employee-timesheet.types'
 import { compareEntryChronological } from '@/lib/timecard/compareEntryChronological'
 import { dedupeTimesheetEntriesById } from '@/lib/timecard/dedupeTimesheetEntries'
+import { isLeaveTimesheetEntry, splitWorkAndLeaveHours } from '@/lib/timecard/leaveWorkType'
 import { weekDayLabels } from '@/lib/timecard/weekDates'
 import type { DayEntry, TimeEntryRow } from '@/components/timecard/timecardTableTypes'
 
@@ -35,6 +36,7 @@ export function buildDayEntries(
   clientLabel: (id: string | null) => string,
   locationLabel: (id: string | null) => string,
   workTypeLabel: (l1: string | null, l2: string | null) => string,
+  l1CodeById?: Map<string, string>,
 ): DayEntry[] {
   const deduped = dedupeTimesheetEntriesById(entries)
   const days = weekDayLabels(weekStartIso)
@@ -51,7 +53,12 @@ export function buildDayEntries(
   return days.map(d => {
     const raw = byDate.get(d.date) ?? []
     const items = raw.map(e => toTimeEntryRow(e, clientLabel, locationLabel, workTypeLabel))
-    const dayTotalHours = items.reduce((s, r) => s + r.hours, 0)
+    const codeMap = l1CodeById ?? new Map<string, string>()
+    const daySplit = splitWorkAndLeaveHours(
+      raw,
+      e => isLeaveTimesheetEntry(e, codeMap),
+      e => Number(e.total_hours) || 0,
+    )
     const datePretty = new Date(`${d.date}T12:00:00`).toLocaleDateString(undefined, {
       month: 'short',
       day: 'numeric',
@@ -60,7 +67,8 @@ export function buildDayEntries(
       date: d.date,
       dayShort: d.label.toUpperCase().slice(0, 3),
       datePretty,
-      dayTotalHours,
+      dayTotalHours: daySplit.workHours,
+      dayLeaveHours: daySplit.leaveHours,
       items,
     }
   })

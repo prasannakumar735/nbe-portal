@@ -8,6 +8,7 @@ import { useAuth } from '@/app/providers/AuthProvider';
 import type { ClientLocationRecord, ClientOption, ClientRecord, ClientLocationOption, DoorRecord } from '@/lib/types/maintenance.types';
 import { createClientSchema, csvDoorRowSchema, } from '@/lib/validation/admin-clients';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
+import { compareDoorRecordsByLabel } from '@/lib/door/doorLabelSort';
 type TabKey = 'clients' | 'locations' | 'doors';
 type ApiResult<T> = {
     ok: true;
@@ -54,6 +55,7 @@ const locationFormSchema = z.object({
 const doorFormSchema = z.object({
     client_location_id: z.string().uuid('Location is required'),
     door_label: z.string().trim().min(1, 'Door label is required'),
+    door_serial: z.string().optional(),
     door_type: z.string().trim().min(1, 'Door type is required'),
     door_description: z.string().optional(),
     door_type_alt: z.string().optional(),
@@ -103,6 +105,7 @@ export default function AdminClientsPage() {
         defaultValues: {
             client_location_id: '',
             door_label: '',
+            door_serial: '',
             door_type: '',
             door_description: '',
             door_type_alt: '',
@@ -140,12 +143,13 @@ export default function AdminClientsPage() {
     const visibleDoors = useMemo(() => {
         const term = doorSearch.trim().toLowerCase();
         const byLocation = doors.filter(item => !selectedLocationId || item.client_location_id === selectedLocationId);
-        if (!term)
-            return byLocation;
-        return byLocation.filter(item => [item.door_label, item.door_type, item.door_description ?? '', item.door_type_alt ?? '']
-            .join(' ')
-            .toLowerCase()
-            .includes(term));
+        const filtered = !term
+            ? byLocation
+            : byLocation.filter(item => [item.door_label, item.door_serial ?? '', item.door_type, item.door_description ?? '', item.door_type_alt ?? '', item.cw ?? '', item.ch ?? '']
+                .join(' ')
+                .toLowerCase()
+                .includes(term));
+        return [...filtered].sort(compareDoorRecordsByLabel);
     }, [doors, doorSearch, selectedLocationId]);
     async function fetchJson<T>(url: string, init?: RequestInit): Promise<ApiResult<T>> {
         const response = await fetch(url, init);
@@ -333,6 +337,7 @@ export default function AdminClientsPage() {
         doorForm.reset({
             client_location_id: selectedLocationId || '',
             door_label: '',
+            door_serial: '',
             door_type: '',
             door_description: '',
             door_type_alt: '',
@@ -438,6 +443,7 @@ export default function AdminClientsPage() {
         await prepareDoorModal(selectedClientId, {
             client_location_id: selectedLocationId || '',
             door_label: '',
+            door_serial: '',
             door_type: '',
             door_description: '',
             door_type_alt: '',
@@ -453,6 +459,7 @@ export default function AdminClientsPage() {
         await prepareDoorModal(clientId, {
             client_location_id: door.client_location_id,
             door_label: door.door_label,
+            door_serial: door.door_serial ?? '',
             door_type: door.door_type,
             door_description: door.door_description ?? '',
             door_type_alt: door.door_type_alt ?? '',
@@ -717,8 +724,11 @@ export default function AdminClientsPage() {
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
                   <th className="px-3 py-2">Door Label</th>
+                  <th className="px-3 py-2">Serial</th>
                   <th className="px-3 py-2">Location</th>
                   <th className="px-3 py-2">Door Type</th>
+                  <th className="px-3 py-2">CW</th>
+                  <th className="px-3 py-2">CH</th>
                   <th className="px-3 py-2">Description</th>
                   <th className="px-3 py-2 text-right">Actions</th>
                 </tr>
@@ -726,9 +736,12 @@ export default function AdminClientsPage() {
               <tbody>
                 {visibleDoors.map(door => (<tr key={door.id} className="border-b border-slate-100">
                     <td className="px-3 py-2 text-slate-800">{door.door_label}</td>
+                    <td className="px-3 py-2 text-slate-700">{door.door_serial ?? '—'}</td>
                     <td className="px-3 py-2 text-slate-700">{locations.find(item => item.id === door.client_location_id)?.location_name ?? '—'}</td>
                     <td className="px-3 py-2 text-slate-700">{door.door_type}</td>
-                    <td className="px-3 py-2 text-slate-700">{door.door_description ?? '-'}</td>
+                    <td className="px-3 py-2 text-slate-700">{door.cw ?? '—'}</td>
+                    <td className="px-3 py-2 text-slate-700">{door.ch ?? '—'}</td>
+                    <td className="px-3 py-2 text-slate-700">{door.door_description ?? '—'}</td>
                     <td className="px-3 py-2 text-right">
                       <button disabled={!canEdit} type="button" className="mr-2 text-indigo-700 underline disabled:opacity-40" onClick={() => openEditDoorModal(door)}>Edit</button>
                       <button disabled={!canEdit} type="button" className="text-red-700 underline disabled:opacity-40" onClick={() => handleDeleteDoor(door.id)}>Delete</button>
@@ -772,6 +785,7 @@ export default function AdminClientsPage() {
                 </p>
               )}
               <input {...doorForm.register('door_label')} placeholder="Door label" className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
+              <input {...doorForm.register('door_serial')} placeholder="Serial number (e.g. P0823)" className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
               <input {...doorForm.register('door_type')} placeholder="Door type" className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
               <input {...doorForm.register('install_date')} type="date" className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
               <input {...doorForm.register('door_description')} placeholder="Door description" className="h-10 rounded-lg border border-slate-300 px-3 text-sm md:col-span-2"/>

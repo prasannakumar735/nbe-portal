@@ -26,6 +26,8 @@ export type TimecardGroupBy = 'day' | 'technician' | 'client'
 
 export type ReportsSummary = {
   totalHours: number
+  workHours: number
+  leaveHours: number
   billableHours: number
   nonBillableHours: number
   /** 0–100 when totalHours > 0 */
@@ -67,6 +69,8 @@ export type TimecardGroupedResponse = {
     subtotalHours: number
   }>
   grandTotalHours: number
+  grandWorkHours: number
+  grandLeaveHours: number
 }
 
 export type MaintenanceReportRow = {
