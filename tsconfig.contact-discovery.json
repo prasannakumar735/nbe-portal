@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "lib/sales/agents/contactDiscoveryExecutor.ts",
+    "lib/sales/agents/contactDiscoveryPersistence.ts",
+    "lib/sales/providers/basicWebsiteContactProvider.ts",
+    "lib/sales/providers/contactClassification.ts",
+    "lib/sales/providers/contactCrawlPlanner.ts",
+    "lib/sales/providers/contactDiscoveryProvider.interface.ts",
+    "lib/sales/providers/contactHtmlExtraction.ts",
+    "lib/sales/providers/contactOutreachRanking.ts",
+    "lib/sales/providers/contactOutreachSignals.ts",
+    "lib/sales/providers/contactPageDiscovery.ts",
+    "lib/sales/providers/websiteFetch.ts",
+    "lib/sales/repositories/salesContactRepository.ts",
+    "lib/sales/types/contact.types.ts",
+    "lib/sales/types/contactDiscovery.types.ts",
+    "lib/sales/types/contactSources.ts",
+    "lib/sales/validation/contactDiscoveryWorkflow.test.ts",
+    "hooks/useContactDiscovery.ts",
+    "hooks/useSelectedContacts.ts",
+    "components/sales-engine/ContactReviewTable.tsx",
+    "components/sales-engine/SalesEnginePage.tsx"
+  ]
+}
