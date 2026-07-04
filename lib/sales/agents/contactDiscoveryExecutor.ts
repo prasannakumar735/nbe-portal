@@ -1,11 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getContactDiscoveryProvider } from '@/lib/sales/providers/contactProviders'
-import { candidatePageUrls } from '@/lib/sales/providers/websiteFetch'
+import { selectRecommendedContacts } from '@/lib/sales/providers/contactOutreachRanking'
 import type { ContactDiscoveryJobPayload } from '@/lib/sales/jobs/job.types'
 import { getSalesBusinessById } from '@/lib/sales/repositories/salesBusinessRepository'
 import {
-  insertSalesContactsSkipDuplicates,
   setPrimarySalesContact,
+  setRecommendedSalesContacts,
+  upsertSalesContactsFromDiscovery,
 } from '@/lib/sales/repositories/salesContactRepository'
 import {
   completeSalesContactScanLog,
@@ -55,9 +56,7 @@ export async function executeContactDiscoveryJob(
 
   try {
     const provider = getContactDiscoveryProvider()
-    const results = await provider.scanWebsite(website)
-    const normalizedUrl = website.startsWith('http') ? website : `https://${website}`
-    const pages_scanned = candidatePageUrls(normalizedUrl).length
+    const { results, pages_scanned } = await provider.scanWebsite(website)
     const emails_found = results.filter((r) => r.email).length
 
     const inserts = results.map((r) => ({
@@ -69,21 +68,46 @@ export async function executeContactDiscoveryJob(
       confidence_score: r.confidence_score,
       is_primary: false,
       source: r.source,
+      discovery_page_title: r.discovery_page_title,
+      discovery_method: r.discovery_method,
+      page_kind: r.page_kind,
+      recommended_for_outreach: false,
+      recommended_reason: null,
     }))
 
-    const { inserted, skipped } = await insertSalesContactsSkipDuplicates(supabase, inserts)
+    const { inserted, updated } = await upsertSalesContactsFromDiscovery(
+      supabase,
+      business.id,
+      inserts,
+    )
+    const allTouched = [...inserted, ...updated]
 
-    const primaryCandidate = inserted
-      .filter((c) => c.email)
-      .sort((a, b) => b.confidence_score - a.confidence_score)[0]
-    if (primaryCandidate) {
-      await setPrimarySalesContact(supabase, business.id, primaryCandidate.id)
+    const recommended = selectRecommendedContacts(results, 1)
+    const emailToId = new Map(
+      allTouched.filter((c) => c.email).map((c) => [c.email!.toLowerCase(), c.id] as const),
+    )
+
+    const recommendations = recommended
+      .map((pick) => {
+        const email = pick.result.email?.toLowerCase()
+        if (!email) return null
+        const contactId = emailToId.get(email)
+        if (!contactId) return null
+        return { contactId, reason: pick.reason }
+      })
+      .filter((r): r is { contactId: string; reason: string } => r != null)
+
+    if (recommendations.length > 0) {
+      await setRecommendedSalesContacts(supabase, business.id, recommendations)
+      await setPrimarySalesContact(supabase, business.id, recommendations[0].contactId)
     }
 
     await completeSalesContactScanLog(supabase, scanLog.id, {
       emails_found,
       scanned_pages: pages_scanned,
     })
+
+    const skipped = Math.max(0, inserts.filter((r) => r.email).length - allTouched.length)
 
     return {
       business_id: business.id,
