@@ -5,6 +5,7 @@ import { salesEngineFetch } from '@/components/sales-engine/salesEngineApi'
 import type { ContactDiscoveryAgentResult } from '@/lib/sales/types/contact.types'
 import type { SalesContact } from '@/lib/sales/types/contact.types'
 import { normalizeSalesContactType } from '@/lib/sales/types/contactSources'
+import { normalizeContactPageKind } from '@/lib/sales/types/contactDiscovery.types'
 import { getSupabaseClient } from '@/lib/supabase'
 
 export type SalesContactDisplayRow = SalesContact & {
@@ -72,11 +73,13 @@ export function useContactDiscovery() {
           row.discovery_method === 'tel'
             ? row.discovery_method
             : null,
-        page_kind:
-          typeof row.page_kind === 'string' ? (row.page_kind as SalesContact['page_kind']) : null,
+        page_kind: normalizeContactPageKind(
+          typeof row.page_kind === 'string' ? row.page_kind : null,
+        ),
         recommended_for_outreach: Boolean(row.recommended_for_outreach),
         recommended_reason:
           row.recommended_reason != null ? String(row.recommended_reason) : null,
+        discovered_at: String(row.discovered_at ?? row.created_at),
         company_name: nameById.get(String(row.business_id)) ?? '—',
       }))
 

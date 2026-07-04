@@ -239,3 +239,19 @@ export function outreachPriorityForContact(contact: OutreachContactPick): number
     contact_page: contact.contact_page,
   })
 }
+
+/** Contact review table order: recommended → outreach priority → confidence. */
+export function compareContactsForOutreachReview(
+  a: OutreachContactPick,
+  b: OutreachContactPick,
+  recommendedIds: ReadonlySet<string>,
+): number {
+  const recA = recommendedIds.has(a.id) ? 1 : 0
+  const recB = recommendedIds.has(b.id) ? 1 : 0
+  if (recB !== recA) return recB - recA
+
+  const priorityDiff = outreachPriorityForContact(b) - outreachPriorityForContact(a)
+  if (priorityDiff !== 0) return priorityDiff
+
+  return b.confidence_score - a.confidence_score
+}

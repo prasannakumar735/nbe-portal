@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import type { ContactResult } from '@/lib/sales/providers/contactDiscoveryProvider.interface'
 import {
   applyOutreachRankingAndRecommendations,
+  compareContactsForOutreachReview,
   computeOutreachPriority,
   explainOutreachRecommendation,
   rankContactResults,
@@ -161,5 +162,59 @@ describe('applyOutreachRankingAndRecommendations', () => {
     assert.equal(out?.recommended_for_outreach, true)
     assert.equal(out?.recommended_reason, 'Found on Contact Us page')
     assert.equal(out?.confidence_score, 77)
+  })
+})
+
+describe('compareContactsForOutreachReview', () => {
+  it('sorts recommended before higher outreach priority', () => {
+    const recommendedIds = new Set(['low-priority-rec'])
+    const lowPriorityRec = {
+      id: 'low-priority-rec',
+      business_id: 'b1',
+      email: 'info@example.com',
+      contact_type: 'general' as const,
+      confidence_score: 99,
+      recommended_for_outreach: true,
+      page_kind: 'homepage' as const,
+      discovery_method: 'body_text' as const,
+    }
+    const highPriority = {
+      id: 'high-priority',
+      business_id: 'b1',
+      email: 'branch@example.com',
+      contact_type: 'sales' as const,
+      confidence_score: 50,
+      recommended_for_outreach: false,
+      page_kind: 'branch' as const,
+      discovery_method: 'mailto_labeled' as const,
+    }
+    assert.ok(
+      compareContactsForOutreachReview(lowPriorityRec, highPriority, recommendedIds) < 0,
+    )
+  })
+
+  it('uses outreach priority then confidence when recommendation ties', () => {
+    const recommendedIds = new Set<string>()
+    const sales = {
+      id: 'a',
+      business_id: 'b1',
+      email: 'sales@example.com',
+      contact_type: 'sales' as const,
+      confidence_score: 60,
+      recommended_for_outreach: false,
+      page_kind: 'contact' as const,
+      discovery_method: 'mailto' as const,
+    }
+    const support = {
+      id: 'b',
+      business_id: 'b1',
+      email: 'help@example.com',
+      contact_type: 'support' as const,
+      confidence_score: 95,
+      recommended_for_outreach: false,
+      page_kind: 'contact' as const,
+      discovery_method: 'mailto' as const,
+    }
+    assert.ok(compareContactsForOutreachReview(sales, support, recommendedIds) < 0)
   })
 })

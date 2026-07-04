@@ -37,7 +37,8 @@ export function ContactReviewTable({
     <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
       <h2 className="text-lg font-semibold text-slate-900">Contact Review</h2>
       <p className="mt-1 text-sm text-slate-600">
-        Choose which email addresses will receive the outreach campaign.
+        Choose which email addresses will receive the outreach campaign. Recommended contacts are
+        pre-selected; you can change the selection anytime.
       </p>
 
       {loading && !hasGroups ? (
@@ -83,7 +84,7 @@ export function ContactReviewTable({
                 </div>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] text-left text-sm">
+                <table className="w-full min-w-[760px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 bg-white">
                       <th className="w-10 px-3 py-2" scope="col">
@@ -94,7 +95,8 @@ export function ContactReviewTable({
                       <th className="px-3 py-2 font-medium text-slate-700">Confidence</th>
                       <th className="px-3 py-2 font-medium text-slate-700">Outreach Priority</th>
                       <th className="px-3 py-2 font-medium text-slate-700">Verification Status</th>
-                      <th className="px-3 py-2 font-medium text-slate-700">Discovery</th>
+                      <th className="px-3 py-2 font-medium text-slate-700">Page URL</th>
+                      <th className="px-3 py-2 font-medium text-slate-700">Page Title</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -152,17 +154,27 @@ export function ContactReviewTable({
                           </span>
                         </td>
                         <td className="px-3 py-2 text-slate-700">
-                          <div className="max-w-xs truncate" title={contact.contact_page ?? undefined}>
-                            {contact.contact_page ?? '—'}
+                          {contact.contact_page ? (
+                            <a
+                              href={contact.contact_page}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block max-w-xs truncate text-indigo-700 hover:underline"
+                              title={contact.contact_page}
+                            >
+                              {contact.contact_page}
+                            </a>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-slate-700">
+                          <div
+                            className="max-w-[10rem] truncate sm:max-w-xs"
+                            title={contact.discovery_page_title ?? undefined}
+                          >
+                            {contact.discovery_page_title ?? '—'}
                           </div>
-                          {contact.discovery_page_title ? (
-                            <div className="mt-0.5 truncate text-xs text-slate-500">
-                              {contact.discovery_page_title}
-                            </div>
-                          ) : null}
-                          {contact.discovery_method ? (
-                            <div className="text-xs text-slate-500">{contact.discovery_method}</div>
-                          ) : null}
                         </td>
                       </tr>
                       )
