@@ -135,6 +135,20 @@ export function useCampaignBuilder() {
         email_verified: Boolean(row.email_verified),
         verification_status: row.verification_status as SalesContact['verification_status'],
         created_at: String(row.created_at),
+        discovery_page_title:
+          row.discovery_page_title != null ? String(row.discovery_page_title) : null,
+        discovery_method:
+          row.discovery_method === 'mailto' ||
+          row.discovery_method === 'mailto_labeled' ||
+          row.discovery_method === 'body_text' ||
+          row.discovery_method === 'tel'
+            ? row.discovery_method
+            : null,
+        page_kind:
+          typeof row.page_kind === 'string' ? (row.page_kind as SalesContact['page_kind']) : null,
+        recommended_for_outreach: Boolean(row.recommended_for_outreach),
+        recommended_reason:
+          row.recommended_reason != null ? String(row.recommended_reason) : null,
         company_name: nameById.get(String(row.business_id)) ?? '—',
       }))
 

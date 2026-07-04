@@ -32,6 +32,7 @@ export function SalesEnginePage() {
         postcode={scan.postcode}
         onPostcodeChange={scan.setPostcode}
         onScan={() => void scan.scan()}
+        onRefreshFromGoogle={() => void scan.refreshFromGoogle()}
         scanning={scan.scanning}
         error={scan.scanError}
       />
@@ -92,6 +93,7 @@ export function SalesEnginePage() {
           <ContactReviewTable
             groups={selection.groups}
             loading={discovery.contactsLoading}
+            recommendedIds={selection.recommendedIds}
             isSelected={selection.isSelected}
             onToggleContact={selection.toggleContact}
             onSelectAllCompany={selection.selectAllForCompany}

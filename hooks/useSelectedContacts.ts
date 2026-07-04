@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { SalesContactDisplayRow } from '@/hooks/useContactDiscovery'
+import {
+  outreachPriorityForContact,
+  pickRecommendedOutreachContactIds,
+} from '@/lib/sales/providers/contactOutreachRanking'
 
 export type ContactReviewGroup = {
   business_id: string
@@ -22,12 +26,26 @@ export function useSelectedContacts(contacts: SalesContactDisplayRow[]) {
     [emailContacts],
   )
 
-  useEffect(() => {
-    setSelectedIds((prev) => {
-      const next = new Set([...prev].filter((id) => emailContactIds.has(id)))
-      return next.size === prev.size && [...next].every((id) => prev.has(id)) ? prev : next
-    })
-  }, [emailContactIds])
+  const recommendedIds = useMemo(
+    () =>
+      new Set(
+        pickRecommendedOutreachContactIds(
+          emailContacts.map((c) => ({
+            id: c.id,
+            business_id: c.business_id,
+            email: c.email,
+            contact_type: c.contact_type,
+            confidence_score: c.confidence_score,
+            recommended_for_outreach: c.recommended_for_outreach,
+            page_kind: c.page_kind,
+            discovery_method: c.discovery_method,
+            contact_page: c.contact_page,
+            recommended_reason: c.recommended_reason,
+          })),
+        ),
+      ),
+    [emailContacts],
+  )
 
   const groups = useMemo((): ContactReviewGroup[] => {
     const byBusiness = new Map<string, ContactReviewGroup>()
@@ -44,12 +62,51 @@ export function useSelectedContacts(contacts: SalesContactDisplayRow[]) {
       }
     }
     for (const group of byBusiness.values()) {
-      group.contacts.sort((a, b) => b.confidence_score - a.confidence_score)
+      group.contacts.sort((a, b) => {
+        const diff =
+          outreachPriorityForContact({
+            id: b.id,
+            business_id: b.business_id,
+            email: b.email,
+            contact_type: b.contact_type,
+            confidence_score: b.confidence_score,
+            recommended_for_outreach: b.recommended_for_outreach,
+            page_kind: b.page_kind,
+            discovery_method: b.discovery_method,
+          }) -
+          outreachPriorityForContact({
+            id: a.id,
+            business_id: a.business_id,
+            email: a.email,
+            contact_type: a.contact_type,
+            confidence_score: a.confidence_score,
+            recommended_for_outreach: a.recommended_for_outreach,
+            page_kind: a.page_kind,
+            discovery_method: a.discovery_method,
+          })
+        if (diff !== 0) return diff
+        return b.confidence_score - a.confidence_score
+      })
     }
     return [...byBusiness.values()].sort((a, b) =>
       a.company_name.localeCompare(b.company_name),
     )
   }, [emailContacts])
+
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const next = new Set([...prev].filter((id) => emailContactIds.has(id)))
+
+      for (const group of groups) {
+        if (group.contacts.some((c) => next.has(c.id))) continue
+        for (const c of group.contacts) {
+          if (recommendedIds.has(c.id)) next.add(c.id)
+        }
+      }
+
+      return next.size === prev.size && [...next].every((id) => prev.has(id)) ? prev : next
+    })
+  }, [emailContactIds, groups, recommendedIds])
 
   const toggleContact = useCallback((contactId: string) => {
     setSelectedIds((prev) => {
@@ -107,6 +164,7 @@ export function useSelectedContacts(contacts: SalesContactDisplayRow[]) {
   return {
     groups,
     emailContacts,
+    recommendedIds,
     extractedEmailCount,
     selectedEmailCount,
     selectedEmailIds,

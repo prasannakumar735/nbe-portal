@@ -2,6 +2,7 @@
 
 import type { ContactReviewGroup } from '@/hooks/useSelectedContacts'
 import { LoadingSkeleton } from '@/components/ui/LoadingSkeleton'
+import { outreachPriorityForContact } from '@/lib/sales/providers/contactOutreachRanking'
 
 const VERIFICATION_STYLES: Record<string, string> = {
   unknown: 'bg-slate-100 text-slate-700',
@@ -14,6 +15,7 @@ const VERIFICATION_STYLES: Record<string, string> = {
 type ContactReviewTableProps = {
   groups: ContactReviewGroup[]
   loading: boolean
+  recommendedIds: Set<string>
   isSelected: (contactId: string) => boolean
   onToggleContact: (contactId: string) => void
   onSelectAllCompany: (businessId: string) => void
@@ -23,6 +25,7 @@ type ContactReviewTableProps = {
 export function ContactReviewTable({
   groups,
   loading,
+  recommendedIds,
   isSelected,
   onToggleContact,
   onSelectAllCompany,
@@ -88,13 +91,25 @@ export function ContactReviewTable({
                       </th>
                       <th className="px-3 py-2 font-medium text-slate-700">Email Address</th>
                       <th className="px-3 py-2 font-medium text-slate-700">Contact Type</th>
-                      <th className="px-3 py-2 font-medium text-slate-700">Confidence Score</th>
+                      <th className="px-3 py-2 font-medium text-slate-700">Confidence</th>
+                      <th className="px-3 py-2 font-medium text-slate-700">Outreach Priority</th>
                       <th className="px-3 py-2 font-medium text-slate-700">Verification Status</th>
-                      <th className="px-3 py-2 font-medium text-slate-700">Source</th>
+                      <th className="px-3 py-2 font-medium text-slate-700">Discovery</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {group.contacts.map((contact) => (
+                    {group.contacts.map((contact) => {
+                      const outreachPriority = outreachPriorityForContact({
+                        id: contact.id,
+                        business_id: contact.business_id,
+                        email: contact.email,
+                        contact_type: contact.contact_type,
+                        confidence_score: contact.confidence_score,
+                        recommended_for_outreach: contact.recommended_for_outreach,
+                        page_kind: contact.page_kind,
+                        discovery_method: contact.discovery_method,
+                      })
+                      return (
                       <tr key={contact.id} className="border-b border-slate-50 last:border-0">
                         <td className="px-3 py-2 align-top">
                           <input
@@ -105,9 +120,27 @@ export function ContactReviewTable({
                             aria-label={`Include ${contact.email} in campaign`}
                           />
                         </td>
-                        <td className="px-3 py-2 font-medium text-slate-900">{contact.email}</td>
+                        <td className="px-3 py-2 font-medium text-slate-900">
+                          <span>{contact.email}</span>
+                          {recommendedIds.has(contact.id) ? (
+                            <span className="ml-2 inline-flex rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">
+                              Recommended
+                            </span>
+                          ) : null}
+                          {contact.is_primary ? (
+                            <span className="ml-2 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                              Primary
+                            </span>
+                          ) : null}
+                          {contact.recommended_reason ? (
+                            <p className="mt-1 text-xs font-normal text-slate-500">
+                              {contact.recommended_reason}
+                            </p>
+                          ) : null}
+                        </td>
                         <td className="px-3 py-2 capitalize text-slate-700">{contact.contact_type}</td>
                         <td className="px-3 py-2 text-slate-700">{contact.confidence_score}%</td>
+                        <td className="px-3 py-2 text-slate-700">{outreachPriority}</td>
                         <td className="px-3 py-2">
                           <span
                             className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
@@ -118,9 +151,22 @@ export function ContactReviewTable({
                             {contact.verification_status}
                           </span>
                         </td>
-                        <td className="px-3 py-2 text-slate-700">{contact.source}</td>
+                        <td className="px-3 py-2 text-slate-700">
+                          <div className="max-w-xs truncate" title={contact.contact_page ?? undefined}>
+                            {contact.contact_page ?? '—'}
+                          </div>
+                          {contact.discovery_page_title ? (
+                            <div className="mt-0.5 truncate text-xs text-slate-500">
+                              {contact.discovery_page_title}
+                            </div>
+                          ) : null}
+                          {contact.discovery_method ? (
+                            <div className="text-xs text-slate-500">{contact.discovery_method}</div>
+                          ) : null}
+                        </td>
                       </tr>
-                    ))}
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>

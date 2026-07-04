@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { salesEngineFetch } from '@/components/sales-engine/salesEngineApi'
 import type { ContactDiscoveryAgentResult } from '@/lib/sales/types/contact.types'
 import type { SalesContact } from '@/lib/sales/types/contact.types'
+import { normalizeSalesContactType } from '@/lib/sales/types/contactSources'
 import { getSupabaseClient } from '@/lib/supabase'
 
 export type SalesContactDisplayRow = SalesContact & {
@@ -55,13 +56,27 @@ export function useContactDiscovery() {
         email: row.email != null ? String(row.email) : null,
         phone: row.phone != null ? String(row.phone) : null,
         contact_page: row.contact_page != null ? String(row.contact_page) : null,
-        contact_type: row.contact_type as SalesContact['contact_type'],
+        contact_type: normalizeSalesContactType(String(row.contact_type ?? 'unknown')),
         confidence_score: Number(row.confidence_score ?? 50),
         is_primary: Boolean(row.is_primary),
         source: row.source as SalesContact['source'],
         email_verified: Boolean(row.email_verified),
         verification_status: row.verification_status as SalesContact['verification_status'],
         created_at: String(row.created_at),
+        discovery_page_title:
+          row.discovery_page_title != null ? String(row.discovery_page_title) : null,
+        discovery_method:
+          row.discovery_method === 'mailto' ||
+          row.discovery_method === 'mailto_labeled' ||
+          row.discovery_method === 'body_text' ||
+          row.discovery_method === 'tel'
+            ? row.discovery_method
+            : null,
+        page_kind:
+          typeof row.page_kind === 'string' ? (row.page_kind as SalesContact['page_kind']) : null,
+        recommended_for_outreach: Boolean(row.recommended_for_outreach),
+        recommended_reason:
+          row.recommended_reason != null ? String(row.recommended_reason) : null,
         company_name: nameById.get(String(row.business_id)) ?? '—',
       }))
 
