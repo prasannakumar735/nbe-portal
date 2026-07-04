@@ -32,15 +32,9 @@ export function normalizeWebsiteUrl(raw: string): string {
   return assertPublicWebsiteUrl(withScheme).toString()
 }
 
-export function candidatePageUrls(baseUrl: string): string[] {
-  const base = new URL(baseUrl)
-  const paths = ['/', '/contact', '/contact-us', '/about', '/about-us']
-  const urls = new Set<string>()
-  for (const path of paths) {
-    urls.add(new URL(path, base).toString())
-  }
-  return [...urls]
-}
+export const MAX_CONTACT_HUB_PAGES = 6
+export const MAX_CONTACT_BRANCH_PAGES = 10
+export const MAX_CONTACT_SCAN_PAGES = 1 + MAX_CONTACT_HUB_PAGES + MAX_CONTACT_BRANCH_PAGES
 
 export async function fetchHtmlPage(url: string): Promise<string | null> {
   const controller = new AbortController()
