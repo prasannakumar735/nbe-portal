@@ -10,8 +10,12 @@ const CONTACT_PATH_RE =
 const LOCATIONS_HUB_RE =
   /\/(locations?|branches|find-us|offices|stores|depots|showrooms?)(?:\/|$)/i
 
+/** Paths that must not be crawled for contact discovery. */
 const EXCLUDE_PATH_RE =
-  /\/(blog|news|media|articles?|press|product|products|shop|cart|catalog|pdf|download|careers|jobs|vacancies)(?:\/|$|\.)/i
+  /\/(login|log-in|signin|sign-in|signup|sign-up|auth|portal|employee|employees|account|my-account|careers|jobs|vacancies|privacy|terms|terms-of-use|legal|cookies?|cookie-policy|blog|news|media|articles?|press|product|products|shop|cart|catalog|download|downloads|wp-content|uploads)(?:\/|$)/i
+
+const EXCLUDE_FILE_RE =
+  /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|7z|csv|png|jpe?g|gif|webp|svg|mp4|mov|avi|wmv)(\?|#|$)/i
 
 export function normalizePageUrl(raw: string, base: URL): string {
   const link = new URL(raw, base)
@@ -28,9 +32,12 @@ export function isSameSite(base: URL, link: URL): boolean {
 }
 
 export function shouldExcludeCrawlPath(pathname: string, href: string): boolean {
+  const path = pathname.toLowerCase()
   const lowerHref = href.toLowerCase()
-  if (lowerHref.endsWith('.pdf') || lowerHref.includes('.pdf?')) return true
-  return EXCLUDE_PATH_RE.test(pathname.toLowerCase())
+  if (EXCLUDE_FILE_RE.test(lowerHref)) return true
+  if (lowerHref.includes('.pdf') || lowerHref.includes('/pdf/')) return true
+  if (/\/privacy/i.test(path) || /\/terms/i.test(path) || /\/cookies/i.test(path)) return true
+  return EXCLUDE_PATH_RE.test(path)
 }
 
 export function linkLooksLikeContactPage(linkText: string, pathname: string): boolean {
@@ -47,6 +54,7 @@ export function linkLooksLikeLocationsHub(linkText: string, pathname: string): b
 }
 
 export function looksLikeBranchPage(linkText: string, pathname: string): boolean {
+  if (shouldExcludeCrawlPath(pathname, pathname)) return false
   const segments = pathname.split('/').filter(Boolean)
   if (segments.length < 2) return false
   const parent = segments[segments.length - 2]?.toLowerCase() ?? ''

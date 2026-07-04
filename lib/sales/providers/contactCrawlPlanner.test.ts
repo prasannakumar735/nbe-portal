@@ -24,12 +24,12 @@ describe('discoverHubPagesFromHtml', () => {
     const html = `
       <html><body>
         <nav><a href="/contact-us">Contact Us</a></nav>
-        <footer><a href="/blog/contact-fake">Contact</a></footer>
+        <footer><a href="/privacy">Privacy</a></footer>
       </body></html>
     `
     const hubs = discoverHubPagesFromHtml(html, 'https://example.com/', 'https://example.com')
     assert.ok(hubs.some((h) => h.url.endsWith('/contact-us')))
-    assert.equal(hubs.some((h) => h.url.includes('blog')), false)
+    assert.equal(hubs.some((h) => h.url.includes('privacy')), false)
   })
 })
 

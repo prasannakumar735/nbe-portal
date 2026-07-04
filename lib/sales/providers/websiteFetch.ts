@@ -1,5 +1,6 @@
 const MAX_HTML_BYTES = 512_000
-const FETCH_TIMEOUT_MS = 8_000
+/** Per-request timeout; failed/ slow pages return null and the crawl continues. */
+export const FETCH_TIMEOUT_MS = 8_000
 const USER_AGENT = 'NBE-Sales-Engine-ContactBot/1.0 (+https://nbe.com.au)'
 
 export function assertPublicWebsiteUrl(raw: string): URL {
@@ -36,6 +37,7 @@ export const MAX_CONTACT_HUB_PAGES = 6
 export const MAX_CONTACT_BRANCH_PAGES = 10
 export const MAX_CONTACT_SCAN_PAGES = 1 + MAX_CONTACT_HUB_PAGES + MAX_CONTACT_BRANCH_PAGES
 
+/** Returns HTML or null on timeout, HTTP error, or non-HTML response. */
 export async function fetchHtmlPage(url: string): Promise<string | null> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)

@@ -27,6 +27,19 @@ export type ContactCrawlPageVisit = {
 
 export type ContactCrawlFetchHtml = (url: string) => Promise<string | null>
 
+function isAllowedCrawlPage(page: PlannedCrawlPage): boolean {
+  try {
+    const pathname = new URL(page.url).pathname
+    return !shouldExcludeCrawlPath(pathname, page.url)
+  } catch {
+    return false
+  }
+}
+
+function filterAllowedCrawlPages(plan: PlannedCrawlPage[]): PlannedCrawlPage[] {
+  return plan.filter(isAllowedCrawlPage)
+}
+
 const HUB_LABEL_RE =
   /\b(contact\s*us|email\s*us|contact|enquir|inquir|get\s*(a\s*)?quote|request\s*(a\s*)?quote|sales|locations?|branches|find\s*us|offices|service)\b/i
 
@@ -198,7 +211,7 @@ export function capHubPagesInPlan(plan: PlannedCrawlPage[]): PlannedCrawlPage[] 
     seen.add(page.url)
     merged.push(page)
   }
-  return merged
+  return filterAllowedCrawlPages(merged)
 }
 
 export function buildInitialCrawlPlan(baseUrl: string, homeHtml: string | null): PlannedCrawlPage[] {
@@ -209,7 +222,7 @@ export function buildInitialCrawlPlan(baseUrl: string, homeHtml: string | null):
 
   if (homeHtml) {
     for (const page of discoverHubPagesFromHtml(homeHtml, home, baseUrl)) {
-      if (seen.has(page.url)) continue
+      if (seen.has(page.url) || !isAllowedCrawlPage(page)) continue
       seen.add(page.url)
       plan.push(page)
     }
@@ -217,7 +230,7 @@ export function buildInitialCrawlPlan(baseUrl: string, homeHtml: string | null):
 
   if (plan.length === 1) {
     for (const page of fallbackSeedPages(baseUrl)) {
-      if (seen.has(page.url)) continue
+      if (seen.has(page.url) || !isAllowedCrawlPage(page)) continue
       seen.add(page.url)
       plan.push(page)
     }
@@ -255,6 +268,7 @@ export async function crawlContactPagesBounded(
 
     for (const branch of discoverBranchPagesFromHtml(html, page.url, baseUrl)) {
       if (branchPagesQueued >= MAX_CONTACT_BRANCH_PAGES) break
+      if (!isAllowedCrawlPage(branch)) continue
       if (queued.has(branch.url)) continue
       queued.add(branch.url)
       queue.push(branch)
