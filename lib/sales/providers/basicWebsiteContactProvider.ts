@@ -1,46 +1,84 @@
 import * as cheerio from 'cheerio'
 import {
   classifyContactFromEmail,
+  isMailtoLabeled,
+  mailtoLinkLabelBoost,
   normalizeEmail,
 } from '@/lib/sales/providers/contactClassification'
+import {
+  buildInitialCrawlPlan,
+  discoverBranchPagesFromHtml,
+  type PlannedCrawlPage,
+} from '@/lib/sales/providers/contactCrawlPlanner'
+import { normalizePageUrl, pageIntentBoost, readPageTitle } from '@/lib/sales/providers/contactPageDiscovery'
 import type { ContactDiscoveryProvider } from '@/lib/sales/providers/contactDiscoveryProvider.interface'
 import type { ContactResult } from '@/lib/sales/providers/contactDiscoveryProvider.interface'
+import { rankContactResults } from '@/lib/sales/providers/contactOutreachRanking'
 import {
-  assertPublicWebsiteUrl,
-  candidatePageUrls,
-  EMAIL_PATTERN,
   fetchHtmlPage,
+  MAX_CONTACT_BRANCH_PAGES,
+  MAX_CONTACT_SCAN_PAGES,
   normalizeWebsiteUrl,
+  EMAIL_PATTERN,
   PHONE_PATTERN,
 } from '@/lib/sales/providers/websiteFetch'
+import type { ContactDiscoveryMethod, ContactPageKind } from '@/lib/sales/types/contactDiscovery.types'
 
-function pageConfidenceBoost(pathname: string): number {
-  const p = pathname.toLowerCase()
-  if (p.includes('contact')) return 15
-  if (p.includes('about')) return 8
-  return 0
+function methodRank(method: ContactDiscoveryMethod | null): number {
+  switch (method) {
+    case 'mailto_labeled':
+      return 3
+    case 'mailto':
+      return 2
+    case 'body_text':
+      return 1
+    default:
+      return 0
+  }
 }
 
-function extractFromHtml(html: string, pageUrl: string): ContactResult[] {
+function isBetterResult(candidate: ContactResult, existing: ContactResult): boolean {
+  if (candidate.confidence_score !== existing.confidence_score) {
+    return candidate.confidence_score > existing.confidence_score
+  }
+  return methodRank(candidate.discovery_method) > methodRank(existing.discovery_method)
+}
+
+function extractFromHtml(
+  html: string,
+  pageUrl: string,
+  pageKind: ContactPageKind,
+): ContactResult[] {
   const $ = cheerio.load(html)
   const found: ContactResult[] = []
   const seenEmails = new Set<string>()
   const page = new URL(pageUrl)
-  const boost = pageConfidenceBoost(page.pathname)
+  const boost = pageIntentBoost(page.pathname)
+  const discovery_page_title = readPageTitle(html)
 
-  $('a[href^="mailto:"]').each((_, el) => {
+  $('a[href]').each((_, el) => {
     const href = $(el).attr('href') ?? ''
+    if (!/^mailto:/i.test(href)) return
     const raw = href.replace(/^mailto:/i, '').split('?')[0]
     const email = normalizeEmail(raw)
     if (!email || seenEmails.has(email)) return
     seenEmails.add(email)
+    const linkLabel = ($(el).text() ?? '').trim()
+    const labelBoost = mailtoLinkLabelBoost(linkLabel)
+    const discovery_method: ContactDiscoveryMethod = isMailtoLabeled(linkLabel)
+      ? 'mailto_labeled'
+      : 'mailto'
     found.push({
       email,
       phone: null,
       contact_page: pageUrl,
       contact_type: classifyContactFromEmail(email),
-      confidence_score: Math.min(95, 72 + boost),
+      confidence_score: Math.min(98, 78 + boost + labelBoost),
       source: 'website_scan',
+      discovery_page_title,
+      discovery_method,
+      page_kind: pageKind,
+      link_label: linkLabel || null,
     })
   })
 
@@ -55,6 +93,9 @@ function extractFromHtml(html: string, pageUrl: string): ContactResult[] {
       contact_type: 'unknown',
       confidence_score: Math.min(85, 60 + boost),
       source: 'website_scan',
+      discovery_page_title,
+      discovery_method: 'tel',
+      page_kind: pageKind,
     })
   })
 
@@ -70,8 +111,11 @@ function extractFromHtml(html: string, pageUrl: string): ContactResult[] {
       phone: null,
       contact_page: pageUrl,
       contact_type: classifyContactFromEmail(email),
-      confidence_score: Math.min(80, 55 + boost),
+      confidence_score: Math.min(80, 52 + boost),
       source: 'website_scan',
+      discovery_page_title,
+      discovery_method: 'body_text',
+      page_kind: pageKind,
     })
   }
 
@@ -84,30 +128,11 @@ function extractFromHtml(html: string, pageUrl: string): ContactResult[] {
       contact_type: 'unknown',
       confidence_score: Math.min(75, 50 + boost),
       source: 'website_scan',
+      discovery_page_title,
+      discovery_method: 'tel',
+      page_kind: pageKind,
     })
   }
-
-  $('footer a[href]').each((_, el) => {
-    const href = $(el).attr('href')?.trim()
-    if (!href) return
-    try {
-      const link = new URL(href, pageUrl)
-      assertPublicWebsiteUrl(link.toString())
-      const label = ($(el).text() ?? '').toLowerCase()
-      if (label.includes('contact') || /\/contact/i.test(link.pathname)) {
-        found.push({
-          email: null,
-          phone: null,
-          contact_page: link.toString(),
-          contact_type: 'general',
-          confidence_score: 45,
-          source: 'website_scan',
-        })
-      }
-    } catch {
-      /* ignore bad footer links */
-    }
-  })
 
   return found
 }
@@ -117,7 +142,7 @@ function dedupeResults(results: ContactResult[]): ContactResult[] {
   for (const r of results) {
     const key = r.email ? `e:${r.email}` : r.phone ? `p:${r.phone}` : `u:${r.contact_page}`
     const existing = byKey.get(key)
-    if (!existing || r.confidence_score > existing.confidence_score) {
+    if (!existing || isBetterResult(r, existing)) {
       byKey.set(key, r)
     }
   }
@@ -127,17 +152,51 @@ function dedupeResults(results: ContactResult[]): ContactResult[] {
 export const basicWebsiteContactProvider: ContactDiscoveryProvider = {
   providerId: 'basic_website',
 
-  async scanWebsite(url: string): Promise<ContactResult[]> {
+  async scanWebsite(url: string) {
     const normalized = normalizeWebsiteUrl(url)
-    const pages = candidatePageUrls(normalized)
-    const aggregated: ContactResult[] = []
+    const base = new URL(normalized)
+    const home = normalizePageUrl(new URL('/', base).toString(), base)
 
-    for (const pageUrl of pages) {
-      const html = await fetchHtmlPage(pageUrl)
-      if (!html) continue
-      aggregated.push(...extractFromHtml(html, pageUrl))
+    const htmlCache = new Map<string, string | null>()
+    const getHtml = async (pageUrl: string): Promise<string | null> => {
+      if (!htmlCache.has(pageUrl)) {
+        htmlCache.set(pageUrl, await fetchHtmlPage(pageUrl))
+      }
+      return htmlCache.get(pageUrl) ?? null
     }
 
-    return dedupeResults(aggregated)
+    const homeHtml = await getHtml(home)
+    const initialPlan = buildInitialCrawlPlan(normalized, homeHtml)
+
+    const queue: PlannedCrawlPage[] = [...initialPlan]
+    const queued = new Set(queue.map((p) => p.url))
+    let branchPagesQueued = 0
+    let pages_scanned = 0
+    const aggregated: ContactResult[] = []
+
+    for (let i = 0; i < queue.length && pages_scanned < MAX_CONTACT_SCAN_PAGES; i++) {
+      const { url: pageUrl, page_kind: pageKind } = queue[i]
+      const html = await getHtml(pageUrl)
+      pages_scanned += 1
+      if (html) {
+        aggregated.push(...extractFromHtml(html, pageUrl, pageKind))
+
+        if (pageKind === 'locations_hub' && branchPagesQueued < MAX_CONTACT_BRANCH_PAGES) {
+          const branches = discoverBranchPagesFromHtml(html, pageUrl, normalized)
+          for (const branch of branches) {
+            if (branchPagesQueued >= MAX_CONTACT_BRANCH_PAGES) break
+            if (queued.has(branch.url)) continue
+            queued.add(branch.url)
+            queue.push(branch)
+            branchPagesQueued += 1
+          }
+        }
+      }
+    }
+
+    return {
+      results: rankContactResults(dedupeResults(aggregated)),
+      pages_scanned,
+    }
   },
 }
