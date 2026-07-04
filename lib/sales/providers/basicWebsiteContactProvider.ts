@@ -5,19 +5,13 @@ import {
   mailtoLinkLabelBoost,
   normalizeEmail,
 } from '@/lib/sales/providers/contactClassification'
-import {
-  buildInitialCrawlPlan,
-  discoverBranchPagesFromHtml,
-  type PlannedCrawlPage,
-} from '@/lib/sales/providers/contactCrawlPlanner'
+import { crawlContactPagesBounded } from '@/lib/sales/providers/contactCrawlPlanner'
 import { normalizePageUrl, pageIntentBoost, readPageTitle } from '@/lib/sales/providers/contactPageDiscovery'
 import type { ContactDiscoveryProvider } from '@/lib/sales/providers/contactDiscoveryProvider.interface'
 import type { ContactResult } from '@/lib/sales/providers/contactDiscoveryProvider.interface'
 import { rankContactResults } from '@/lib/sales/providers/contactOutreachRanking'
 import {
   fetchHtmlPage,
-  MAX_CONTACT_BRANCH_PAGES,
-  MAX_CONTACT_SCAN_PAGES,
   normalizeWebsiteUrl,
   EMAIL_PATTERN,
   PHONE_PATTERN,
@@ -166,32 +160,16 @@ export const basicWebsiteContactProvider: ContactDiscoveryProvider = {
     }
 
     const homeHtml = await getHtml(home)
-    const initialPlan = buildInitialCrawlPlan(normalized, homeHtml)
-
-    const queue: PlannedCrawlPage[] = [...initialPlan]
-    const queued = new Set(queue.map((p) => p.url))
-    let branchPagesQueued = 0
-    let pages_scanned = 0
     const aggregated: ContactResult[] = []
+    const { visits, pages_scanned } = await crawlContactPagesBounded(
+      normalized,
+      getHtml,
+      homeHtml,
+    )
 
-    for (let i = 0; i < queue.length && pages_scanned < MAX_CONTACT_SCAN_PAGES; i++) {
-      const { url: pageUrl, page_kind: pageKind } = queue[i]
-      const html = await getHtml(pageUrl)
-      pages_scanned += 1
-      if (html) {
-        aggregated.push(...extractFromHtml(html, pageUrl, pageKind))
-
-        if (pageKind === 'locations_hub' && branchPagesQueued < MAX_CONTACT_BRANCH_PAGES) {
-          const branches = discoverBranchPagesFromHtml(html, pageUrl, normalized)
-          for (const branch of branches) {
-            if (branchPagesQueued >= MAX_CONTACT_BRANCH_PAGES) break
-            if (queued.has(branch.url)) continue
-            queued.add(branch.url)
-            queue.push(branch)
-            branchPagesQueued += 1
-          }
-        }
-      }
+    for (const { page, html } of visits) {
+      if (!html) continue
+      aggregated.push(...extractFromHtml(html, page.url, page.page_kind))
     }
 
     return {
