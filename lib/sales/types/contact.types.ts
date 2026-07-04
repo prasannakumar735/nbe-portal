@@ -1,4 +1,8 @@
 import type { SalesContactVerificationStatus } from '@/lib/sales/constants/contactVerification'
+import type {
+  ContactDiscoveryMethod,
+  ContactPageKind,
+} from '@/lib/sales/types/contactDiscovery.types'
 import type { SalesContactSource, SalesContactType } from '@/lib/sales/types/contactSources'
 
 export type { SalesContactSource, SalesContactType } from '@/lib/sales/types/contactSources'
@@ -19,6 +23,11 @@ export type SalesContact = {
   email_verified: boolean
   verification_status: SalesContactVerificationStatus
   created_at: string
+  discovery_page_title: string | null
+  discovery_method: ContactDiscoveryMethod | null
+  page_kind: ContactPageKind | null
+  recommended_for_outreach: boolean
+  recommended_reason: string | null
 }
 
 export type SalesContactInsert = {
@@ -32,6 +41,11 @@ export type SalesContactInsert = {
   source: SalesContactSource
   email_verified?: boolean
   verification_status?: SalesContactVerificationStatus
+  discovery_page_title?: string | null
+  discovery_method?: ContactDiscoveryMethod | null
+  page_kind?: ContactPageKind | null
+  recommended_for_outreach?: boolean
+  recommended_reason?: string | null
 }
 
 export type SalesContactVerificationPatch = {
