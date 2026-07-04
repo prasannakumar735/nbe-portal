@@ -5,6 +5,7 @@ import type {
   SalesContactVerificationPatch,
 } from '@/lib/sales/types/contact.types'
 import type { ContactDiscoveryMethod, ContactPageKind } from '@/lib/sales/types/contactDiscovery.types'
+import { normalizeContactPageKind } from '@/lib/sales/types/contactDiscovery.types'
 import { normalizeSalesContactType } from '@/lib/sales/types/contactSources'
 
 const TABLE = 'sales_contacts'
@@ -17,20 +18,8 @@ function parseDiscoveryMethod(raw: unknown): ContactDiscoveryMethod | null {
 }
 
 function parsePageKind(raw: unknown): ContactPageKind | null {
-  const kinds: ContactPageKind[] = [
-    'homepage',
-    'contact',
-    'quote',
-    'sales',
-    'locations_hub',
-    'branch',
-    'service',
-    'other',
-  ]
-  if (typeof raw === 'string' && (kinds as string[]).includes(raw)) {
-    return raw as ContactPageKind
-  }
-  return null
+  if (typeof raw !== 'string') return null
+  return normalizeContactPageKind(raw)
 }
 
 function mapRow(row: Record<string, unknown>): SalesContact {
@@ -53,6 +42,7 @@ function mapRow(row: Record<string, unknown>): SalesContact {
     page_kind: parsePageKind(row.page_kind),
     recommended_for_outreach: Boolean(row.recommended_for_outreach),
     recommended_reason: row.recommended_reason != null ? String(row.recommended_reason) : null,
+    discovered_at: String(row.discovered_at ?? row.created_at),
   }
 }
 
@@ -73,6 +63,7 @@ function rowToDb(r: SalesContactInsert): Record<string, unknown> {
     page_kind: r.page_kind ?? null,
     recommended_for_outreach: r.recommended_for_outreach ?? false,
     recommended_reason: r.recommended_reason ?? null,
+    ...(r.discovered_at != null ? { discovered_at: r.discovered_at } : {}),
   }
 }
 
@@ -149,18 +140,20 @@ export async function upsertSalesContactsFromDiscovery(
     if (!row.email) continue
     const key = row.email.toLowerCase()
     const match = byEmail.get(key)
+    const discoveredAt = row.discovered_at ?? new Date().toISOString()
     if (match) {
       const { data, error } = await supabase
         .from(TABLE)
         .update({
-          phone: row.phone ?? match.phone,
-          contact_page: row.contact_page ?? match.contact_page,
-          contact_type: row.contact_type ?? match.contact_type,
+          phone: row.phone ?? null,
+          contact_page: row.contact_page ?? null,
+          contact_type: row.contact_type ?? 'unknown',
           confidence_score: row.confidence_score ?? match.confidence_score,
           discovery_page_title: row.discovery_page_title ?? null,
           discovery_method: row.discovery_method ?? null,
           page_kind: row.page_kind ?? null,
           source: row.source,
+          discovered_at: discoveredAt,
         })
         .eq('id', match.id)
         .eq('business_id', businessId)
@@ -173,7 +166,7 @@ export async function upsertSalesContactsFromDiscovery(
 
     const { data, error } = await supabase
       .from(TABLE)
-      .insert(rowToDb({ ...row, business_id: businessId }))
+      .insert(rowToDb({ ...row, business_id: businessId, discovered_at: discoveredAt }))
       .select('*')
       .maybeSingle()
     if (error) throw error

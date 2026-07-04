@@ -1,6 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import {
+  buildDiscoveryUpsertRows,
+  countPersistableEmails,
+  resolveDiscoveryRecommendations,
+} from '@/lib/sales/agents/contactDiscoveryPersistence'
 import { getContactDiscoveryProvider } from '@/lib/sales/providers/contactProviders'
-import { selectRecommendedContacts } from '@/lib/sales/providers/contactOutreachRanking'
 import type { ContactDiscoveryJobPayload } from '@/lib/sales/jobs/job.types'
 import { getSalesBusinessById } from '@/lib/sales/repositories/salesBusinessRepository'
 import {
@@ -17,7 +21,11 @@ import {
 export type ContactDiscoveryJobResult = {
   business_id: string
   website: string | null
+  contacts_discovered: number
   contacts_inserted: number
+  contacts_updated: number
+  contacts_recommended: number
+  /** @deprecated Use contacts_updated; kept for API compatibility. */
   contacts_skipped: number
   pages_scanned: number
   scan_log_id?: string
@@ -41,7 +49,10 @@ export async function executeContactDiscoveryJob(
     return {
       business_id: business.id,
       website: null,
+      contacts_discovered: 0,
       contacts_inserted: 0,
+      contacts_updated: 0,
+      contacts_recommended: 0,
       contacts_skipped: 0,
       pages_scanned: 0,
       skipped_reason: 'no_website',
@@ -57,63 +68,42 @@ export async function executeContactDiscoveryJob(
   try {
     const provider = getContactDiscoveryProvider()
     const { results, pages_scanned } = await provider.scanWebsite(website)
-    const emails_found = results.filter((r) => r.email).length
+    const contacts_discovered = countPersistableEmails(results)
+    const discoveredAt = new Date().toISOString()
 
-    const inserts = results.map((r) => ({
-      business_id: business.id,
-      email: r.email,
-      phone: r.phone,
-      contact_page: r.contact_page,
-      contact_type: r.contact_type,
-      confidence_score: r.confidence_score,
-      is_primary: false,
-      source: r.source,
-      discovery_page_title: r.discovery_page_title,
-      discovery_method: r.discovery_method,
-      page_kind: r.page_kind,
-      recommended_for_outreach: false,
-      recommended_reason: null,
-    }))
-
+    const upsertRows = buildDiscoveryUpsertRows(business.id, results, discoveredAt)
     const { inserted, updated } = await upsertSalesContactsFromDiscovery(
       supabase,
       business.id,
-      inserts,
+      upsertRows,
     )
     const allTouched = [...inserted, ...updated]
 
-    const recommended = selectRecommendedContacts(results, 1)
-    const emailToId = new Map(
-      allTouched.filter((c) => c.email).map((c) => [c.email!.toLowerCase(), c.id] as const),
-    )
-
-    const recommendations = recommended
-      .map((pick) => {
-        const email = pick.result.email?.toLowerCase()
-        if (!email) return null
-        const contactId = emailToId.get(email)
-        if (!contactId) return null
-        return { contactId, reason: pick.reason }
-      })
-      .filter((r): r is { contactId: string; reason: string } => r != null)
-
+    const recommendations = resolveDiscoveryRecommendations(results, allTouched)
     if (recommendations.length > 0) {
-      await setRecommendedSalesContacts(supabase, business.id, recommendations)
+      await setRecommendedSalesContacts(
+        supabase,
+        business.id,
+        recommendations.map(({ contactId, reason }) => ({ contactId, reason })),
+      )
       await setPrimarySalesContact(supabase, business.id, recommendations[0].contactId)
     }
 
     await completeSalesContactScanLog(supabase, scanLog.id, {
-      emails_found,
+      emails_found: contacts_discovered,
       scanned_pages: pages_scanned,
     })
 
-    const skipped = Math.max(0, inserts.filter((r) => r.email).length - allTouched.length)
+    const notPersisted = Math.max(0, upsertRows.length - allTouched.length)
 
     return {
       business_id: business.id,
       website,
+      contacts_discovered,
       contacts_inserted: inserted.length,
-      contacts_skipped: skipped,
+      contacts_updated: updated.length,
+      contacts_recommended: recommendations.length,
+      contacts_skipped: notPersisted,
       pages_scanned,
       scan_log_id: scanLog.id,
     }

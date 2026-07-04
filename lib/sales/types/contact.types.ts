@@ -28,6 +28,7 @@ export type SalesContact = {
   page_kind: ContactPageKind | null
   recommended_for_outreach: boolean
   recommended_reason: string | null
+  discovered_at: string
 }
 
 export type SalesContactInsert = {
@@ -46,6 +47,7 @@ export type SalesContactInsert = {
   page_kind?: ContactPageKind | null
   recommended_for_outreach?: boolean
   recommended_reason?: string | null
+  discovered_at?: string
 }
 
 export type SalesContactVerificationPatch = {
@@ -62,7 +64,10 @@ export type ContactDiscoveryAgentResult = {
 
 export type ContactDiscoveryJobSummary = {
   business_id: string
+  contacts_discovered?: number
   contacts_inserted: number
+  contacts_updated?: number
+  contacts_recommended?: number
   contacts_skipped: number
   pages_scanned: number
   error?: string
