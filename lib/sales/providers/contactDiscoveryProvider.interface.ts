@@ -15,6 +15,8 @@ export type ContactResult = {
   discovery_method: ContactDiscoveryMethod | null
   page_kind: ContactPageKind
   link_label?: string | null
+  recommended_for_outreach?: boolean
+  recommended_reason?: string | null
 }
 
 export type ContactScanResult = {

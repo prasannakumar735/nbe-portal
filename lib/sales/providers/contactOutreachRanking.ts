@@ -5,12 +5,13 @@ import type { SalesContactType } from '@/lib/sales/types/contactSources'
 
 export type OutreachRankingInput = {
   contact_type: SalesContactType
-  confidence_score: number
   page_kind: ContactPageKind | null
   discovery_method: ContactDiscoveryMethod | null
   link_label?: string | null
   email?: string | null
   contact_page?: string | null
+  discovery_page_title?: string | null
+  /** Optional — use computeOutreachPriorityWithEngagement when signals exist. */
   engagement?: ContactEngagementSignals
 }
 
@@ -35,11 +36,11 @@ const PAGE_KIND_ADJUST: Partial<Record<ContactPageKind, number>> = {
   branch: 10,
   contact: 8,
   quote: 6,
-  sales: 6,
-  locations_hub: 2,
+  location: 2,
   homepage: -4,
 }
 
+/** Dynamic outreach priority (never persisted). Does not use confidence_score. */
 export function computeOutreachPriority(input: OutreachRankingInput): number {
   let score = TYPE_BASE[input.contact_type] ?? 30
   score += METHOD_ADJUST[input.discovery_method ?? 'body_text'] ?? 0
@@ -48,8 +49,11 @@ export function computeOutreachPriority(input: OutreachRankingInput): number {
   if (input.page_kind === 'branch' && input.contact_type === 'sales') {
     score += 12
   }
-  if (input.discovery_method === 'mailto_labeled' && input.contact_type === 'general') {
-    score += 6
+  if (input.page_kind === 'contact' && input.discovery_method === 'mailto_labeled') {
+    score += 8
+  }
+  if (input.page_kind === 'quote') {
+    score += 4
   }
 
   const local = input.email?.split('@')[0] ?? ''
@@ -57,44 +61,52 @@ export function computeOutreachPriority(input: OutreachRankingInput): number {
     score -= 35
   }
 
-  score += Math.round((input.confidence_score - 50) * 0.08)
+  return Math.min(100, Math.max(0, Math.round(score)))
+}
 
-  return applyEngagementAdjustments(Math.min(100, Math.max(0, Math.round(score))), input.engagement ?? {})
+/** Extension point for future engagement-aware ranking. */
+export function computeOutreachPriorityWithEngagement(input: OutreachRankingInput): number {
+  const base = computeOutreachPriority(input)
+  if (!input.engagement) return base
+  return applyEngagementAdjustments(base, input.engagement)
 }
 
 export function explainOutreachRecommendation(input: OutreachRankingInput): string {
-  const parts: string[] = []
-  if (input.page_kind === 'branch' && input.contact_type === 'sales') {
-    parts.push('Branch sales email from a location page')
-  } else if (input.contact_type === 'sales') {
-    parts.push('Sales inbox')
-  } else if (input.discovery_method === 'mailto_labeled') {
-    parts.push(`Customer-facing mailto link (${input.link_label?.trim() || 'labeled CTA'})`)
-  } else if (input.contact_type === 'general' && input.page_kind === 'contact') {
-    parts.push('General enquiries on contact page')
-  } else if (input.contact_type === 'general') {
-    parts.push('General enquiries address')
-  } else if (input.contact_type === 'accounts') {
-    parts.push('Finance/accounts inbox (lower outreach value)')
-  } else {
-    parts.push(`${input.contact_type} contact`)
-  }
+  const label = (input.link_label ?? '').trim().toLowerCase()
 
-  if (input.contact_page) {
-    parts.push(`found on ${input.contact_page}`)
+  if (input.page_kind === 'branch' && input.contact_type === 'sales') {
+    return 'Branch sales contact'
   }
-  return parts.join(' · ')
+  if (input.discovery_method === 'mailto_labeled' && /\bemail\s*us\b/.test(label)) {
+    return 'Mailto from Email Us button'
+  }
+  if (input.discovery_method === 'mailto_labeled' && /\bcontact\s*us\b/.test(label)) {
+    return 'Mailto from Contact Us button'
+  }
+  if (input.page_kind === 'contact') {
+    return 'Found on Contact Us page'
+  }
+  if (input.contact_type === 'sales') {
+    return 'Sales email detected'
+  }
+  if (input.contact_type === 'general') {
+    return 'General enquiries contact'
+  }
+  if (input.contact_type === 'accounts') {
+    return 'Accounts or finance contact (lower outreach value)'
+  }
+  return `${input.contact_type} contact`
 }
 
 function rankingInputFromResult(r: ContactResult): OutreachRankingInput {
   return {
     contact_type: r.contact_type,
-    confidence_score: r.confidence_score,
     page_kind: r.page_kind,
     discovery_method: r.discovery_method,
     link_label: r.link_label,
     email: r.email,
     contact_page: r.contact_page,
+    discovery_page_title: r.discovery_page_title,
   }
 }
 
@@ -116,16 +128,49 @@ export type RecommendedContactPick = {
 
 export function selectRecommendedContacts(
   results: ContactResult[],
-  maxPerBusiness = 1,
+  maxRecommended = 1,
 ): RecommendedContactPick[] {
   const emails = results.filter((r) => r.email)
   const ranked = rankContactResults(emails)
-  return ranked.slice(0, maxPerBusiness).map((result) => {
+  return ranked.slice(0, maxRecommended).map((result) => {
     const input = rankingInputFromResult(result)
     return {
       result,
       priority: computeOutreachPriority(input),
-      reason: explainOutreachRecommendation({ ...input, contact_page: result.contact_page }),
+      reason: explainOutreachRecommendation(input),
+    }
+  })
+}
+
+/**
+ * Sort by outreach priority and mark recommended contacts (in-memory only until persisted by the job worker).
+ */
+export function applyOutreachRankingAndRecommendations(
+  results: ContactResult[],
+  maxRecommended = 1,
+): ContactResult[] {
+  const picks = selectRecommendedContacts(
+    results.filter((r) => r.email),
+    maxRecommended,
+  )
+  const reasonByEmail = new Map(
+    picks
+      .filter((p) => p.result.email)
+      .map((p) => [p.result.email!.toLowerCase(), p.reason] as const),
+  )
+  const recommendedEmails = new Set(reasonByEmail.keys())
+
+  const ranked = rankContactResults(results)
+  return ranked.map((r) => {
+    if (!r.email) {
+      return { ...r, recommended_for_outreach: false, recommended_reason: null }
+    }
+    const key = r.email.toLowerCase()
+    const recommended = recommendedEmails.has(key)
+    return {
+      ...r,
+      recommended_for_outreach: recommended,
+      recommended_reason: recommended ? (reasonByEmail.get(key) ?? null) : null,
     }
   })
 }
@@ -164,17 +209,17 @@ export function pickRecommendedOutreachContactIds(contacts: OutreachContactPick[
     const sorted = [...list].sort((a, b) => {
       const pa = computeOutreachPriority({
         contact_type: a.contact_type,
-        confidence_score: a.confidence_score,
         page_kind: a.page_kind,
         discovery_method: a.discovery_method,
         email: a.email,
+        link_label: a.link_label,
       })
       const pb = computeOutreachPriority({
         contact_type: b.contact_type,
-        confidence_score: b.confidence_score,
         page_kind: b.page_kind,
         discovery_method: b.discovery_method,
         email: b.email,
+        link_label: b.link_label,
       })
       return pb - pa
     })
@@ -187,9 +232,10 @@ export function pickRecommendedOutreachContactIds(contacts: OutreachContactPick[
 export function outreachPriorityForContact(contact: OutreachContactPick): number {
   return computeOutreachPriority({
     contact_type: contact.contact_type,
-    confidence_score: contact.confidence_score,
     page_kind: contact.page_kind,
     discovery_method: contact.discovery_method,
     email: contact.email,
+    link_label: contact.link_label,
+    contact_page: contact.contact_page,
   })
 }

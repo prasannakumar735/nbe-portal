@@ -6,6 +6,7 @@ export type ContactEngagementSignals = {
   unsubscribed?: boolean
 }
 
+/** Extension point — not used by default ranking; wire when engagement data is available. */
 export function applyEngagementAdjustments(
   basePriority: number,
   signals: ContactEngagementSignals,

@@ -3,19 +3,11 @@ import {
   dedupeContactResults,
   extractContactsFromHtml,
 } from '@/lib/sales/providers/contactHtmlExtraction'
+import { applyOutreachRankingAndRecommendations } from '@/lib/sales/providers/contactOutreachRanking'
 import { normalizePageUrl } from '@/lib/sales/providers/contactPageDiscovery'
 import type { ContactDiscoveryProvider } from '@/lib/sales/providers/contactDiscoveryProvider.interface'
 import type { ContactResult } from '@/lib/sales/providers/contactDiscoveryProvider.interface'
 import { fetchHtmlPage, normalizeWebsiteUrl } from '@/lib/sales/providers/websiteFetch'
-
-function sortByExtractionConfidence(results: ContactResult[]): ContactResult[] {
-  return [...results].sort((a, b) => {
-    if (b.confidence_score !== a.confidence_score) {
-      return b.confidence_score - a.confidence_score
-    }
-    return (a.email ?? '').localeCompare(b.email ?? '')
-  })
-}
 
 export const basicWebsiteContactProvider: ContactDiscoveryProvider = {
   providerId: 'basic_website',
@@ -47,7 +39,7 @@ export const basicWebsiteContactProvider: ContactDiscoveryProvider = {
     }
 
     return {
-      results: sortByExtractionConfidence(dedupeContactResults(aggregated)),
+      results: applyOutreachRankingAndRecommendations(dedupeContactResults(aggregated), 1),
       pages_scanned,
     }
   },
