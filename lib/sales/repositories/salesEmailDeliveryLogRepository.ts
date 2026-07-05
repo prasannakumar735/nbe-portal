@@ -53,6 +53,58 @@ export async function createSalesEmailDeliveryLog(
   return mapRow(data as Record<string, unknown>)
 }
 
+export type SalesDeliveryCorrelationContext = {
+  deliveryLogId: string
+  queueId: string
+  campaignId: string
+  contactId: string
+  generatedEmailId: string
+}
+
+/** Matches outbound `X-NBE-Correlation-Id` stored on delivery logs as `external_message_id`. */
+export async function findSalesDeliveryContextByCorrelationId(
+  supabase: SupabaseClient,
+  correlationId: string,
+): Promise<SalesDeliveryCorrelationContext | null> {
+  const id = correlationId.trim()
+  if (!id) return null
+
+  const { data: logRow, error: logErr } = await supabase
+    .from(TABLE)
+    .select('id, queue_id, external_message_id, status')
+    .eq('external_message_id', id)
+    .eq('status', 'success')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (logErr) throw logErr
+  if (!logRow) return null
+
+  const queueId = String((logRow as { queue_id: string }).queue_id)
+  const { data: queueRow, error: queueErr } = await supabase
+    .from('sales_email_send_queue')
+    .select('id, campaign_id, contact_id, generated_email_id')
+    .eq('id', queueId)
+    .maybeSingle()
+  if (queueErr) throw queueErr
+  if (!queueRow) return null
+
+  const q = queueRow as {
+    id: string
+    campaign_id: string
+    contact_id: string
+    generated_email_id: string
+  }
+
+  return {
+    deliveryLogId: String((logRow as { id: string }).id),
+    queueId: q.id,
+    campaignId: q.campaign_id,
+    contactId: q.contact_id,
+    generatedEmailId: q.generated_email_id,
+  }
+}
+
 export async function listRecentSalesEmailDeliveryFailures(
   supabase: SupabaseClient,
   options?: { campaignId?: string; limit?: number },

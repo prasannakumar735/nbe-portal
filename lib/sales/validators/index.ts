@@ -1,4 +1,4 @@
-export {
+﻿export {
   discoveryScanBodySchema,
   parsePostcodesInput,
   salesPostcodeSchema,
