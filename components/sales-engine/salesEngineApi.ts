@@ -3,6 +3,18 @@
 type ApiOk<T> = { ok: true; data: T }
 type ApiFail = { ok: false; error: string; issues?: unknown }
 
+export class SalesEngineApiError extends Error {
+  readonly issues?: unknown
+  readonly status: number
+
+  constructor(message: string, status: number, issues?: unknown) {
+    super(message)
+    this.name = 'SalesEngineApiError'
+    this.status = status
+    this.issues = issues
+  }
+}
+
 export async function salesEngineFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
@@ -13,7 +25,7 @@ export async function salesEngineFetch<T>(url: string, init?: RequestInit): Prom
   })
   const json = (await res.json()) as ApiOk<T> | ApiFail
   if (!json.ok) {
-    throw new Error(json.error || 'Request failed')
+    throw new SalesEngineApiError(json.error || 'Request failed', res.status, json.issues)
   }
   return json.data
 }

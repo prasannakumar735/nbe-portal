@@ -5,6 +5,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { SALES_PRODUCT_LINE_SLUGS, SALES_PRODUCT_LINE_LABELS } from '../lib/sales/constants/productLineSlugs'
 import { EMPTY_SALES_AI_PROMPT_DEFINITION, buildPromptNameKey } from '../lib/sales/types/aiPrompt.types'
+import { formatPromptDescriptionLabel } from '../lib/sales/prompts/promptLabels'
 
 function requireEnv(name: string): string {
   const v = process.env[name]?.trim()
@@ -20,10 +21,17 @@ async function main() {
 
   for (const productSlug of SALES_PRODUCT_LINE_SLUGS) {
     const label = SALES_PRODUCT_LINE_LABELS[productSlug]
+    const industrySlug = 'general' as const
+    const useCaseSlug = 'initial_outreach' as const
     const promptName = buildPromptNameKey({
       product_slug: productSlug,
-      industry_slug: 'general',
-      use_case_slug: 'initial_outreach',
+      industry_slug: industrySlug,
+      use_case_slug: useCaseSlug,
+    })
+    const description = formatPromptDescriptionLabel({
+      productSlug,
+      industrySlug,
+      useCaseSlug,
     })
 
     const { data: existing } = await supabase
@@ -34,7 +42,7 @@ async function main() {
       .maybeSingle()
 
     if (existing) {
-      console.info('Skip existing', promptName)
+      console.info('Skip existing', description)
       continue
     }
 
@@ -59,13 +67,14 @@ async function main() {
       prompt_name: promptName,
       version: 1,
       product_slug: productSlug,
-      industry_slug: 'general',
-      use_case_slug: 'initial_outreach',
+      industry_slug: industrySlug,
+      use_case_slug: useCaseSlug,
+      description,
       definition,
       is_active: true,
     })
     if (error) throw error
-    console.info('Seeded', promptName)
+    console.info('Seeded', description)
   }
 }
 

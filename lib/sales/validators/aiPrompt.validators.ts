@@ -22,13 +22,20 @@ export const createSalesAiPromptBodySchema = z.object({
   industrySlug: z.enum(SALES_INDUSTRY_SLUGS),
   useCaseSlug: z.enum(SALES_PROMPT_USE_CASE_SLUGS),
   campaignTypeId: z.string().uuid().nullable().optional(),
+  description: z.string().trim().max(500).nullable().optional(),
   definition: salesAiPromptDefinitionSchema,
   activate: z.boolean().optional(),
+  confirmReplace: z.boolean().optional(),
 })
 
-export const updateSalesAiPromptBodySchema = z.object({
-  definition: salesAiPromptDefinitionSchema,
-})
+export const updateSalesAiPromptBodySchema = z
+  .object({
+    definition: salesAiPromptDefinitionSchema.optional(),
+    description: z.string().trim().max(500).nullable().optional(),
+  })
+  .refine((v) => v.definition != null || v.description !== undefined, {
+    message: 'Provide definition and/or description.',
+  })
 
 export const salesAiPromptListQuerySchema = z.object({
   productSlug: z.enum(SALES_PRODUCT_LINE_SLUGS).optional(),
@@ -43,6 +50,7 @@ export const salesAiPromptListQuerySchema = z.object({
 })
 
 export const salesAiPromptPreviewQuerySchema = z.object({
+  promptId: z.string().uuid().optional(),
   campaignId: z.string().uuid().optional(),
   campaignTypeId: z.string().uuid().optional(),
   productSlug: z.enum(SALES_PRODUCT_LINE_SLUGS).optional(),

@@ -12,6 +12,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const parsed = salesAiPromptPreviewQuerySchema.parse({
+      promptId: searchParams.get('promptId') ?? undefined,
       campaignId: searchParams.get('campaignId') ?? undefined,
       campaignTypeId: searchParams.get('campaignTypeId') ?? undefined,
       productSlug: searchParams.get('productSlug') ?? undefined,

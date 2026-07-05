@@ -13,6 +13,7 @@ import type { SalesPromptUseCaseSlug } from '@/lib/sales/constants/useCaseSlugs'
 import { isSalesIndustrySlug } from '@/lib/sales/constants/industrySlugs'
 import { isSalesProductLineSlug } from '@/lib/sales/constants/productLineSlugs'
 import { isSalesPromptUseCaseSlug } from '@/lib/sales/constants/useCaseSlugs'
+import { validateSalesAiPromptForActivation } from '@/lib/sales/prompts/promptValidation'
 
 const TABLE = 'sales_ai_prompts'
 
@@ -39,6 +40,7 @@ function mapRow(row: Record<string, unknown>): SalesAiPrompt {
     use_case_slug: useCase,
     campaign_type_id: row.campaign_type_id != null ? String(row.campaign_type_id) : null,
     definition: parseSalesAiPromptDefinitionFromDb(row.definition),
+    description: row.description != null ? String(row.description).trim() || null : null,
     is_active: Boolean(row.is_active),
     created_by: row.created_by != null ? String(row.created_by) : null,
     created_at: String(row.created_at),
@@ -134,6 +136,7 @@ export async function createSalesAiPrompt(
       use_case_slug: row.use_case_slug,
       campaign_type_id: row.campaign_type_id ?? null,
       definition: row.definition,
+      description: row.description ?? null,
       is_active: row.is_active ?? false,
       created_by: row.created_by ?? null,
     })
@@ -148,15 +151,31 @@ export async function updateSalesAiPromptDefinition(
   id: string,
   definition: SalesAiPromptInsert['definition'],
 ): Promise<SalesAiPrompt> {
+  return updateSalesAiPrompt(supabase, id, { definition })
+}
+
+/** Update inactive prompt definition and/or description. Active rows are immutable. */
+export async function updateSalesAiPrompt(
+  supabase: SupabaseClient,
+  id: string,
+  patch: {
+    definition?: SalesAiPromptInsert['definition']
+    description?: string | null
+  },
+): Promise<SalesAiPrompt> {
   const existing = await getSalesAiPromptById(supabase, id)
   if (!existing) throw new SalesAiPromptError('Prompt not found.')
   if (existing.is_active) {
     throw new SalesAiPromptError('Active prompts are immutable; publish a new version instead.')
   }
 
+  const update: Record<string, unknown> = {}
+  if (patch.definition != null) update.definition = patch.definition
+  if (patch.description !== undefined) update.description = patch.description
+
   const { data, error } = await supabase
     .from(TABLE)
-    .update({ definition })
+    .update(update)
     .eq('id', id)
     .eq('is_active', false)
     .select('*')
@@ -166,21 +185,63 @@ export async function updateSalesAiPromptDefinition(
   return mapRow(data as Record<string, unknown>)
 }
 
+export class SalesAiPromptActivationConflictError extends SalesAiPromptError {
+  readonly code = 'ACTIVE_PROMPT_EXISTS' as const
+  readonly currentActive: SalesAiPrompt
+
+  constructor(currentActive: SalesAiPrompt) {
+    super(
+      'Another prompt is already active for this Product + Industry + Use Case. Confirm replacement to continue.',
+    )
+    this.name = 'SalesAiPromptActivationConflictError'
+    this.currentActive = currentActive
+  }
+}
+
+export class SalesAiPromptValidationError extends SalesAiPromptError {
+  readonly code = 'VALIDATION_FAILED' as const
+  readonly errors: string[]
+
+  constructor(errors: string[]) {
+    super(`Prompt is incomplete and cannot be activated:\n- ${errors.join('\n- ')}`)
+    this.name = 'SalesAiPromptValidationError'
+    this.errors = errors
+  }
+}
+
 export async function activateSalesAiPrompt(
   supabase: SupabaseClient,
   id: string,
+  options?: { confirmReplace?: boolean },
 ): Promise<SalesAiPrompt> {
   const target = await getSalesAiPromptById(supabase, id)
   if (!target) throw new SalesAiPromptError('Prompt not found.')
+  if (target.is_active) return target
 
-  const { error: deactivateError } = await supabase
-    .from(TABLE)
-    .update({ is_active: false })
-    .eq('product_slug', target.product_slug)
-    .eq('industry_slug', target.industry_slug)
-    .eq('use_case_slug', target.use_case_slug)
-    .eq('is_active', true)
-  if (deactivateError) throw deactivateError
+  const validation = validateSalesAiPromptForActivation(target.definition)
+  if (!validation.ok) {
+    throw new SalesAiPromptValidationError(validation.errors)
+  }
+
+  const currentActive = await getActiveSalesAiPrompt(supabase, {
+    productSlug: target.product_slug,
+    industrySlug: target.industry_slug,
+    useCaseSlug: target.use_case_slug,
+  })
+
+  if (currentActive && currentActive.id !== id) {
+    if (!options?.confirmReplace) {
+      throw new SalesAiPromptActivationConflictError(currentActive)
+    }
+  }
+
+  if (currentActive && currentActive.id !== id) {
+    const { error: deactivateError } = await supabase
+      .from(TABLE)
+      .update({ is_active: false })
+      .eq('id', currentActive.id)
+    if (deactivateError) throw deactivateError
+  }
 
   const { data, error } = await supabase
     .from(TABLE)
@@ -193,12 +254,33 @@ export async function activateSalesAiPrompt(
   return mapRow(data as Record<string, unknown>)
 }
 
+/** Clear active flag for this row only (slot may have no active prompt). */
+export async function deactivateSalesAiPrompt(
+  supabase: SupabaseClient,
+  id: string,
+): Promise<SalesAiPrompt> {
+  const target = await getSalesAiPromptById(supabase, id)
+  if (!target) throw new SalesAiPromptError('Prompt not found.')
+  if (!target.is_active) return target
+
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update({ is_active: false })
+    .eq('id', id)
+    .select('*')
+    .maybeSingle()
+  if (error) throw error
+  if (!data) throw new SalesAiPromptError('Prompt could not be deactivated.')
+  return mapRow(data as Record<string, unknown>)
+}
+
 export function buildSalesAiPromptInsert(input: {
   product_slug: SalesProductLineSlug
   industry_slug: SalesIndustrySlug
   use_case_slug: SalesPromptUseCaseSlug
   campaign_type_id?: string | null
   definition: SalesAiPromptInsert['definition']
+  description?: string | null
   version: number
   created_by?: string | null
   activate?: boolean
@@ -215,6 +297,7 @@ export function buildSalesAiPromptInsert(input: {
     use_case_slug: input.use_case_slug,
     campaign_type_id: input.campaign_type_id ?? null,
     definition: input.definition,
+    description: input.description ?? null,
     is_active: input.activate ?? false,
     created_by: input.created_by ?? null,
   }

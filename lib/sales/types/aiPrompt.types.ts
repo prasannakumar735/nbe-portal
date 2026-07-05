@@ -28,6 +28,7 @@ export type SalesAiPrompt = {
   use_case_slug: SalesPromptUseCaseSlug
   campaign_type_id: string | null
   definition: SalesAiPromptDefinition
+  description: string | null
   is_active: boolean
   created_by: string | null
   created_at: string
@@ -41,11 +42,13 @@ export type SalesAiPromptInsert = {
   use_case_slug: SalesPromptUseCaseSlug
   campaign_type_id?: string | null
   definition: SalesAiPromptDefinition
+  description?: string | null
   is_active?: boolean
   created_by?: string | null
 }
 
-export type SalesAiPromptMetrics = {
+/** Derived reporting snapshot (not source of truth). Populated from raw campaign events via analytics jobs. */
+export type SalesAiPromptMetricsSnapshot = {
   id: string
   prompt_name: string
   prompt_version: number

@@ -2,6 +2,8 @@
 
 import { useCallback, useState } from 'react'
 import { salesEngineFetch } from '@/components/sales-engine/salesEngineApi'
+import { PromptPreviewMetaCard } from '@/components/sales-engine/PromptPreviewMetaCard'
+import type { PromptPreviewMeta } from '@/lib/sales/prompts/promptPreviewMeta'
 import type { PromptRenderVariables } from '@/lib/sales/prompts/promptRenderVariables.types'
 
 type PreviewResponse = {
@@ -10,31 +12,61 @@ type PreviewResponse = {
     userPrompt: string
     promptName: string
     promptVersion: number
+    promptLibraryId: string
+    promptDescription: string | null
     variables: PromptRenderVariables
     product_slug: string
     industry_slug: string
     use_case_slug: string
     resolution_path: string[]
+    meta: PromptPreviewMeta
   }
 }
 
 type PromptPreviewPanelProps = {
-  campaignId: string
+  campaignId?: string
+  promptId?: string
+  productSlug?: string
+  industrySlug?: string
+  useCaseSlug?: string
+  title?: string
+  autoLoad?: boolean
 }
 
-export function PromptPreviewPanel({ campaignId }: PromptPreviewPanelProps) {
+function buildPreviewQuery(props: PromptPreviewPanelProps): string {
+  const params = new URLSearchParams()
+  if (props.promptId) params.set('promptId', props.promptId)
+  if (props.campaignId) params.set('campaignId', props.campaignId)
+  if (props.productSlug) params.set('productSlug', props.productSlug)
+  if (props.industrySlug) params.set('industrySlug', props.industrySlug)
+  if (props.useCaseSlug) params.set('useCaseSlug', props.useCaseSlug)
+  return params.toString()
+}
+
+export function PromptPreviewPanel(props: PromptPreviewPanelProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<PreviewResponse['preview'] | null>(null)
   const [open, setOpen] = useState(false)
 
+  const { campaignId, promptId, productSlug, industrySlug, useCaseSlug } = props
+
   const loadPreview = useCallback(async () => {
+    const qs = buildPreviewQuery({
+      campaignId,
+      promptId,
+      productSlug,
+      industrySlug,
+      useCaseSlug,
+    })
+    if (!qs) {
+      setError('Select a prompt or campaign to preview.')
+      return
+    }
     setLoading(true)
     setError(null)
     try {
-      const data = await salesEngineFetch<PreviewResponse>(
-        `/api/sales/ai-prompts/preview?campaignId=${encodeURIComponent(campaignId)}`,
-      )
+      const data = await salesEngineFetch<PreviewResponse>(`/api/sales/ai-prompts/preview?${qs}`)
       setPreview(data.preview)
       setOpen(true)
     } catch (e) {
@@ -42,13 +74,14 @@ export function PromptPreviewPanel({ campaignId }: PromptPreviewPanelProps) {
     } finally {
       setLoading(false)
     }
-  }, [campaignId])
+  }, [campaignId, promptId, productSlug, industrySlug, useCaseSlug])
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-slate-900">Prompt preview</h2>
+      <h2 className="text-lg font-semibold text-slate-900">{props.title ?? 'Prompt preview'}</h2>
       <p className="mt-1 text-sm text-slate-600">
-        Inspect resolved system prompt, variables, and rendered user prompt before generating emails.
+        Inspect resolution metadata, variables (preview placeholders when missing), and assembled
+        prompts. Preview only — generation still handles blank fields gracefully.
       </p>
       <button
         type="button"
@@ -61,11 +94,7 @@ export function PromptPreviewPanel({ campaignId }: PromptPreviewPanelProps) {
       {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
       {open && preview ? (
         <div className="mt-4 space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-          <p>
-            <span className="font-semibold text-slate-900">{preview.promptName}</span>
-            <span className="text-slate-600"> · v{preview.promptVersion}</span>
-          </p>
-          <p className="text-xs text-slate-500">{preview.resolution_path.join(' → ')}</p>
+          <PromptPreviewMetaCard meta={preview.meta} />
           <div>
             <h3 className="font-semibold text-slate-900">Variables</h3>
             <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-white p-2 text-xs">

@@ -2,7 +2,7 @@ import { ZodError } from 'zod'
 import { fail, ok, requireManagerOrAdminApi } from '@/app/api/admin/_utils'
 import {
   getSalesAiPromptById,
-  updateSalesAiPromptDefinition,
+  updateSalesAiPrompt,
 } from '@/lib/sales/repositories/salesAiPromptRepository'
 import { salesAiPromptIdParamSchema, updateSalesAiPromptBodySchema } from '@/lib/sales/validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
@@ -35,7 +35,10 @@ export async function PATCH(request: Request, context: RouteContext) {
     const { id } = salesAiPromptIdParamSchema.parse({ id: (await context.params).id })
     const body = await request.json()
     const parsed = updateSalesAiPromptBodySchema.parse(body)
-    const prompt = await updateSalesAiPromptDefinition(auth.supabase, id, parsed.definition)
+    const prompt = await updateSalesAiPrompt(auth.supabase, id, {
+      definition: parsed.definition,
+      description: parsed.description,
+    })
     return ok({ prompt })
   } catch (error) {
     if (error instanceof ZodError) return fail('Validation failed', 422, error.issues)
