@@ -13,6 +13,20 @@ export {
   salesBusinessSourceSchema,
 } from '@/lib/sales/validators/business.validators'
 export { processSalesJobsBodySchema } from '@/lib/sales/validators/jobs.validators'
+export {
+  emailGenerationRequestSchema,
+  campaignIdParamSchema,
+  campaignContactParamSchema,
+  regenerateEmailBodySchema,
+} from '@/lib/sales/validators/emailGeneration.validators'
+export {
+  createSalesAiPromptBodySchema,
+  updateSalesAiPromptBodySchema,
+  salesAiPromptListQuerySchema,
+  salesAiPromptPreviewQuerySchema,
+  salesAiPromptIdParamSchema,
+  salesAiPromptDefinitionSchema,
+} from '@/lib/sales/validators/aiPrompt.validators'
 export { contactDiscoveryRequestSchema } from '@/lib/sales/validators/contact.validators'
 export {
   salesContactVerificationPatchSchema,
