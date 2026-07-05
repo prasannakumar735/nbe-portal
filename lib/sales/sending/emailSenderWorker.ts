@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { classifyDeliveryFailure } from '@/lib/sales/sending/deliveryFailureClassifier'
 import { sendEmail } from '@/lib/sales/sending/emailSenderAdapter'
 import { calculateNextRetryTime } from '@/lib/sales/sending/retryScheduler'
+import { MAX_EMAIL_SEND_ATTEMPTS } from '@/lib/sales/sending/emailSendQueue.constants'
 import { createSalesEmailDeliveryLog } from '@/lib/sales/repositories/salesEmailDeliveryLogRepository'
 import {
   claimSalesEmailSendQueueItem,
@@ -34,8 +35,9 @@ export type EmailSenderWorkerResult = {
 export async function processEmailSendQueueItem(
   supabase: SupabaseClient,
   queueId: string,
-  _options?: { maxAttempts?: number },
+  options?: { maxAttempts?: number },
 ): Promise<EmailSenderWorkerResult> {
+  const maxAttempts = options?.maxAttempts ?? MAX_EMAIL_SEND_ATTEMPTS
   const claimed = await claimSalesEmailSendQueueItem(supabase, queueId)
   if (!claimed) {
     const existing = await getSalesEmailSendQueueById(supabase, queueId)
@@ -49,12 +51,28 @@ export async function processEmailSendQueueItem(
     }
   }
 
-  return executeSendForQueueRecord(supabase, claimed)
+  if (claimed.attempts > maxAttempts) {
+    await markSalesEmailSendQueueFailed(supabase, claimed.id)
+    await createSalesEmailDeliveryLog(supabase, {
+      queue_id: claimed.id,
+      provider: claimed.provider,
+      status: 'failed',
+      failure_reason: `Maximum send attempts (${maxAttempts}) exceeded.`,
+    })
+    return {
+      queueId: claimed.id,
+      outcome: 'failed',
+      errorMessage: `Maximum send attempts (${maxAttempts}) exceeded.`,
+    }
+  }
+
+  return executeSendForQueueRecord(supabase, claimed, maxAttempts)
 }
 
 async function executeSendForQueueRecord(
   supabase: SupabaseClient,
   queue: SalesEmailSendQueue,
+  maxAttempts: number,
 ): Promise<EmailSenderWorkerResult> {
   const email = await getSalesGeneratedEmailById(supabase, queue.generated_email_id)
   if (!email) {
@@ -66,6 +84,21 @@ async function executeSendForQueueRecord(
       failure_reason: 'Generated email not found.',
     })
     return { queueId: queue.id, outcome: 'failed', errorMessage: 'Generated email not found.' }
+  }
+
+  if (email.status !== 'queued') {
+    await markSalesEmailSendQueueFailed(supabase, queue.id)
+    await createSalesEmailDeliveryLog(supabase, {
+      queue_id: queue.id,
+      provider: queue.provider,
+      status: 'failed',
+      failure_reason: `Generated email is not approved for send (status: ${email.status}).`,
+    })
+    return {
+      queueId: queue.id,
+      outcome: 'failed',
+      errorMessage: 'Only queued (approved) emails may be sent.',
+    }
   }
 
   const contacts = await listSalesContactsByIds(supabase, [queue.contact_id])
@@ -134,7 +167,7 @@ async function executeSendForQueueRecord(
     }
 
     const retryPlan = calculateNextRetryTime(queue.attempts)
-    if ('scheduledAt' in retryPlan) {
+    if ('scheduledAt' in retryPlan && queue.attempts < maxAttempts) {
       const requeued = await requeueSalesEmailSendQueueItem(
         supabase,
         queue.id,

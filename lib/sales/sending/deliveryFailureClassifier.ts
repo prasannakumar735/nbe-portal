@@ -63,6 +63,9 @@ function isProviderError(message: string): boolean {
   const lower = message.toLowerCase()
   if (/not implemented yet/i.test(message)) return true
   if (lower.includes('provider error')) return true
+  if (lower.includes('microsoft graph sendmail failed')) return true
+  if (lower.includes('throttl') || lower.includes('too many requests')) return true
+  if (/\b429\b/.test(message)) return true
   if (lower.includes('authentication') || lower.includes('unauthorized') || lower.includes('api key')) {
     return true
   }

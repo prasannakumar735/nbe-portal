@@ -52,3 +52,31 @@ export async function createSalesEmailDeliveryLog(
   if (error) throw error
   return mapRow(data as Record<string, unknown>)
 }
+
+export async function listRecentSalesEmailDeliveryFailures(
+  supabase: SupabaseClient,
+  options?: { campaignId?: string; limit?: number },
+): Promise<SalesEmailDeliveryLog[]> {
+  const limit = options?.limit ?? 20
+  let query = supabase
+    .from(TABLE)
+    .select('*')
+    .neq('status', 'success')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (options?.campaignId) {
+    const { data: queueRows, error: queueErr } = await supabase
+      .from('sales_email_send_queue')
+      .select('id')
+      .eq('campaign_id', options.campaignId)
+    if (queueErr) throw queueErr
+    const ids = (queueRows ?? []).map((r) => String((r as { id: string }).id))
+    if (ids.length === 0) return []
+    query = query.in('queue_id', ids)
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+  return (data ?? []).map((row) => mapRow(row as Record<string, unknown>))
+}

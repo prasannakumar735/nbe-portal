@@ -246,3 +246,67 @@ export async function cancelSalesEmailSendQueueItem(
   if (!data) return null
   return mapRow(data as Record<string, unknown>)
 }
+
+/** Reset `sending` rows to `queued` (e.g. after worker timeout). Returns count updated. */
+export async function requeueStuckSalesEmailSendQueueItems(
+  supabase: SupabaseClient,
+): Promise<number> {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update({ status: 'queued' })
+    .eq('status', 'sending')
+    .select('id')
+  if (error) throw error
+  return data?.length ?? 0
+}
+
+/** Manual resend: failed or cancelled → queued (resets attempts). */
+export async function prepareManualResendSalesEmailSendQueueItem(
+  supabase: SupabaseClient,
+  id: string,
+  scheduledAt?: string,
+): Promise<SalesEmailSendQueue | null> {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update({
+      status: 'queued',
+      attempts: 0,
+      scheduled_at: scheduledAt ?? new Date().toISOString(),
+      sent_at: null,
+    })
+    .eq('id', id)
+    .in('status', ['failed', 'cancelled'])
+    .select('*')
+    .maybeSingle()
+  if (error) throw error
+  if (!data) return null
+  return mapRow(data as Record<string, unknown>)
+}
+
+export type SalesEmailSendQueueStatusCounts = Record<SalesEmailSendQueueStatus, number>
+
+export async function countSalesEmailSendQueueByStatus(
+  supabase: SupabaseClient,
+  options?: { campaignId?: string },
+): Promise<SalesEmailSendQueueStatusCounts> {
+  const counts: SalesEmailSendQueueStatusCounts = {
+    queued: 0,
+    sending: 0,
+    sent: 0,
+    failed: 0,
+    bounced: 0,
+    cancelled: 0,
+  }
+
+  let query = supabase.from(TABLE).select('status')
+  if (options?.campaignId) {
+    query = query.eq('campaign_id', options.campaignId)
+  }
+  const { data, error } = await query
+  if (error) throw error
+  for (const row of data ?? []) {
+    const status = (row as { status: SalesEmailSendQueueStatus }).status
+    if (status in counts) counts[status] += 1
+  }
+  return counts
+}
