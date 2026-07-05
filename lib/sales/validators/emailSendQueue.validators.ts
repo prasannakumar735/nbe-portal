@@ -27,4 +27,13 @@ export const emailSendQueueListQuerySchema = z.object({
 export const dispatchEmailSendQueueBodySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).optional(),
   queueIds: z.array(z.string().uuid()).optional(),
+  campaignId: z.string().uuid().optional(),
+})
+
+export const emailSendQueueMonitorQuerySchema = z.object({
+  campaignId: z.string().uuid().optional(),
+})
+
+export const emailSendQueueIdParamSchema = z.object({
+  queueId: z.string().uuid(),
 })

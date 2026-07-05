@@ -79,7 +79,9 @@ export {
   bulkQueueApprovedEmailsBodySchema,
   cancelQueuedEmailParamSchema,
   dispatchEmailSendQueueBodySchema,
+  emailSendQueueIdParamSchema,
   emailSendQueueListQuerySchema,
+  emailSendQueueMonitorQuerySchema,
   queueApprovedEmailBodySchema,
 } from '@/lib/sales/validators/emailSendQueue.validators'
 export {
