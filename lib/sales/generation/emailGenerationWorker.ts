@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { isLLMProviderId, type LLMProviderId } from '@/lib/sales/constants/llmProviders'
-import { buildEmailGenerationPrompt } from '@/lib/sales/generation/emailPromptBuilder'
+import { buildEmailGenerationPromptBundle } from '@/lib/sales/generation/emailPromptBuilder'
 import { classifyGenerationFailure } from '@/lib/sales/generation/generationFailureClassifier'
 import { executeProviderGeneration } from '@/lib/sales/generation/providerExecutionAdapter'
 import { scoreGeneratedEmail } from '@/lib/sales/quality/emailQualityScorer'
@@ -29,6 +29,8 @@ export type EmailGenerationWorkerInput = {
   provider: LLMProviderId
   contact: SalesContact
   business: SalesBusiness
+  /** When set, links regeneration to the prior generated email row. */
+  parentGeneratedEmailId?: string | null
 }
 
 export type EmailGenerationWorkerResult = {
@@ -45,17 +47,24 @@ export async function processEmailGenerationForContact(
   supabase: SupabaseClient,
   input: EmailGenerationWorkerInput,
 ): Promise<EmailGenerationWorkerResult> {
-  const { job, campaign, provider, contact, business } = input
+  const { job, campaign, provider, contact, business, parentGeneratedEmailId } = input
   const startedAt = Date.now()
-  let prompt = ''
+  let userPrompt = ''
+  let systemPrompt = ''
 
   try {
     assertProviderRequestAllowed(provider)
     recordProviderRequest(provider)
 
-    prompt = await buildEmailGenerationPrompt(supabase, { campaign, contact, business })
+    const bundle = await buildEmailGenerationPromptBundle(supabase, { campaign, contact, business })
+    userPrompt = bundle.userPrompt
+    systemPrompt = bundle.systemPrompt
 
-    const execution = await executeProviderGeneration({ provider, prompt })
+    const execution = await executeProviderGeneration({
+      provider,
+      prompt: userPrompt,
+      systemPrompt,
+    })
     const { content } = execution
 
     const version = await getNextSalesGeneratedEmailVersion(supabase, {
@@ -71,7 +80,11 @@ export async function processEmailGenerationForContact(
       generation_provider: content.provider || provider,
       status: 'draft',
       version,
+      parent_generated_email_id: parentGeneratedEmailId ?? null,
       sequence_position: 0,
+      prompt_name: bundle.promptName,
+      prompt_version: bundle.promptVersion,
+      prompt_library_id: bundle.promptLibraryId,
     })
 
     await createSalesGenerationLog(supabase, {

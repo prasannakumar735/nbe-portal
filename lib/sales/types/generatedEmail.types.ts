@@ -16,6 +16,9 @@ export type SalesGeneratedEmail = {
   parent_generated_email_id: string | null
   thread_root_email_id: string | null
   sequence_position: number
+  prompt_library_id: string | null
+  prompt_name: string | null
+  prompt_version: number | null
   reviewed_by: string | null
   reviewed_at: string | null
   updated_at: string | null
@@ -38,6 +41,9 @@ export type SalesGeneratedEmailInsert = {
   parent_generated_email_id?: string | null
   thread_root_email_id?: string | null
   sequence_position?: number
+  prompt_name?: string | null
+  prompt_version?: number | null
+  prompt_library_id?: string | null
 }
 
 export type SalesGeneratedEmailUpdate = {

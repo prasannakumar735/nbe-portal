@@ -4,6 +4,10 @@ export interface GeneratedEmailResult {
   provider: string
 }
 
+export interface LLMProviderGenerateOptions {
+  systemPrompt?: string
+}
+
 export interface LLMProvider {
-  generateEmail(prompt: string): Promise<GeneratedEmailResult>
+  generateEmail(prompt: string, options?: LLMProviderGenerateOptions): Promise<GeneratedEmailResult>
 }

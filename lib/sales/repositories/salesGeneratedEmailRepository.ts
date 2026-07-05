@@ -31,12 +31,18 @@ function mapRow(row: Record<string, unknown>): SalesGeneratedEmail {
     thread_root_email_id:
       row.thread_root_email_id != null ? String(row.thread_root_email_id) : null,
     sequence_position: Number(row.sequence_position ?? 0),
+    prompt_library_id:
+      row.prompt_library_id != null ? String(row.prompt_library_id) : null,
+    prompt_name: row.prompt_name != null ? String(row.prompt_name) : null,
+    prompt_version: row.prompt_version != null ? Number(row.prompt_version) : null,
     reviewed_by: row.reviewed_by != null ? String(row.reviewed_by) : null,
     reviewed_at: row.reviewed_at != null ? String(row.reviewed_at) : null,
     updated_at: row.updated_at != null ? String(row.updated_at) : null,
     created_at: String(row.created_at),
   }
 }
+
+const REVIEWABLE_FOR_APPROVE: SalesGeneratedEmailStatus[] = ['draft', 'edited']
 
 function assertCanApprove(status: SalesGeneratedEmailStatus): void {
   if (status === 'sent') {
@@ -48,8 +54,11 @@ function assertCanApprove(status: SalesGeneratedEmailStatus): void {
   if (status === 'queued') {
     throw new SalesGeneratedEmailReviewError('Cannot approve an email that is already queued for sending.')
   }
-  if (status !== 'draft') {
-    throw new SalesGeneratedEmailReviewError('Only draft emails can be approved.')
+  if (status === 'approved') {
+    throw new SalesGeneratedEmailReviewError('Email is already approved.')
+  }
+  if (!REVIEWABLE_FOR_APPROVE.includes(status)) {
+    throw new SalesGeneratedEmailReviewError('Only draft or edited emails can be approved.')
   }
 }
 
@@ -60,8 +69,11 @@ function assertCanReject(status: SalesGeneratedEmailStatus): void {
   if (status === 'queued') {
     throw new SalesGeneratedEmailReviewError('Cannot reject an email that is already queued for sending.')
   }
-  if (status !== 'draft') {
-    throw new SalesGeneratedEmailReviewError('Only draft emails can be rejected.')
+  if (status === 'rejected') {
+    throw new SalesGeneratedEmailReviewError('Email is already rejected.')
+  }
+  if (!REVIEWABLE_FOR_APPROVE.includes(status)) {
+    throw new SalesGeneratedEmailReviewError('Only draft or edited emails can be rejected.')
   }
 }
 
@@ -94,6 +106,27 @@ export async function listSalesGeneratedEmailsByCampaign(
   const { data, error } = await query
   if (error) throw error
   return (data ?? []).map((row) => mapRow(row as Record<string, unknown>))
+}
+
+/** One row per contact (highest version) for campaign review UI. */
+export async function listLatestSalesGeneratedEmailsByCampaign(
+  supabase: SupabaseClient,
+  campaignId: string,
+  options?: { status?: SalesGeneratedEmailStatus },
+): Promise<SalesGeneratedEmail[]> {
+  const rows = await listSalesGeneratedEmailsByCampaign(supabase, campaignId, {
+    status: options?.status,
+  })
+  const latestByContact = new Map<string, SalesGeneratedEmail>()
+  for (const row of rows) {
+    const existing = latestByContact.get(row.contact_id)
+    if (!existing || row.version > existing.version) {
+      latestByContact.set(row.contact_id, row)
+    }
+  }
+  return [...latestByContact.values()].sort((a, b) =>
+    a.contact_id.localeCompare(b.contact_id),
+  )
 }
 
 /** Regeneration / audit history for one campaign contact (newest version first). */
@@ -169,6 +202,9 @@ export async function createSalesGeneratedEmail(
   if (row.sequence_position !== undefined) {
     insertRow.sequence_position = row.sequence_position
   }
+  if (row.prompt_name !== undefined) insertRow.prompt_name = row.prompt_name
+  if (row.prompt_version !== undefined) insertRow.prompt_version = row.prompt_version
+  if (row.prompt_library_id !== undefined) insertRow.prompt_library_id = row.prompt_library_id
 
   const { data, error } = await supabase
     .from(TABLE)
@@ -264,7 +300,7 @@ export async function approveSalesGeneratedEmail(
       reviewed_at: now,
     })
     .eq('id', id)
-    .eq('status', 'draft')
+    .in('status', REVIEWABLE_FOR_APPROVE)
     .select('*')
     .maybeSingle()
 
@@ -293,7 +329,7 @@ export async function rejectSalesGeneratedEmail(
       reviewed_at: now,
     })
     .eq('id', id)
-    .eq('status', 'draft')
+    .in('status', REVIEWABLE_FOR_APPROVE)
     .select('*')
     .maybeSingle()
 

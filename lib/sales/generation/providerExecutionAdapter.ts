@@ -23,6 +23,7 @@ export type ProviderGenerationExecutionResult = {
 export type ExecuteProviderGenerationInput = {
   provider: string
   prompt: string
+  systemPrompt?: string
 }
 
 /** Rough token estimate until provider APIs return usage metadata (Phase 5+). */
@@ -80,15 +81,18 @@ export async function executeProviderGeneration(
 
   const startedAt = Date.now()
   const llm = getLLMProvider(provider)
-  const raw = await llm.generateEmail(prompt)
+  const raw = await llm.generateEmail(prompt, { systemPrompt: input.systemPrompt })
   const latencyMs = Math.max(0, Date.now() - startedAt)
 
   const content = normalizeProviderEmailResult(provider, raw)
   const completionText = `${content.subject}\n\n${content.body}`
+  const promptTokens = estimateTokenCount(
+    `${input.systemPrompt ?? ''}\n${prompt}`,
+  )
 
   return {
     content,
-    promptTokens: estimateTokenCount(prompt),
+    promptTokens,
     completionTokens: estimateTokenCount(completionText),
     latencyMs,
   }
