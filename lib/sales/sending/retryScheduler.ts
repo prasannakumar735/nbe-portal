@@ -1,13 +1,4 @@
-/** Backoff delays after failed send attempt (Phase 6). */
-const RETRY_DELAY_MS_BY_ATTEMPT: Readonly<Record<1 | 2 | 3, number>> = {
-  1: 5 * 60 * 1000,
-  2: 15 * 60 * 1000,
-  3: 60 * 60 * 1000,
-}
-
-export const PERMANENT_FAILURE_ATTEMPT = 4
-
-/** Backoff delays after failed send attempt (Phase 6). */
+/** Backoff delays after failed send attempt (Phase 6 / 9). */
 const RETRY_DELAY_MS_BY_ATTEMPT: Readonly<Record<1 | 2 | 3, number>> = {
   1: 5 * 60 * 1000,
   2: 15 * 60 * 1000,

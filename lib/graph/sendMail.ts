@@ -12,6 +12,16 @@ export type GraphSendMailOptions = {
   bodyHtml?: string
   /** Optional; defaults to process.env.MS_GRAPH_MAIL_USER_ID or MS_ONEDRIVE_USER_ID */
   sendAsUserId?: string
+  /** Correlation id for delivery logs (Graph sendMail returns no message id). */
+  correlationId?: string
+  /** Request timeout ms (default 30000). */
+  timeoutMs?: number
+}
+
+export type GraphSendMailResult = {
+  correlationId: string
+  latencyMs: number
+  httpStatus: number
 }
 
 async function getGraphAccessToken(): Promise<string> {
@@ -57,8 +67,10 @@ async function getGraphAccessToken(): Promise<string> {
  * Send an email using Microsoft Graph API.
  * Uses POST /users/{userId}/sendMail.
  */
-export async function sendMailViaGraph(options: GraphSendMailOptions): Promise<void> {
-  const { to, subject, bodyText, bodyHtml, sendAsUserId } = options
+export async function sendMailViaGraphWithResult(
+  options: GraphSendMailOptions,
+): Promise<GraphSendMailResult> {
+  const { to, subject, bodyText, bodyHtml, sendAsUserId, correlationId, timeoutMs } = options
 
   const userId =
     sendAsUserId?.trim() ||
@@ -78,8 +90,13 @@ export async function sendMailViaGraph(options: GraphSendMailOptions): Promise<v
   }
 
   const token = await getGraphAccessToken()
+  const id =
+    correlationId?.trim() ||
+    (typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `nbe-${Date.now()}`)
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     message: {
       subject,
       body: html
@@ -93,21 +110,56 @@ export async function sendMailViaGraph(options: GraphSendMailOptions): Promise<v
           },
         },
       ],
+      internetMessageHeaders: [
+        {
+          name: 'X-NBE-Correlation-Id',
+          value: id.slice(0, 200),
+        },
+      ],
     },
     saveToSentItems: true,
   }
 
-  const res = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}/sendMail`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  })
+  const startedAt = Date.now()
+  const timeout = timeoutMs ?? Number(process.env.SALES_EMAIL_SEND_GRAPH_TIMEOUT_MS ?? 30_000)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeout)
+
+  let res: Response
+  try {
+    res = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}/sendMail`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Microsoft Graph sendMail timed out after ${timeout}ms.`)
+    }
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
+
+  const latencyMs = Math.max(0, Date.now() - startedAt)
 
   if (!res.ok) {
     const body = await res.text()
     throw new Error(`Microsoft Graph sendMail failed (${res.status}): ${body}`)
   }
+
+  return {
+    correlationId: id,
+    latencyMs,
+    httpStatus: res.status,
+  }
+}
+
+/** @deprecated Prefer sendMailViaGraphWithResult for delivery logging. */
+export async function sendMailViaGraph(options: GraphSendMailOptions): Promise<void> {
+  await sendMailViaGraphWithResult(options)
 }

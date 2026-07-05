@@ -2,18 +2,10 @@ import {
   isEmailSendProviderId,
   type EmailSendProviderId,
 } from '@/lib/sales/constants/emailSendProviders'
+import { sendOutboundEmailViaMicrosoft365 } from '@/lib/sales/sending/microsoft365EmailSender'
+import type { SendEmailInput, SendEmailResult } from '@/lib/sales/sending/emailSenderAdapter.types'
 
-export type SendEmailInput = {
-  recipient: string
-  subject: string
-  body: string
-  provider: string
-}
-
-export type SendEmailResult = {
-  externalMessageId: string
-  latencyMs: number
-}
+export type { SendEmailInput, SendEmailResult } from '@/lib/sales/sending/emailSenderAdapter.types'
 
 function assertSendProvider(provider: string): EmailSendProviderId {
   if (!isEmailSendProviderId(provider)) {
@@ -42,12 +34,16 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
     throw new Error('Invalid email content: subject and body are required.')
   }
 
-  const startedAt = Date.now()
-  await sendViaProviderStub(provider)
-  const latencyMs = Math.max(0, Date.now() - startedAt)
+  const normalized: SendEmailInput = { recipient, subject, body, provider }
 
-  return {
-    externalMessageId: '',
-    latencyMs,
+  switch (provider) {
+    case 'microsoft365':
+      return sendOutboundEmailViaMicrosoft365(normalized)
+    case 'smtp':
+    case 'sendgrid':
+    case 'mailgun':
+      return sendViaProviderStub(provider)
+    default:
+      return sendViaProviderStub(provider)
   }
 }
