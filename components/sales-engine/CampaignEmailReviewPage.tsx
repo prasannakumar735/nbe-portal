@@ -10,6 +10,7 @@ import { GeneratedEmailReviewTable } from '@/components/sales-engine/GeneratedEm
 import { GenerateEmailsPanel } from '@/components/sales-engine/GenerateEmailsPanel'
 import { PromptPreviewPanel } from '@/components/sales-engine/PromptPreviewPanel'
 import { QueueApprovedEmailsPanel } from '@/components/sales-engine/QueueApprovedEmailsPanel'
+import { EmailSendQueueMonitorPanel } from '@/components/sales-engine/EmailSendQueueMonitorPanel'
 import type { CampaignGeneratedEmailRow } from '@/lib/sales/review/campaignGeneratedEmailListService'
 import { useCampaignEmailReview } from '@/hooks/useCampaignEmailReview'
 import { useGeneratedEmailActions } from '@/hooks/useGeneratedEmailActions'
@@ -117,6 +118,7 @@ export function CampaignEmailReviewPage({ campaignId }: CampaignEmailReviewPageP
         onBulkApprove={(ids) => void actions.bulkApprove(ids)}
         onBulkQueue={(ids) => void actions.bulkQueue(ids)}
       />
+      <EmailSendQueueMonitorPanel campaignId={campaignId} onMutated={review.refresh} />
 
       <GeneratedEmailEditorModal
         open={editorRow != null}
