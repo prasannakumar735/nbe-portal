@@ -58,7 +58,7 @@ export function defaultPromptLibraryForm(): PromptLibraryFormState {
       target_audience: ['Operations manager', 'Facilities manager'],
       business_pain_points: ['Operational downtime', 'Compliance and safety requirements'],
       value_proposition: 'Practical industrial solutions with measurable operational benefit.',
-      cta: 'Offer a brief site conversation to assess current setup.',
+      cta: "If you'd like, we would be happy to arrange a no-obligation site assessment, provide a product recommendation, or prepare a quotation based on your facility's operational requirements.",
       subject_line_guidance: 'Professional, specific to operations; no hype.',
     },
   }

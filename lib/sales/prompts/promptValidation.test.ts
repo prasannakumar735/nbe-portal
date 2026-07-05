@@ -8,7 +8,7 @@ const complete = {
   tone: 'professional',
   business_pain_points: ['Downtime'],
   value_proposition: 'Practical industrial advice.',
-  cta: 'Offer a brief site conversation.',
+  cta: "If you'd like, we would be happy to arrange a no-obligation site assessment.",
   subject_line_guidance: 'Specific and professional.',
 }
 

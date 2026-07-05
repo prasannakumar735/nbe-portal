@@ -68,7 +68,15 @@ export const EMPTY_SALES_AI_PROMPT_DEFINITION: SalesAiPromptDefinition = {
   cta: '',
   subject_line_guidance: '',
   word_limit: 180,
-  avoid: ['spam language', 'fake urgency', 'exaggerated claims'],
+  avoid: [
+    'spam language',
+    'fake urgency',
+    'exaggerated claims',
+    "Hope you're doing well",
+    'Industry-leading',
+    'Act now',
+    'Limited-time offer',
+  ],
 }
 
 function asStringArray(v: unknown): string[] {

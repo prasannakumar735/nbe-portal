@@ -56,10 +56,10 @@ async function main() {
         'Downtime from damaged or poorly fitted equipment',
         'Safety and compliance pressure in industrial sites',
       ],
-      value_proposition: `National Bookkeeping & Energy helps ${label} customers improve efficiency, compliance, and total cost of ownership with practical site-focused advice.`,
-      cta: 'Offer a brief site conversation or inspection to assess current setup.',
+      value_proposition: `NBE Australia helps ${label} customers improve efficiency, compliance, and total cost of ownership with practical, site-focused industrial door solutions.`,
+      cta: "If you'd like, we would be happy to arrange a no-obligation site assessment, provide a product recommendation, or prepare a quotation based on your facility's operational requirements.",
       subject_line_guidance:
-        'Specific, professional, reference site or operational context; no hype or fake urgency.',
+        'Specific, professional, max 8 words; reference operations or doorway efficiency; no hype or capitals.',
       word_limit: 180,
     }
 

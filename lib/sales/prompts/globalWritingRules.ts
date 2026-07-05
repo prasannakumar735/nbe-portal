@@ -1,15 +1,31 @@
 /**
  * Inherited by every library prompt at assembly time (not stored per row).
- * Keeps Australian English and consultative B2B tone consistent.
+ * Core list kept for UI comparison; full methodology lives in nbeB2bSalesEmailFramework.
  */
 
+import {
+  NBE_BANNED_PHRASES,
+  NBE_WRITING_STYLE_RULES,
+  formatNbeFrameworkSystemBrief,
+} from '@/lib/sales/prompts/nbeB2bSalesEmailFramework'
+
+export {
+  NBE_BANNED_PHRASES,
+  NBE_EMAIL_WORD_ABSOLUTE_MAX,
+  NBE_EMAIL_WORD_TARGET_MAX,
+  NBE_EMAIL_WORD_TARGET_MIN,
+  NBE_FINAL_VALIDATION_CHECKLIST,
+  formatNbeFrameworkSystemBrief,
+  formatNbeFrameworkUserSections,
+} from '@/lib/sales/prompts/nbeB2bSalesEmailFramework'
+
+/** Summary rules shown in Prompt Library comparison (Global Rules row). */
 export const SALES_AI_GLOBAL_WRITING_RULES: readonly string[] = [
-  'Use Australian English spelling and conventions (e.g. organisation, colour, metre).',
-  'Maintain a professional, consultative tone; write as a trusted industrial partner, not a marketer.',
-  'Do not use exaggerated marketing language, hype, or unsubstantiated superlatives.',
-  'Do not create fake urgency (e.g. “act now”, “limited time”, “last chance”).',
-  'Include exactly one clear call to action aligned with the prompt CTA.',
-  'Be concise and specific to the recipient’s operation and industry context.',
+  ...NBE_WRITING_STYLE_RULES,
+  'Do not claim unsupported performance, savings percentages, payback periods, or guaranteed ROI unless verified NBE Australia data is provided in the prompt.',
+  `Banned phrase examples: ${NBE_BANNED_PHRASES.slice(0, 6).join('; ')}…`,
+  'NBE five-part structure: observation → problem → solution → benefits → low-pressure CTA.',
+  'Standard CTAs: free site inspection, no-obligation site assessment, product recommendation, quotation.',
 ]
 
 export const SALES_AI_DEFAULT_OUTPUT_FORMAT = [
@@ -19,7 +35,7 @@ export const SALES_AI_DEFAULT_OUTPUT_FORMAT = [
 ].join(' ')
 
 export function formatGlobalWritingRulesBlock(): string {
-  return ['## Global writing rules (always apply)', ...SALES_AI_GLOBAL_WRITING_RULES.map((r) => `- ${r}`)].join(
+  return ['## Global writing rules (NBE — always apply)', ...SALES_AI_GLOBAL_WRITING_RULES.map((r) => `- ${r}`)].join(
     '\n',
   )
 }

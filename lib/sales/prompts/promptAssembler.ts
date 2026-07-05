@@ -1,7 +1,12 @@
 import type { SalesAiPrompt, SalesAiPromptDefinition } from '@/lib/sales/types/aiPrompt.types'
+import type { SalesIndustrySlug } from '@/lib/sales/constants/industrySlugs'
+import type { SalesProductLineSlug } from '@/lib/sales/constants/productLineSlugs'
 import {
+  NBE_EMAIL_WORD_ABSOLUTE_MAX,
   SALES_AI_DEFAULT_OUTPUT_FORMAT,
   formatGlobalWritingRulesBlock,
+  formatNbeFrameworkSystemBrief,
+  formatNbeFrameworkUserSections,
 } from '@/lib/sales/prompts/globalWritingRules'
 import type { PromptRenderVariables } from '@/lib/sales/prompts/promptRenderVariables.types'
 import { renderPromptTemplate } from '@/lib/sales/prompts/variableRendering'
@@ -18,7 +23,9 @@ function formatList(items: string[], maxItems = 8): string {
 function assembleUserPromptFromComponents(
   definition: SalesAiPromptDefinition,
   variables: PromptRenderVariables,
+  slot: { productSlug: SalesProductLineSlug; industrySlug: SalesIndustrySlug },
 ): string {
+  const wordCap = Math.min(definition.word_limit, NBE_EMAIL_WORD_ABSOLUTE_MAX)
   return [
     'Write a single personalised B2B sales outreach email using the following brief.',
     '',
@@ -56,10 +63,15 @@ function assembleUserPromptFromComponents(
     '## Avoid',
     formatList(definition.avoid),
     '',
+    formatNbeFrameworkUserSections({
+      productSlug: slot.productSlug,
+      industrySlug: slot.industrySlug,
+    }),
+    '',
     formatGlobalWritingRulesBlock(),
     '',
     '## Output',
-    `Keep the email body under ${definition.word_limit} words.`,
+    `Keep the email body under ${wordCap} words (NBE target 120–180).`,
     'Return JSON only: {"subject":"...","body":"..."}.',
   ]
     .filter((line): line is string => line != null)
@@ -83,17 +95,32 @@ export function assemblePromptFromLibrary(
 ): AssembledPromptBundle {
   const { definition } = prompt
 
-  const systemParts = [
-    'You write B2B industrial sales outreach emails for Australian decision-makers.',
-    'Follow the user prompt exactly.',
-    definition.system_prompt_extension,
+  const frameworkTail = [
+    '',
+    formatNbeFrameworkUserSections({
+      productSlug: prompt.product_slug,
+      industrySlug: prompt.industry_slug,
+    }),
+    '',
     formatGlobalWritingRulesBlock(),
+    '',
+    '## Output',
+    `Keep the email body under ${Math.min(definition.word_limit, NBE_EMAIL_WORD_ABSOLUTE_MAX)} words.`,
+    'Return JSON only: {"subject":"...","body":"..."}.',
+  ].join('\n')
+
+  const systemParts = [
+    formatNbeFrameworkSystemBrief(),
+    definition.system_prompt_extension,
     SALES_AI_DEFAULT_OUTPUT_FORMAT,
   ].filter(Boolean)
 
   const userPrompt = definition.user_prompt_template?.trim()
-    ? renderPromptTemplate(definition.user_prompt_template, variables)
-    : assembleUserPromptFromComponents(definition, variables)
+    ? `${renderPromptTemplate(definition.user_prompt_template, variables)}${frameworkTail}`
+    : assembleUserPromptFromComponents(definition, variables, {
+        productSlug: prompt.product_slug,
+        industrySlug: prompt.industry_slug,
+      })
 
   return {
     systemPrompt: systemParts.join('\n\n'),
