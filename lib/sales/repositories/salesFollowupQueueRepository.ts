@@ -28,6 +28,8 @@ function mapRow(row: Record<string, unknown>): SalesFollowupQueue {
       row.generation_provider != null ? String(row.generation_provider) : null,
     processing_started_at:
       row.processing_started_at != null ? String(row.processing_started_at) : null,
+    result_generated_email_id:
+      row.result_generated_email_id != null ? String(row.result_generated_email_id) : null,
     created_at: String(row.created_at),
   }
 }
@@ -181,11 +183,54 @@ export async function markSalesFollowupQueueQueued(
   return mapRow(data as Record<string, unknown>)
 }
 
+export async function markSalesFollowupQueueAwaitingReview(
+  supabase: SupabaseClient,
+  id: string,
+  input: { resultGeneratedEmailId: string; generationProvider?: string },
+): Promise<SalesFollowupQueue | null> {
+  const patch: {
+    status: SalesFollowupQueueStatus
+    result_generated_email_id: string
+    generation_provider?: string
+  } = {
+    status: 'awaiting_review',
+    result_generated_email_id: input.resultGeneratedEmailId,
+  }
+  if (input.generationProvider?.trim()) {
+    patch.generation_provider = input.generationProvider.trim()
+  }
+
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update(patch)
+    .eq('id', id)
+    .eq('status', 'generating')
+    .select('*')
+    .maybeSingle()
+  if (error) throw error
+  if (!data) return null
+  return mapRow(data as Record<string, unknown>)
+}
+
+export async function getSalesFollowupQueueByResultEmailId(
+  supabase: SupabaseClient,
+  resultGeneratedEmailId: string,
+): Promise<SalesFollowupQueue | null> {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select('*')
+    .eq('result_generated_email_id', resultGeneratedEmailId)
+    .maybeSingle()
+  if (error) throw error
+  if (!data) return null
+  return mapRow(data as Record<string, unknown>)
+}
+
 export async function markSalesFollowupQueueSent(
   supabase: SupabaseClient,
   id: string,
 ): Promise<SalesFollowupQueue | null> {
-  return markSalesFollowupQueueStatus(supabase, id, ['queued'], 'sent')
+  return markSalesFollowupQueueStatus(supabase, id, ['queued', 'awaiting_review'], 'sent')
 }
 
 export async function markSalesFollowupQueueSkipped(

@@ -1,5 +1,8 @@
 import { z } from 'zod'
-import { LLM_PROVIDER_IDS } from '@/lib/sales/constants/llmProviders'
+import {
+  LLM_PROVIDER_IDS,
+  resolveDefaultSalesLlmProvider,
+} from '@/lib/sales/constants/llmProviders'
 import { SALES_GENERATION_JOB_STATUSES } from '@/lib/sales/constants/generationJobStatuses'
 
 export const salesGenerationJobListQuerySchema = z.object({
@@ -10,7 +13,13 @@ export const salesGenerationJobListQuerySchema = z.object({
 
 export const createSalesGenerationJobBodySchema = z.object({
   campaignId: z.string().uuid(),
-  provider: z.enum(LLM_PROVIDER_IDS),
+  provider: z.preprocess(
+    (value) =>
+      value === undefined || value === null || value === ''
+        ? resolveDefaultSalesLlmProvider()
+        : value,
+    z.enum(LLM_PROVIDER_IDS),
+  ),
   totalContacts: z.number().int().min(0),
   status: z.enum(SALES_GENERATION_JOB_STATUSES).optional(),
 })

@@ -2,11 +2,13 @@ export function isLeaveLevel1Code(code: string | null | undefined): boolean {
   return (code ?? '').trim().toUpperCase() === 'LVH'
 }
 
-/** Legacy `time_entries` store level1 as VARCHAR codes (e.g. LVH). */
+/** Legacy `time_entries` may store level-1 as UUID (`level1_id`) or code string. */
 export function isLeaveLegacyTimeEntry(entry: {
   work_type_level1_id?: string | null | undefined
+  level1_id?: string | null | undefined
 }): boolean {
-  return isLeaveLevel1Code(entry.work_type_level1_id)
+  if (isLeaveLevel1Code(entry.work_type_level1_id)) return true
+  return isLeaveLevel1Code(entry.level1_id)
 }
 
 export function isLeaveTimesheetEntry(

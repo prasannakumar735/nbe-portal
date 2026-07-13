@@ -12,6 +12,9 @@ export type SalesEmailDeliveryLog = {
   external_message_id: string | null
   failure_reason: string | null
   latency_ms: number
+  intended_recipient_email: string | null
+  actual_recipient_email: string | null
+  safe_delivery_mode: boolean
   created_at: string
 }
 
@@ -22,4 +25,7 @@ export type SalesEmailDeliveryLogInsert = {
   external_message_id?: string | null
   failure_reason?: string | null
   latency_ms?: number
+  intended_recipient_email?: string | null
+  actual_recipient_email?: string | null
+  safe_delivery_mode?: boolean
 }

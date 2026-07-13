@@ -7,6 +7,14 @@ import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
+function routeErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) return error.message
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message: unknown }).message)
+  }
+  return fallback
+}
+
 export async function POST(request: Request) {
   const auth = await requireManagerOrAdminApi(request)
   if (!auth.ok) return auth.response
@@ -26,6 +34,6 @@ export async function POST(request: Request) {
     if (error instanceof ZodError) {
       return fail('Validation failed', 422, error.issues)
     }
-    return fail(error instanceof Error ? error.message : 'Job processing failed', 500)
+    return fail(routeErrorMessage(error, 'Job processing failed'), 500)
   }
 }

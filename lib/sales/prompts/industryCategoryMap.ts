@@ -7,7 +7,24 @@ import { isSalesIndustrySlug } from '@/lib/sales/constants/industrySlugs'
  */
 const CATEGORY_INDUSTRY_KEYWORDS: { slug: SalesIndustrySlug; keywords: string[] }[] = [
   { slug: 'cold_storage', keywords: ['cold storage', 'cold store', 'freezer', 'refrigerat'] },
-  { slug: 'food_processing', keywords: ['food processing', 'food manufacture', 'abattoir', 'bakery', 'brewery'] },
+  {
+    slug: 'food_processing',
+    keywords: [
+      'food processing',
+      'food manufacture',
+      'food manufacturer',
+      'food production',
+      'gourmet',
+      'delicatessen',
+      'deli ',
+      'confection',
+      'catering',
+      'edible',
+      'abattoir',
+      'bakery',
+      'brewery',
+    ],
+  },
   { slug: 'pharmaceutical', keywords: ['pharmaceutical', 'pharma', 'medical device', 'laboratory'] },
   { slug: 'logistics', keywords: ['logistics', 'courier', 'freight', 'transport', 'distribution centre'] },
   { slug: 'manufacturing', keywords: ['manufactur', 'factory', 'production', 'industrial'] },

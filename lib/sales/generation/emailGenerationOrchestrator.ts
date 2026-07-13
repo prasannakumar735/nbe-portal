@@ -16,6 +16,7 @@ import {
   startSalesGenerationJob,
 } from '@/lib/sales/repositories/salesGenerationJobRepository'
 import { createSalesGenerationLog } from '@/lib/sales/repositories/salesGenerationLogRepository'
+import { getLatestSalesGeneratedEmailForContact } from '@/lib/sales/repositories/salesGeneratedEmailRepository'
 import type { SalesCampaignContact } from '@/lib/sales/types/campaign.types'
 import type { SalesGenerationJob } from '@/lib/sales/types/generationJob.types'
 
@@ -26,6 +27,8 @@ export type EmailGenerationBatchInput = {
   processImmediately?: boolean
   /** Resume existing batch (queue retries / duplicate worker safety). */
   existingGenerationJobId?: string
+  /** Limit generation to these campaign contact ids (subset regen). */
+  contactIds?: string[]
 }
 
 export type EmailGenerationBatchResult = {
@@ -76,7 +79,11 @@ export async function startEmailGenerationBatch(
     throw new Error('Campaign not found.')
   }
 
-  const audience = await listSelectedSalesCampaignContacts(supabase, campaign.id)
+  let audience = await listSelectedSalesCampaignContacts(supabase, campaign.id)
+  if (input.contactIds?.length) {
+    const allowed = new Set(input.contactIds)
+    audience = audience.filter((row) => allowed.has(row.contact_id))
+  }
   if (audience.length === 0) {
     throw new Error('Campaign has no selected contacts for email generation.')
   }
@@ -208,4 +215,87 @@ async function incrementFailedContactProgress(
     failure_reason: 'Skipped contact during batch dispatch.',
   })
   await incrementSalesGenerationJobProgress(supabase, jobId, 'failed')
+}
+
+export type RegenerateEmailForContactInput = {
+  campaignId: string
+  contactId: string
+  provider: string
+}
+
+export type RegenerateEmailForContactResult = EmailGenerationWorkerResult & {
+  generationJob: SalesGenerationJob
+}
+
+/** Single-contact regeneration (new version row, parent link). */
+export async function regenerateEmailForContact(
+  supabase: SupabaseClient,
+  input: RegenerateEmailForContactInput,
+): Promise<RegenerateEmailForContactResult> {
+  if (!isLLMProviderId(input.provider)) {
+    throw new Error(`Unknown LLM provider: ${input.provider}`)
+  }
+  const provider = input.provider as LLMProviderId
+
+  const campaign = await getSalesCampaignById(supabase, input.campaignId)
+  if (!campaign) {
+    throw new Error('Campaign not found.')
+  }
+
+  const audience = await listSelectedSalesCampaignContacts(supabase, campaign.id)
+  const row = audience.find((r) => r.contact_id === input.contactId)
+  if (!row) {
+    throw new Error('Contact is not in the campaign audience.')
+  }
+
+  const contacts = await listSalesContactsByIds(supabase, [input.contactId])
+  const contact = contacts[0]
+  if (!contact) {
+    throw new Error('Contact not found.')
+  }
+  if (!contact.email?.trim()) {
+    throw new Error('Contact has no email address.')
+  }
+
+  const business = await getSalesBusinessById(supabase, row.business_id)
+  if (!business) {
+    throw new Error('Business not found.')
+  }
+
+  const prior = await getLatestSalesGeneratedEmailForContact(
+    supabase,
+    campaign.id,
+    contact.id,
+  )
+
+  const job = await createSalesGenerationJob(supabase, {
+    campaign_id: campaign.id,
+    provider,
+    total_contacts: 1,
+    status: 'queued',
+  })
+
+  const runningJob = await startSalesGenerationJob(supabase, job.id)
+  const activeJob =
+    runningJob ?? (await getSalesGenerationJobById(supabase, job.id)) ?? job
+  if (!activeJob || activeJob.status !== 'running') {
+    await failSalesGenerationJob(supabase, job.id)
+    throw new Error('Failed to start regeneration job.')
+  }
+
+  const result = await processEmailGenerationForContact(supabase, {
+    job: activeJob,
+    campaign,
+    provider,
+    contact,
+    business,
+    parentGeneratedEmailId: prior?.id ?? null,
+  })
+
+  const finalJob = (await getSalesGenerationJobById(supabase, activeJob.id)) ?? activeJob
+
+  return {
+    ...result,
+    generationJob: finalJob,
+  }
 }

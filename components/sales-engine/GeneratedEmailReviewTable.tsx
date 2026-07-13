@@ -11,6 +11,19 @@ const STATUS_STYLES: Record<string, string> = {
   sent: 'bg-slate-200 text-slate-800',
 }
 
+function engagementLabels(row: CampaignGeneratedEmailRow): string {
+  const e = row.engagement
+  if (!e) return '—'
+  const tags: string[] = []
+  if (e.delivered) tags.push('Delivered')
+  if (e.opened) tags.push('Opened')
+  if (e.clicked) tags.push('Clicked')
+  if (e.reply_detected) tags.push('Replied')
+  if (e.bounce_detected) tags.push('Bounced')
+  if (e.unsubscribed) tags.push('Unsubscribed')
+  return tags.length ? tags.join(', ') : '—'
+}
+
 type GeneratedEmailReviewTableProps = {
   rows: CampaignGeneratedEmailRow[]
   loading: boolean
@@ -63,6 +76,7 @@ export function GeneratedEmailReviewTable({
               <th className="px-2 py-2">Subject</th>
               <th className="px-2 py-2">Status</th>
               <th className="px-2 py-2">Quality</th>
+              <th className="px-2 py-2">Engagement</th>
               <th className="px-2 py-2">Actions</th>
             </tr>
           </thead>
@@ -101,6 +115,7 @@ export function GeneratedEmailReviewTable({
                   <td className="px-2 py-3 text-xs text-slate-600">
                     {row.quality?.recommendation ?? '—'}
                   </td>
+                  <td className="px-2 py-3 text-xs text-slate-600">{engagementLabels(row)}</td>
                   <td className="px-2 py-3">
                     <div className="flex flex-wrap gap-1.5">
                       <button

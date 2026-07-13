@@ -1,6 +1,5 @@
 import type { SalesBusinessStatus } from '@/lib/sales/constants/businessStatuses'
 import type { SalesBusinessSource } from '@/lib/sales/types/sources'
-import type { SalesScanRun } from '@/lib/sales/types/scanRun.types'
 
 export type { SalesBusinessStatus } from '@/lib/sales/constants/businessStatuses'
 export { SALES_BUSINESS_STATUSES } from '@/lib/sales/constants/businessStatuses'
@@ -33,6 +32,7 @@ export type SalesBusiness = {
   last_contacted_at: string | null
   contact_attempts: number
   raw_payload: Record<string, unknown> | null
+  scanned_at: string | null
   created_at: string
 }
 
@@ -51,6 +51,7 @@ export type SalesBusinessInsert = {
   last_contacted_at?: string | null
   contact_attempts?: number
   raw_payload?: Record<string, unknown> | null
+  scanned_at?: string | null
 }
 
 export type SalesBusinessListResult = {
@@ -65,12 +66,34 @@ export type SalesBusinessSummary = {
   selected: number
 }
 
-export type BusinessDiscoveryAgentResult = {
+export type BusinessDiscoveryPersistStats = {
   inserted: number
-  skipped: number
-  scan_runs: SalesScanRun[]
-  businesses: SalesBusiness[]
+  updated: number
+  existing: number
+  duplicatesSkipped: number
+  failed: number
 }
 
-/** @deprecated Use BusinessDiscoveryAgentResult */
-export type DiscoveryScanResult = BusinessDiscoveryAgentResult
+export type BusinessDiscoveryScanResult = {
+  jobId: string
+  postcode: string
+  cached: boolean
+  durationMs: number
+  googleReturned: number
+  inserted: number
+  updated: number
+  existing: number
+  duplicatesSkipped: number
+  totalFound: number
+  failed: number
+}
+
+export type BusinessDiscoveryScanApiResponse = {
+  results: BusinessDiscoveryScanResult[]
+}
+
+/** @deprecated Use BusinessDiscoveryScanApiResponse */
+export type BusinessDiscoveryAgentResult = BusinessDiscoveryScanApiResponse
+
+/** @deprecated Use BusinessDiscoveryScanApiResponse */
+export type DiscoveryScanResult = BusinessDiscoveryScanApiResponse

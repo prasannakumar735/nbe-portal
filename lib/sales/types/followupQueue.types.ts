@@ -10,6 +10,7 @@ export type SalesFollowupQueue = {
   status: SalesFollowupQueueStatus
   generation_provider: string | null
   processing_started_at: string | null
+  result_generated_email_id: string | null
   created_at: string
 }
 

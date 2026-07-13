@@ -49,7 +49,10 @@ export function TopNavigation({ user }: TopNavigationProps) {
       return pathname.startsWith('/dashboard/quotes/service')
     }
     if (href === '/dashboard/sales-engine') {
-      return pathname === '/dashboard/sales-engine'
+      return (
+        pathname === '/dashboard/sales-engine' ||
+        pathname.startsWith('/dashboard/sales-engine/')
+      )
     }
     return pathname === href
   }

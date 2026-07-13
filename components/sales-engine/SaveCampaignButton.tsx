@@ -11,7 +11,7 @@ export function SaveCampaignButton({ onSave, saving, disabled = false }: SaveCam
     <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
       <h2 className="text-lg font-semibold text-slate-900">Save Campaign Draft</h2>
       <p className="mt-1 text-sm text-slate-600">
-        Store this audience and campaign details for AI email generation (next phase).
+        Store this audience and campaign details, then continue to AI email generation.
       </p>
       <button
         type="button"

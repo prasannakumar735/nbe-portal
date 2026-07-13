@@ -10,7 +10,9 @@ import {
 import {
   resolveActivePromptForSlot,
   resolveProductSlugForCampaign,
+  type PromptResolutionSlot,
 } from '@/lib/sales/prompts/promptResolver'
+import { ensurePromptLibrarySlotWithFallbacks } from '@/lib/sales/prompts/seed/ensurePromptLibrarySlot'
 import type { SalesPromptUseCaseSlug } from '@/lib/sales/constants/useCaseSlugs'
 import { DEFAULT_SALES_PROMPT_USE_CASE } from '@/lib/sales/constants/useCaseSlugs'
 import type { SalesProductLineSlug } from '@/lib/sales/constants/productLineSlugs'
@@ -31,11 +33,15 @@ export async function ensureActivePromptForCampaign(
     throw new Error('Campaign type is not mapped to a product line in the Prompt Library.')
   }
 
-  await resolveActivePromptForSlot(supabase, {
+  const slot: PromptResolutionSlot = {
     productSlug,
     industrySlug: 'general',
     useCaseSlug: DEFAULT_SALES_PROMPT_USE_CASE,
-  })
+  }
+
+  await ensurePromptLibrarySlotWithFallbacks(supabase, slot)
+
+  await resolveActivePromptForSlot(supabase, slot)
 }
 
 export type BuildPromptPreviewInput = {

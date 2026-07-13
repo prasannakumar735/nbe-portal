@@ -112,6 +112,11 @@ export function EmailSendQueueMonitorPanel({ campaignId, onMutated }: EmailSendQ
           <p className="mt-1 text-sm text-slate-600">
             Approved emails only. Dispatch sends via Microsoft Graph with rate limiting and retries.
           </p>
+          {snapshot.safeDeliveryEnabled ? (
+            <p className="mt-2 text-sm font-medium text-amber-900">
+              Safe Delivery Mode: ON → {snapshot.safeDeliveryRedirectEmail || '(redirect not set)'}
+            </p>
+          ) : null}
         </div>
         <button
           type="button"
@@ -165,6 +170,37 @@ export function EmailSendQueueMonitorPanel({ campaignId, onMutated }: EmailSendQ
                 >
                   Resend
                 </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {snapshot.recentSuccesses.length > 0 ? (
+        <div className="mt-4">
+          <h3 className="text-sm font-medium text-slate-800">Recent successful sends</h3>
+          <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-xs text-slate-600">
+            {snapshot.recentSuccesses.slice(0, 6).map((log) => (
+              <li key={log.id} className="border-b border-slate-100 py-1">
+                {log.safe_delivery_mode ? (
+                  <>
+                    <span className="font-medium text-amber-800">Safe delivery</span>
+                    {' — intended '}
+                    <span className="font-mono">{log.intended_recipient_email}</span>
+                    {' → actual '}
+                    <span className="font-mono">{log.actual_recipient_email}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-medium text-emerald-700">Delivered</span>
+                    {log.actual_recipient_email ? (
+                      <>
+                        {' to '}
+                        <span className="font-mono">{log.actual_recipient_email}</span>
+                      </>
+                    ) : null}
+                  </>
+                )}
               </li>
             ))}
           </ul>

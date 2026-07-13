@@ -15,7 +15,7 @@ export const salesBusinessStatusPatchSchema = z.object({
 
 export const salesBusinessListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  pageSize: z.coerce.number().int().min(1).max(250).default(25),
   postcode: z
     .string()
     .trim()

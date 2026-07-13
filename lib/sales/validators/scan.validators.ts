@@ -38,4 +38,5 @@ export const discoveryScanBodySchema = z.object({
     .array(salesPostcodeSchema)
     .min(1, 'At least one postcode is required.')
     .max(10, 'Maximum 10 postcodes per scan.'),
+  refreshFromGoogle: z.boolean().optional(),
 })

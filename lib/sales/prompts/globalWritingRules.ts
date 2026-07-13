@@ -24,8 +24,8 @@ export const SALES_AI_GLOBAL_WRITING_RULES: readonly string[] = [
   ...NBE_WRITING_STYLE_RULES,
   'Do not claim unsupported performance, savings percentages, payback periods, or guaranteed ROI unless verified NBE Australia data is provided in the prompt.',
   `Banned phrase examples: ${NBE_BANNED_PHRASES.slice(0, 6).join('; ')}…`,
-  'NBE five-part structure: observation → problem → solution → benefits → low-pressure CTA.',
-  'Standard CTAs: free site inspection, no-obligation site assessment, product recommendation, quotation.',
+  'NBE seven-part structure: greeting → reason for contact → brief introduction → relevant product → practical value → soft assistance → closing.',
+  'Soft CTA: one low-pressure offer of assistance; vary wording; no meeting pressure or fake urgency.',
 ]
 
 export const SALES_AI_DEFAULT_OUTPUT_FORMAT = [

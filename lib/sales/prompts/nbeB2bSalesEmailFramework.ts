@@ -1,5 +1,5 @@
 /**
- * NBE Australia — professional B2B industrial sales email methodology.
+ * NBE Australia — AI Writing Manual (canonical B2B customer email methodology).
  * Applied at prompt assembly time for every library-backed generation (not stored per row).
  */
 
@@ -11,19 +11,30 @@ export const NBE_EMAIL_WORD_TARGET_MAX = 180
 export const NBE_EMAIL_WORD_ABSOLUTE_MAX = 220
 export const NBE_SUBJECT_MAX_WORDS = 8
 
-/** Phrases the model must not use (Australian B2B consultative standard). */
+/** Phrases the model must not use (NBE AI Writing Manual). */
 export const NBE_BANNED_PHRASES: readonly string[] = [
   "Hope you're doing well",
   'I hope this email finds you well',
   'Just checking in',
   'Industry-leading',
+  'Cutting-edge',
   'Best-in-class',
   'Revolutionary',
+  'Game-changing',
+  'State-of-the-art',
   'Amazing',
+  'Unlock efficiency',
+  'Transform your business',
+  'Maximise productivity',
+  'Take your operations to the next level',
+  'We are excited',
+  'We are thrilled',
   'Limited-time offer',
   'Act now',
   "Don't miss out",
   'Exclusive offer',
+  'Exclusive opportunity',
+  'Premium solution',
   'World-class',
   'Cheap',
   'Lowest price',
@@ -32,17 +43,24 @@ export const NBE_BANNED_PHRASES: readonly string[] = [
   'LIMITED TIME',
   'FREE TODAY',
   'I wanted to reach out',
+  'We are contacting manufacturing facilities',
+  'We are contacting facilities in',
+  'businesses in your area',
+  'facilities in your area',
 ]
 
-export const NBE_STANDARD_CTA_OFFERS: readonly string[] = [
-  'Free site inspection',
-  'No-obligation site assessment',
-  'Product recommendation',
-  'Quotation',
+/** Soft assistance CTA style examples — vary wording; do not copy verbatim every time. */
+export const NBE_SOFT_CTA_EXAMPLES: readonly string[] = [
+  "If you have an upcoming project, we'd be happy to assist.",
+  "If you'd like further information, please feel free to contact us.",
+  "We'd be pleased to discuss suitable options if required.",
+  'Please let us know if we can assist with any future projects.',
 ]
 
-export const NBE_DEFAULT_CTA_TEMPLATE =
-  "If you'd like, we would be happy to arrange a no-obligation site assessment, provide a product recommendation, or prepare a quotation based on your facility's operational requirements."
+export const NBE_DEFAULT_CTA_TEMPLATE = NBE_SOFT_CTA_EXAMPLES[0]
+
+/** @deprecated Use NBE_SOFT_CTA_EXAMPLES — kept for UI comparison labels. */
+export const NBE_STANDARD_CTA_OFFERS = NBE_SOFT_CTA_EXAMPLES
 
 /** Do not state specific savings/ROI unless verified customer data or explicit NBE copy is provided. */
 export const NBE_UNSUPPORTED_CLAIM_EXAMPLES: readonly string[] = [
@@ -60,49 +78,69 @@ export const NBE_QUALIFIED_BENEFIT_LANGUAGE: readonly string[] = [
   'Often assists with…',
   'Designed to…',
   'Helps support…',
+  'May be relevant',
+  'Where applicable',
+  'Depending on the application',
+  'If you have an upcoming requirement',
 ]
 
 export const NBE_TECHNICAL_ACCURACY_RULES: readonly string[] = [
   'Do not claim measurable savings, percentages, payback periods, or ROI unless supported by verified customer data or text explicitly supplied by NBE Australia in this prompt.',
   'Do not guarantee outcomes.',
   'Prefer qualified benefit language when describing operational or cost impact.',
+  'Never invent product specifications, door speeds, certifications, warranty periods, dimensions, or performance claims.',
+  'Only use technical information from approved NBE documentation, structured product data, CRM, or other context supplied in this prompt.',
+  'If information is unavailable, leave it out — do not estimate or infer.',
 ]
 
 export const NBE_WRITING_STYLE_RULES: readonly string[] = [
   'Australian English spelling and conventions.',
-  'Professional, consultative, helpful, respectful; technical where appropriate; conversational but not casual.',
-  'Educate rather than sell aggressively; never sound like spam.',
+  'NBE is an engineering company first: professional, calm, friendly, confident, respectful, genuine, helpful, knowledgeable.',
+  'Write naturally in plain English; keep sentences clear and concise.',
+  'Avoid unnecessary adjectives, filler sentences, and repeating information.',
+  'Educate and inform rather than sell; demonstrate expertise; build trust rather than excitement.',
+  'Never sound scripted, like a salesperson, like a marketing agency, or AI-generated.',
+  'Mention only benefits relevant to the customer industry and likely application.',
   'No exaggerated marketing language, fake urgency, multiple exclamation marks, emojis, or excessive bold.',
-  'One clear message and exactly one low-pressure CTA.',
+  'One clear message and exactly one soft, low-pressure offer of assistance.',
   `Body length: target ${NBE_EMAIL_WORD_TARGET_MIN}–${NBE_EMAIL_WORD_TARGET_MAX} words; never exceed ${NBE_EMAIL_WORD_ABSOLUTE_MAX} words.`,
   ...NBE_TECHNICAL_ACCURACY_RULES,
 ]
 
 export const NBE_EMAIL_STRUCTURE: readonly { title: string; guidance: string }[] = [
   {
-    title: '1. Personalised observation',
+    title: '1. Greeting',
     guidance:
-      'Open with something relevant to warehouse operations, loading docks, manufacturing, distribution, cold storage, food production, or logistics. Do not invent facts. Use phrasing such as "Based on your operations…", "It appears your facility…", or "Many businesses operating facilities like yours…".',
+      'Professional and personal. Use the provided company name when greeting (e.g. "Dear [Company name] team,"). Do not invent a contact person name unless supplied in context.',
   },
   {
-    title: '2. Customer problem',
+    title: '2. Reason for contact',
     guidance:
-      'Describe operational challenges before mentioning products. Focus on problems the prospect likely faces in their context.',
+      'One or two sentences explaining why NBE is writing to this specific business (use company name). Do not describe outreach to all businesses, manufacturing facilities, or companies in a suburb, postcode, or region.',
   },
   {
-    title: '3. Solution',
+    title: '3. Brief introduction',
     guidance:
-      'Introduce NBE naturally (e.g. "NBE Australia helps businesses…"). Do not lead with "We sell…". Explain how the solution addresses the problem.',
+      'One or two sentences: NBE Australia supplies and services industrial rapid doors and PVC door systems for commercial and industrial sites. Do not over-promote or list long credentials.',
   },
   {
-    title: '4. Business benefits',
+    title: '4. Relevant product',
     guidance:
-      'Emphasise outcomes (workflow, energy, operating costs, temperature, safety, productivity) using qualified language. Do not state specific savings percentages or guaranteed ROI unless verified NBE data is provided in this prompt.',
+      'Introduce only the product or products relevant to the customer industry or likely application.',
   },
   {
-    title: '5. Low-pressure CTA',
+    title: '5. Practical value',
     guidance:
-      'Use exactly one CTA. Prefer practical, site-focused offers (free site inspection, no-obligation site assessment, product recommendation, quotation). Do not pressure or demand an immediate meeting.',
+      'Explain how the product may assist their operation; focus on operational outcomes, not marketing claims.',
+  },
+  {
+    title: '6. Soft offer of assistance',
+    guidance:
+      'Invite contact if they have an upcoming project or want further information. Exactly one soft CTA; no pressure, repeated meeting asks, or countdowns.',
+  },
+  {
+    title: '7. Closing',
+    guidance: 'Professional, simple, and friendly.',
   },
 ]
 
@@ -114,8 +152,12 @@ export const NBE_SUBJECT_LINE_RULES: readonly string[] = [
 
 export const NBE_PERSONALISATION_RULES: readonly string[] = [
   'Use only provided data: company name, industry/category, location, website, product line, campaign context.',
-  'Never invent employee counts, warehouse size, revenue, equipment, or customers.',
+  'Address the recipient as the named company; suburb/postcode may appear only as light location context, never as the reason you are emailing a group of local businesses.',
+  'Prioritise the prompt industry focus and category over generic "manufacturing" language when they differ.',
+  'Never invent employee counts, warehouse size, revenue, equipment, facility problems, or projects.',
   'Never hallucinate; if detail is missing, stay general.',
+  'When context is uncertain, use careful language (e.g. may be relevant, where applicable, depending on the application, if you have an upcoming requirement).',
+  'Do not present assumptions as facts.',
 ]
 
 export const NBE_SIGNATURE_GUIDANCE = [
@@ -197,22 +239,27 @@ const INDUSTRY_GUIDANCE: Record<SalesIndustrySlug, string[]> = {
 }
 
 export const NBE_FINAL_VALIDATION_CHECKLIST: readonly string[] = [
-  'Professional Australian English',
-  'No hype or fake urgency',
-  'No invented facts or unverified savings claims',
-  'Exactly one CTA',
+  'Opens for this company by name — not a geographic or industry blast to "facilities in [suburb]"',
+  'Includes a brief NBE introduction (industrial door systems) before product detail',
+  'Benefits match the supplied industry/category focus, not generic manufacturing copy',
+  'Sounds like a real person — experienced engineer or business owner, not a salesperson',
+  'Concise; every sentence useful',
+  'All claims supported; no invented specs or customer assumptions',
+  'Professional Australian English; no marketing clichés or fake urgency',
+  'Authentic; customer likely to trust the sender',
+  'Exactly one soft CTA',
   `Under ${NBE_EMAIL_WORD_TARGET_MAX} words (hard max ${NBE_EMAIL_WORD_ABSOLUTE_MAX})`,
-  'Business-focused: problem first, solution second, benefits third',
-  'Professional closing',
-  'If any rule is violated, rewrite before returning JSON',
+  'Reflects NBE values: trust, expertise, easy to work with',
+  'If any check fails, rewrite before returning JSON; do not expose this checklist in output',
 ]
 
 export function formatNbeCtaGuidanceBlock(): string {
   return [
-    '## Call to action (standard NBE offers)',
-    'Use one low-pressure, site-focused CTA drawn from:',
-    ...NBE_STANDARD_CTA_OFFERS.map((o) => `- ${o}`),
-    `Example phrasing: ${NBE_DEFAULT_CTA_TEMPLATE}`,
+    '## Soft call to action',
+    'Use exactly one low-pressure offer of assistance. Style examples (vary wording across emails):',
+    ...NBE_SOFT_CTA_EXAMPLES.map((o) => `- ${o}`),
+    'Prefer soft assistance over site-inspection or quotation pressure unless the library brief explicitly requires it.',
+    'Never pressure the customer, repeatedly ask for meetings, or use countdowns or urgency.',
   ].join('\n')
 }
 
@@ -252,9 +299,10 @@ export function formatNbeProductGuidance(productSlug: SalesProductLineSlug): str
   const g = PRODUCT_GUIDANCE[productSlug]
   return [
     '## Product focus (NBE methodology)',
+    'Select only benefits relevant to this industry and application.',
     'Typical problems:',
     ...g.problems.map((p) => `- ${p}`),
-    'Emphasise:',
+    'May emphasise where relevant:',
     ...g.focus.map((p) => `- ${p}`),
   ].join('\n')
 }
@@ -263,6 +311,7 @@ export function formatNbeIndustryGuidance(industrySlug: SalesIndustrySlug): stri
   const focus = INDUSTRY_GUIDANCE[industrySlug] ?? INDUSTRY_GUIDANCE.general
   return [
     '## Industry focus (NBE methodology)',
+    'Use this section and the Context "Prompt industry focus" / category — not generic manufacturing wording unless that is the supplied focus.',
     ...focus.map((p) => `- ${p}`),
   ].join('\n')
 }
@@ -277,9 +326,10 @@ export function formatNbeFinalValidationBlock(): string {
 /** System instruction: role + methodology summary for all NBE sales email generation. */
 export function formatNbeFrameworkSystemBrief(): string {
   return [
-    'You generate professional, consultative, highly personalised B2B sales emails for NBE Australia.',
-    'Each email must feel written by an experienced sales consultant who understands warehouse and industrial operations.',
-    'Emails must be unique per business while following the NBE sales methodology in the user prompt.',
+    'You write customer communications on behalf of NBE Australia (industrial rapid doors and PVC door systems).',
+    'Communicate as an experienced engineering professional or company director — not as a salesperson or marketing agency.',
+    'Build trust and demonstrate expertise; build confidence rather than excitement.',
+    'Each email must feel written for this specific business while following the NBE methodology in the user prompt.',
     'Do not generate generic marketing copy.',
     ...NBE_WRITING_STYLE_RULES.map((r) => `- ${r}`),
     NBE_SIGNATURE_GUIDANCE,

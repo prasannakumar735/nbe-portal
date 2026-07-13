@@ -7,12 +7,14 @@ import { groqProvider } from '@/lib/sales/llm/groqProvider'
 import type { LLMProvider } from '@/lib/sales/llm/llmProvider.interface'
 import { ollamaProvider } from '@/lib/sales/llm/ollamaProvider'
 import { openaiProvider } from '@/lib/sales/llm/openaiProvider'
+import { xaiProvider } from '@/lib/sales/llm/xaiProvider'
 
 const providers: Record<LLMProviderId, LLMProvider> = {
   openai: openaiProvider,
   anthropic: anthropicProvider,
   ollama: ollamaProvider,
   groq: groqProvider,
+  xai: xaiProvider,
 }
 
 export function getLLMProvider(providerId: string): LLMProvider {

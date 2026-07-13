@@ -5,28 +5,24 @@ import {
   type ProviderGenerationExecutionResult,
 } from '@/lib/sales/generation/providerExecutionAdapter'
 import {
-  loadEmailGenerationPromptContext,
-  type EmailGenerationPromptContext,
+  buildEmailGenerationPromptBundle,
+  type EmailGenerationPromptBundle,
 } from '@/lib/sales/generation/emailPromptBuilder'
 import { getLLMProvider } from '@/lib/sales/llm/llmProviderRegistry'
+import {
+  formatThreadContextBlock,
+  listThreadEmailsForFollowup,
+} from '@/lib/sales/followup/followupThreadContext'
 import type { SalesBusiness } from '@/lib/sales/types/business.types'
 import type { SalesCampaign } from '@/lib/sales/types/campaign.types'
 import type { SalesContact } from '@/lib/sales/types/contact.types'
 import type { SalesGeneratedEmail } from '@/lib/sales/types/generatedEmail.types'
 
-export type FollowupCampaignContext = EmailGenerationPromptContext
-
-export type FollowupPromptInput = {
-  originalEmail: Pick<SalesGeneratedEmail, 'subject' | 'body'>
-  context: FollowupCampaignContext
-  followupNumber: number
-  provider: LLMProviderId
-  /** When set, prompt must not imply a reply was received. */
-  lastReplyAt?: string | null
-}
-
 export type BuildFollowupGenerationPromptInput = {
-  originalEmail: Pick<SalesGeneratedEmail, 'subject' | 'body'>
+  originalEmail: Pick<
+    SalesGeneratedEmail,
+    'id' | 'subject' | 'body' | 'thread_root_email_id' | 'sequence_position'
+  >
   campaign: SalesCampaign
   contact: SalesContact
   business: SalesBusiness
@@ -37,38 +33,23 @@ export type BuildFollowupGenerationPromptInput = {
 
 export type FollowupEmailGenerationInput = {
   provider: LLMProviderId
-  prompt: string
+  systemPrompt: string
+  userPrompt: string
 }
 
 export type FollowupEmailGenerationResult = ProviderGenerationExecutionResult & {
   resolvedProvider: string
-}
-
-function formatList(items: string[]): string {
-  return items.length > 0 ? items.map((item) => `- ${item}`).join('\n') : '- (none specified)'
+  promptBundle: EmailGenerationPromptBundle
 }
 
 function followupStrategyLine(followupNumber: number): string {
   if (followupNumber <= 1) {
-    return 'Follow-up 1: Gentle reminder — reference the prior message professionally without pressure.'
+    return 'Follow-up 1: Polite reminder referencing the earlier message; no pressure.'
   }
   if (followupNumber === 2) {
-    return 'Follow-up 2: Reinforce the value proposition and how it applies to their business; stay concise.'
+    return 'Follow-up 2: Add one fresh operational angle; do not reuse prior phrasing.'
   }
-  return 'Follow-up 3: Final courteous check-in — acknowledge they may be busy; offer an easy next step or close the loop politely.'
-}
-
-function buildRecipientBlock(context: FollowupCampaignContext): string {
-  const { contact, business } = context
-  return [
-    `Company: ${business.company_name}`,
-    `Location: ${[business.suburb, business.postcode].filter(Boolean).join(', ') || business.postcode}`,
-    `Industry/category: ${business.category ?? 'unknown'}`,
-    `Website: ${business.website ?? 'unknown'}`,
-    `Contact email: ${contact.email ?? 'unknown'}`,
-    `Contact type: ${contact.contact_type}`,
-    `Primary contact: ${contact.is_primary ? 'yes' : 'no'}`,
-  ].join('\n')
+  return 'Follow-up 3: Final courteous check-in; acknowledge they may be busy; easy opt-out tone.'
 }
 
 export function resolveFollowupProvider(raw: string): LLMProviderId {
@@ -79,91 +60,79 @@ export function resolveFollowupProvider(raw: string): LLMProviderId {
   return raw
 }
 
-/**
- * Build LLM prompt for a sequence follow-up (reuses campaign template + contact context).
- */
-export function generateFollowupPrompt(input: FollowupPromptInput): string {
-  const { originalEmail, context, followupNumber, provider, lastReplyAt } = input
-  const { campaign, promptConfig, template, campaignTypeName, offerTypeName } = context
-
-  const replyGuard =
-    lastReplyAt != null
-      ? 'A reply timestamp exists on record — do not write as if you are following up on silence.'
-      : 'Do not claim you received a reply unless one exists.'
-
-  return [
-    'You are writing a follow-up B2B sales email in an existing outreach thread.',
-    '',
-    '## Campaign',
-    `Name: ${campaign.name}`,
-    `Product/service focus: ${campaignTypeName}`,
-    `Offer: ${offerTypeName}`,
-    '',
-    '## Template (stay aligned with original outreach)',
-    `Template name: ${template.template_name}`,
-    `Objective: ${promptConfig.objective}`,
-    `Tone: ${promptConfig.tone}`,
-    `Call to action: ${promptConfig.cta}`,
-    '',
-    '## Pain points to address',
-    formatList(promptConfig.pain_points),
-    '',
-    '## Target roles',
-    formatList(promptConfig.target_roles),
-    '',
-    '## Avoid',
-    formatList(promptConfig.avoid),
-    '',
-    '## Recipient / company context',
-    buildRecipientBlock(context),
-    '',
-    '## Prior outreach (do not repeat verbatim; build on it)',
-    `Subject: ${originalEmail.subject}`,
-    '',
-    originalEmail.body,
-    '',
-    '## Follow-up strategy',
-    followupStrategyLine(followupNumber),
-    `This is follow-up number ${followupNumber} in the sequence.`,
-    '',
-    '## Generation',
-    `LLM provider: ${provider}`,
-    '',
-    '## Output format',
-    'Return a concise subject line (may be a light variation of the original) and email body suitable for a warehouse/industrial decision-maker.',
-    'Do not use spammy urgency language.',
-    replyGuard,
-  ].join('\n')
-}
-
-export async function buildFollowupGenerationPrompt(
+async function resolveFollowUpLibraryBundle(
   supabase: SupabaseClient,
   input: BuildFollowupGenerationPromptInput,
-): Promise<{ prompt: string; provider: LLMProviderId; context: FollowupCampaignContext }> {
-  const provider = resolveFollowupProvider(input.provider)
-  const context = await loadEmailGenerationPromptContext(supabase, {
-    campaign: input.campaign,
-    contact: input.contact,
-    business: input.business,
-  })
-  const prompt = generateFollowupPrompt({
-    originalEmail: input.originalEmail,
-    context,
-    followupNumber: input.followupNumber,
-    provider,
-    lastReplyAt: input.lastReplyAt,
-  })
-  return { prompt, provider, context }
+): Promise<EmailGenerationPromptBundle> {
+  try {
+    return await buildEmailGenerationPromptBundle(supabase, {
+      campaign: input.campaign,
+      contact: input.contact,
+      business: input.business,
+      useCaseSlug: 'follow_up',
+    })
+  } catch {
+    return buildEmailGenerationPromptBundle(supabase, {
+      campaign: input.campaign,
+      contact: input.contact,
+      business: input.business,
+      useCaseSlug: 'initial_outreach',
+    })
+  }
 }
 
-/**
- * Execute follow-up generation via the shared provider adapter (no parallel LLM stack).
- */
+export async function buildFollowupGenerationPromptBundle(
+  supabase: SupabaseClient,
+  input: BuildFollowupGenerationPromptInput,
+): Promise<{ bundle: EmailGenerationPromptBundle; systemPrompt: string; userPrompt: string }> {
+  resolveFollowupProvider(input.provider)
+  const threadRoot = input.originalEmail.thread_root_email_id ?? input.originalEmail.id
+  const threadEmails = await listThreadEmailsForFollowup(supabase, {
+    campaignId: input.campaign.id,
+    contactId: input.contact.id,
+    threadRootEmailId: threadRoot,
+  })
+
+  const libraryBundle = await resolveFollowUpLibraryBundle(supabase, input)
+
+  const replyGuard =
+    input.lastReplyAt != null
+      ? 'A reply is on record — do not write as if the thread is unanswered.'
+      : 'No reply detected — write a respectful no-reply follow-up only.'
+
+  const userPrompt = [
+    libraryBundle.userPrompt,
+    '',
+    formatThreadContextBlock(threadEmails),
+    '',
+    '## Follow-up instructions',
+    followupStrategyLine(input.followupNumber),
+    'Sequence step: follow-up ' + input.followupNumber + ' of maximum 3.',
+    replyGuard,
+    'Do not repeat wording from thread history. Vary sentence structure and subject line.',
+    'Return JSON only: {"subject":"...","body":"..."}.',
+  ].join('\n')
+
+  return {
+    bundle: libraryBundle,
+    systemPrompt: [
+      libraryBundle.systemPrompt,
+      'You are drafting a follow-up in an existing B2B outreach thread for NBE Australia.',
+      'Professional Australian English only.',
+    ].join('\n\n'),
+    userPrompt,
+  }
+}
+
 export async function generateFollowupEmailContent(
   input: FollowupEmailGenerationInput,
-): Promise<FollowupEmailGenerationResult> {
+): Promise<Omit<FollowupEmailGenerationResult, 'promptBundle'>> {
   const provider = resolveFollowupProvider(input.provider)
-  const execution = await executeProviderGeneration({ provider, prompt: input.prompt })
+  const execution = await executeProviderGeneration({
+    provider,
+    prompt: input.userPrompt,
+    systemPrompt: input.systemPrompt,
+  })
   return {
     ...execution,
     resolvedProvider: execution.content.provider || provider,

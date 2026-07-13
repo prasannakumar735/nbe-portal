@@ -19,6 +19,13 @@ import type { BillableStackedDatum } from '@/components/dashboard/charts/Billabl
 import { pickSearchParam, type AppSearchParams } from '@/lib/app/searchParams';
 import { PvcWorkflowDashboardBanner } from '@/components/pvc/PvcWorkflowDashboardBanner';
 import { isLeaveLegacyTimeEntry } from '@/lib/timecard/leaveWorkType';
+import {
+    DASHBOARD_TIME_ENTRY_SELECT,
+    mapDashboardTimeEntryRows,
+    type DashboardTimeEntryRaw,
+    type DashboardTimeEntryRow,
+} from '@/lib/analytics/normalizeDashboardTimeEntries';
+import { loadLevel1CodeMap } from '@/lib/timecard/loadLevel1CodeMap';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 type DashboardQuery = {
@@ -27,17 +34,7 @@ type DashboardQuery = {
     start?: string;
     end?: string;
 };
-type TimeEntryRow = {
-    id: string;
-    employee_id: string;
-    client_id: string;
-    start_time: string;
-    end_time: string | null;
-    hours: number | null;
-    billable: boolean | null;
-    status: string | null;
-    work_type_level1_id: string | null;
-};
+type TimeEntryRow = DashboardTimeEntryRow;
 function resolvePeriod(period?: string) {
     if (period === 'this_week' || period === 'last_week' || period === 'this_month' || period === 'custom') {
         return period;
@@ -196,7 +193,7 @@ export default async function DashboardPage({ searchParams, }: {
             const isPrivileged = role === 'admin' || role === 'manager';
             const baseQuery = supabase
                 .from('time_entries')
-                .select('id, employee_id, client_id, start_time, end_time, hours, billable, status, work_type_level1_id')
+                .select(DASHBOARD_TIME_ENTRY_SELECT)
                 .neq('status', 'active')
                 .gte('start_time', range.start.toISOString())
                 .lte('start_time', range.end.toISOString());
@@ -207,11 +204,10 @@ export default async function DashboardPage({ searchParams, }: {
             const { data: currentEntries, error: currentError } = await currentQuery.order('start_time', { ascending: true });
             if (currentError)
                 throw currentError;
-            entries = (currentEntries || []) as TimeEntryRow[];
             const previousRange = getPreviousRange(range.start, range.end);
             const previousQuery = supabase
                 .from('time_entries')
-                .select('id, employee_id, client_id, start_time, end_time, hours, billable, status, work_type_level1_id')
+                .select(DASHBOARD_TIME_ENTRY_SELECT)
                 .neq('status', 'active')
                 .gte('start_time', previousRange.start.toISOString())
                 .lte('start_time', previousRange.end.toISOString());
@@ -219,12 +215,11 @@ export default async function DashboardPage({ searchParams, }: {
             const { data: prevEntries, error: prevError } = await prevScoped;
             if (prevError)
                 throw prevError;
-            previousEntries = (prevEntries || []) as TimeEntryRow[];
             const trendStart = new Date(range.end);
             trendStart.setDate(trendStart.getDate() - 56);
             const trendQuery = supabase
                 .from('time_entries')
-                .select('id, employee_id, client_id, start_time, end_time, hours, billable, status, work_type_level1_id')
+                .select(DASHBOARD_TIME_ENTRY_SELECT)
                 .neq('status', 'active')
                 .gte('start_time', trendStart.toISOString())
                 .lte('start_time', range.end.toISOString());
@@ -232,7 +227,16 @@ export default async function DashboardPage({ searchParams, }: {
             const { data: trendData, error: trendError } = await trendScoped;
             if (trendError)
                 throw trendError;
-            trendEntries = (trendData || []) as TimeEntryRow[];
+            const rawCurrent = (currentEntries || []) as DashboardTimeEntryRaw[];
+            const rawPrevious = (prevEntries || []) as DashboardTimeEntryRaw[];
+            const rawTrend = (trendData || []) as DashboardTimeEntryRaw[];
+            const level1Ids = [...rawCurrent, ...rawPrevious, ...rawTrend]
+                .map(r => (r.level1_id != null ? String(r.level1_id) : ''))
+                .filter(Boolean);
+            const level1CodeById = await loadLevel1CodeMap(supabase, level1Ids);
+            entries = mapDashboardTimeEntryRows(rawCurrent, level1CodeById);
+            previousEntries = mapDashboardTimeEntryRows(rawPrevious, level1CodeById);
+            trendEntries = mapDashboardTimeEntryRows(rawTrend, level1CodeById);
             const clientIds = Array.from(new Set(entries.map(entry => entry.client_id)));
             if (clientIds.length > 0) {
                 const { data: clients, error: clientsError } = await supabase

@@ -85,6 +85,11 @@ export {
   queueApprovedEmailBodySchema,
 } from '@/lib/sales/validators/emailSendQueue.validators'
 export {
+  engagementTrackingClickQuerySchema,
+  promptEngagementMetricsQuerySchema,
+  recordEngagementEventBodySchema,
+} from '@/lib/sales/validators/engagement.validators'
+export {
   dispatchSalesFollowupQueueBodySchema,
   salesContactEngagementPatchBodySchema,
   salesFollowupQueueListQuerySchema,
@@ -92,3 +97,37 @@ export {
   scheduleSalesFollowupBodySchema,
   upsertSalesFollowupSequenceBodySchema,
 } from '@/lib/sales/validators/followup.validators'
+export {
+  analyzeReplyThreadBodySchema,
+  createSalesEmailMessageBodySchema,
+  createSalesEmailThreadBodySchema,
+  createSalesManagerNotificationBodySchema,
+  createSalesReplyDraftBodySchema,
+  insertSalesReplyAnalysisBodySchema,
+  markSalesManagerNotificationsReadBodySchema,
+  patchSalesEmailThreadBodySchema,
+  patchSalesReplyDraftBodySchema,
+  salesEmailThreadIdParamSchema,
+  salesEmailThreadListQuerySchema,
+  salesManagerNotificationListQuerySchema,
+  salesReplyDraftIdParamSchema,
+} from '@/lib/sales/validators/replyManagement.validators'
+export {
+  createSalesPipelineOpportunityBodySchema,
+  salesPipelineOpportunityListQuerySchema,
+  salesPipelineOpportunityIdParamSchema,
+  updateSalesPipelineOpportunityBodySchema,
+  salesPipelineStageSchema,
+} from '@/lib/sales/validators/pipeline.validators'
+export {
+  appendAssistantNotesBodySchema,
+  runSalesAssistantBodySchema,
+  salesAssistantCapabilitySchema,
+} from '@/lib/sales/validators/salesAssistant.validators'
+export {
+  dispatchSalesAgentBodySchema,
+} from '@/lib/sales/validators/salesAgent.validators'
+export {
+  salesEngineSettingsPatchBodySchema,
+  validateSafeDeliveryPatch,
+} from '@/lib/sales/validators/salesEngineSettings.validators'

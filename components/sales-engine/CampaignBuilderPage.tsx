@@ -101,7 +101,18 @@ export function CampaignBuilderPage() {
       />
 
       {builder.savedCampaignId ? (
-        <p className="text-xs text-slate-500">Campaign ID: {builder.savedCampaignId}</p>
+        <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4 sm:p-6">
+          <h2 className="text-lg font-semibold text-slate-900">Next: AI email generation</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Generate personalised drafts, review and edit them, approve, then queue for send.
+          </p>
+          <Link
+            href={`/dashboard/sales-engine/campaigns/${builder.savedCampaignId}/emails`}
+            className="mt-4 inline-flex items-center justify-center rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
+          >
+            Review &amp; generate emails
+          </Link>
+        </section>
       ) : null}
     </div>
   )

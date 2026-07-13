@@ -22,6 +22,7 @@ function mapRow(row: Record<string, unknown>): SalesContactEngagement {
     last_email_sent_at: row.last_email_sent_at != null ? String(row.last_email_sent_at) : null,
     last_reply_at: row.last_reply_at != null ? String(row.last_reply_at) : null,
     reply_detected: Boolean(row.reply_detected),
+    delivered: Boolean(row.delivered),
     opened: Boolean(row.opened),
     clicked: Boolean(row.clicked),
     unsubscribed: Boolean(row.unsubscribed),
@@ -75,6 +76,7 @@ export async function patchSalesContactEngagement(
       | 'last_email_sent_at'
       | 'last_reply_at'
       | 'reply_detected'
+      | 'delivered'
       | 'opened'
       | 'clicked'
       | 'unsubscribed'
@@ -119,4 +121,13 @@ export async function recordSalesContactEmailSentAt(
 ): Promise<SalesContactEngagement> {
   const at = sentAt ?? new Date().toISOString()
   return patchSalesContactEngagement(supabase, key, { last_email_sent_at: at })
+}
+
+export async function listSalesContactEngagementByCampaign(
+  supabase: SupabaseClient,
+  campaignId: string,
+): Promise<SalesContactEngagement[]> {
+  const { data, error } = await supabase.from(TABLE).select('*').eq('campaign_id', campaignId)
+  if (error) throw error
+  return (data ?? []).map((row) => mapRow(row as Record<string, unknown>))
 }

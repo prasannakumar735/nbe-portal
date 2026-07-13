@@ -4,6 +4,7 @@ type BusinessScanCardProps = {
   postcode: string
   onPostcodeChange: (value: string) => void
   onScan: () => void
+  onRefreshFromGoogle: () => void
   scanning: boolean
   error: string | null
 }
@@ -31,6 +32,7 @@ export function BusinessScanCard({
   postcode,
   onPostcodeChange,
   onScan,
+  onRefreshFromGoogle,
   scanning,
   error,
 }: BusinessScanCardProps) {
@@ -50,7 +52,7 @@ export function BusinessScanCard({
         maxLength={4}
         value={postcode}
         onChange={(e) => onPostcodeChange(e.target.value)}
-        placeholder="Enter postcode (example 3025)"
+        placeholder="3025"
         className="mt-1 w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
       />
       {error ? (
@@ -61,21 +63,31 @@ export function BusinessScanCard({
           {error}
         </div>
       ) : null}
-      <button
-        type="button"
-        disabled={scanning || !postcode.trim()}
-        onClick={onScan}
-        className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {scanning ? (
-          <>
-            <Spinner />
-            Scanning…
-          </>
-        ) : (
-          'Scan Businesses'
-        )}
-      </button>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={scanning || !postcode.trim()}
+          onClick={onScan}
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {scanning ? (
+            <>
+              <Spinner />
+              Scanning…
+            </>
+          ) : (
+            'Scan Businesses'
+          )}
+        </button>
+        <button
+          type="button"
+          disabled={scanning || !postcode.trim()}
+          onClick={onRefreshFromGoogle}
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Refresh from Google
+        </button>
+      </div>
     </section>
   )
 }

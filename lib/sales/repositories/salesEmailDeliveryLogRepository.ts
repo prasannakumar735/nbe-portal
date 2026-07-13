@@ -16,6 +16,11 @@ function mapRow(row: Record<string, unknown>): SalesEmailDeliveryLog {
       row.external_message_id != null ? String(row.external_message_id) : null,
     failure_reason: row.failure_reason != null ? String(row.failure_reason) : null,
     latency_ms: Number(row.latency_ms ?? 0),
+    intended_recipient_email:
+      row.intended_recipient_email != null ? String(row.intended_recipient_email) : null,
+    actual_recipient_email:
+      row.actual_recipient_email != null ? String(row.actual_recipient_email) : null,
+    safe_delivery_mode: Boolean(row.safe_delivery_mode),
     created_at: String(row.created_at),
   }
 }
@@ -46,6 +51,9 @@ export async function createSalesEmailDeliveryLog(
       external_message_id: row.external_message_id ?? null,
       failure_reason: row.failure_reason ?? null,
       latency_ms: row.latency_ms ?? 0,
+      intended_recipient_email: row.intended_recipient_email ?? null,
+      actual_recipient_email: row.actual_recipient_email ?? null,
+      safe_delivery_mode: row.safe_delivery_mode ?? false,
     })
     .select('*')
     .single()
@@ -103,6 +111,34 @@ export async function findSalesDeliveryContextByCorrelationId(
     contactId: q.contact_id,
     generatedEmailId: q.generated_email_id,
   }
+}
+
+export async function listRecentSalesEmailDeliverySuccesses(
+  supabase: SupabaseClient,
+  options?: { campaignId?: string; limit?: number },
+): Promise<SalesEmailDeliveryLog[]> {
+  const limit = options?.limit ?? 10
+  let query = supabase
+    .from(TABLE)
+    .select('*')
+    .eq('status', 'success')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (options?.campaignId) {
+    const { data: queueRows, error: queueErr } = await supabase
+      .from('sales_email_send_queue')
+      .select('id')
+      .eq('campaign_id', options.campaignId)
+    if (queueErr) throw queueErr
+    const ids = (queueRows ?? []).map((r) => String((r as { id: string }).id))
+    if (ids.length === 0) return []
+    query = query.in('queue_id', ids)
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+  return (data ?? []).map((row) => mapRow(row as Record<string, unknown>))
 }
 
 export async function listRecentSalesEmailDeliveryFailures(

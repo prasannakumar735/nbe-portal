@@ -34,7 +34,13 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
     throw new Error('Invalid email content: subject and body are required.')
   }
 
-  const normalized: SendEmailInput = { recipient, subject, body, provider }
+  const normalized: SendEmailInput = {
+    recipient,
+    subject,
+    body,
+    provider,
+    attachments: input.attachments,
+  }
 
   switch (provider) {
     case 'microsoft365':

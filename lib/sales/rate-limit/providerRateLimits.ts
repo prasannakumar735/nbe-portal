@@ -5,6 +5,7 @@ export const PROVIDER_RATE_LIMITS: Record<LLMProviderId, { requestsPerMinute: nu
   openai: { requestsPerMinute: 20 },
   anthropic: { requestsPerMinute: 15 },
   groq: { requestsPerMinute: 30 },
+  xai: { requestsPerMinute: 20 },
   ollama: { requestsPerMinute: 10 },
 }
 

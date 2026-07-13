@@ -17,6 +17,7 @@ import {
   toStoredReplyAnalysisFields,
 } from '@/lib/sales/replies/parseReplyAnalysisResponse'
 import { createReplyAnalysisNotifications } from '@/lib/sales/replies/replyNotificationService'
+import { loadSalesEngineSettings } from '@/lib/sales/settings/salesEngineSettingsService'
 import type { SalesReplyAnalysis } from '@/lib/sales/types/replyManagement.types'
 
 export type RunReplyAnalysisInput = {
@@ -77,6 +78,11 @@ export async function runReplyAnalysis(
   supabase: SupabaseClient,
   input: RunReplyAnalysisInput,
 ): Promise<RunReplyAnalysisResult> {
+  const engineSettings = await loadSalesEngineSettings(supabase)
+  if (!engineSettings.aiReplyAnalysisEnabled) {
+    throw new Error('AI reply analysis is disabled in Sales Engine administration settings.')
+  }
+
   const ctx = await loadReplyAnalysisContext(supabase, {
     threadId: input.threadId,
     messageId: input.messageId,

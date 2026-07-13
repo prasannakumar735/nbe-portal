@@ -5,6 +5,7 @@ export type SalesContactEngagement = {
   last_email_sent_at: string | null
   last_reply_at: string | null
   reply_detected: boolean
+  delivered: boolean
   opened: boolean
   clicked: boolean
   unsubscribed: boolean

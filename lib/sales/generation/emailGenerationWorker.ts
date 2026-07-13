@@ -12,6 +12,7 @@ import {
   createSalesGeneratedEmail,
   getNextSalesGeneratedEmailVersion,
 } from '@/lib/sales/repositories/salesGeneratedEmailRepository'
+import { copyOfferAttachmentsToGeneratedEmail } from '@/lib/sales/attachments/salesBrochureStorage'
 import { createSalesGenerationLog } from '@/lib/sales/repositories/salesGenerationLogRepository'
 import {
   incrementSalesGenerationJobProgress,
@@ -85,6 +86,11 @@ export async function processEmailGenerationForContact(
       prompt_name: bundle.promptName,
       prompt_version: bundle.promptVersion,
       prompt_library_id: bundle.promptLibraryId,
+    })
+
+    await copyOfferAttachmentsToGeneratedEmail(supabase, {
+      generatedEmailId: savedEmail.id,
+      offerTypeId: campaign.offer_type_id,
     })
 
     await createSalesGenerationLog(supabase, {

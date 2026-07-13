@@ -1,5 +1,6 @@
 /** PVC strip curtain prospect categories for Business Discovery Agent. */
 export const PVC_DISCOVERY_CATEGORIES = [
+  'industrial',
   'warehouse',
   'logistics company',
   'cold storage',

@@ -1,9 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { cancelScheduledFollowup, scheduleFollowup } from '@/lib/sales/followup/followupScheduler'
 import {
-  getActiveQueuedSalesFollowupForContact,
+  getSalesFollowupQueueByResultEmailId,
   markSalesFollowupQueueSent,
 } from '@/lib/sales/repositories/salesFollowupQueueRepository'
+import { incrementSalesContactFollowupCount } from '@/lib/sales/repositories/salesContactEngagementRepository'
 import {
   patchSalesContactEngagement,
   recordSalesContactEmailSentAt,
@@ -39,13 +40,22 @@ export async function onOutboundEmailSent(
   const isFollowup = email?.parent_generated_email_id != null
 
   if (isFollowup) {
-    const activeFollowup = await getActiveQueuedSalesFollowupForContact(
+    const followupRow = await getSalesFollowupQueueByResultEmailId(
       supabase,
-      input.contact_id,
-      input.campaign_id,
+      input.generatedEmailId,
     )
-    if (activeFollowup) {
-      await markSalesFollowupQueueSent(supabase, activeFollowup.id)
+    if (followupRow) {
+      await markSalesFollowupQueueSent(supabase, followupRow.id)
+      await incrementSalesContactFollowupCount(supabase, {
+        contact_id: input.contact_id,
+        campaign_id: input.campaign_id,
+      })
+      await scheduleFollowup(supabase, {
+        generatedEmailId: input.generatedEmailId,
+        contactId: input.contact_id,
+        campaignId: input.campaign_id,
+        sentAt,
+      })
     }
     return
   }
@@ -109,4 +119,4 @@ export async function markUnsubscribed(
     campaignId: key.campaign_id,
   })
 }
-
+

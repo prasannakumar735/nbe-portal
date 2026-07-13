@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { salesEngineFetch } from '@/components/sales-engine/salesEngineApi'
 import type {
-  DiscoveryScanResult,
+  BusinessDiscoveryScanApiResponse,
   SalesBusiness,
   SalesBusinessListResult,
   SalesBusinessSummary,
@@ -15,8 +15,8 @@ export function useBusinessScan() {
   const [scanError, setScanError] = useState<string | null>(null)
   const [listError, setListError] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
-  const [listLoading, setListLoading] = useState(true)
-  const [summaryLoading, setSummaryLoading] = useState(true)
+  const [listLoading, setListLoading] = useState(false)
+  const [summaryLoading, setSummaryLoading] = useState(false)
   const [rows, setRows] = useState<SalesBusiness[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -78,49 +78,61 @@ export function useBusinessScan() {
   )
 
   useEffect(() => {
+    if (!hasScanned || !lastScanPostcode) return
     let cancelled = false
-    void loadList(() => cancelled)
+    void loadList(() => cancelled, { postcode: lastScanPostcode })
     return () => {
       cancelled = true
     }
-  }, [loadList])
+  }, [loadList, hasScanned, lastScanPostcode, page, pageSize])
 
   useEffect(() => {
+    if (!hasScanned || !lastScanPostcode) return
     let cancelled = false
-    void loadSummary(() => cancelled, lastScanPostcode ?? undefined)
+    void loadSummary(() => cancelled, lastScanPostcode)
     return () => {
       cancelled = true
     }
-  }, [loadSummary, lastScanPostcode])
+  }, [loadSummary, hasScanned, lastScanPostcode])
 
-  const scan = useCallback(async () => {
-    setScanError(null)
-    let postcodes: string[]
-    try {
-      postcodes = parsePostcodesInput(postcode)
-    } catch (e) {
-      setScanError(e instanceof Error ? e.message : 'Invalid postcode')
-      return
-    }
+  const runScan = useCallback(
+    async (refreshFromGoogle: boolean) => {
+      setScanError(null)
+      let postcodes: string[]
+      try {
+        postcodes = parsePostcodesInput(postcode)
+      } catch (e) {
+        setScanError(e instanceof Error ? e.message : 'Invalid postcode')
+        return
+      }
 
-    const scannedPostcode = postcodes[0]
-    setScanning(true)
-    try {
-      await salesEngineFetch<DiscoveryScanResult>('/api/sales/discovery/scan', {
-        method: 'POST',
-        body: JSON.stringify({ postcodes }),
-      })
-      setLastScanPostcode(scannedPostcode)
-      setHasScanned(true)
-      let cancelled = false
-      await loadList(() => cancelled, { page: 1, postcode: scannedPostcode })
-      await loadSummary(() => cancelled, scannedPostcode)
-    } catch (e) {
-      setScanError(e instanceof Error ? e.message : 'Scan failed')
-    } finally {
-      setScanning(false)
-    }
-  }, [postcode, loadList, loadSummary])
+      const scannedPostcode = postcodes[0]
+      setScanning(true)
+      try {
+        console.info('[businessDiscovery] scan requested', {
+          refreshFromGoogle,
+          postcodes,
+        })
+        await salesEngineFetch<BusinessDiscoveryScanApiResponse>('/api/sales/discovery/scan', {
+          method: 'POST',
+          body: JSON.stringify({ postcodes, refreshFromGoogle }),
+        })
+        setLastScanPostcode(scannedPostcode)
+        setHasScanned(true)
+        let cancelled = false
+        await loadList(() => cancelled, { page: 1, postcode: scannedPostcode })
+        await loadSummary(() => cancelled, scannedPostcode)
+      } catch (e) {
+        setScanError(e instanceof Error ? e.message : 'Scan failed')
+      } finally {
+        setScanning(false)
+      }
+    },
+    [postcode, loadList, loadSummary],
+  )
+
+  const scan = useCallback(() => runScan(false), [runScan])
+  const refreshFromGoogle = useCallback(() => runScan(true), [runScan])
 
   const toggleSelected = useCallback(
     async (row: SalesBusiness, selected: boolean) => {
@@ -163,8 +175,9 @@ export function useBusinessScan() {
     summary,
     updatingId,
     hasScanned,
-    showResultsTable: hasScanned || rows.length > 0,
+    showResultsTable: hasScanned,
     scan,
+    refreshFromGoogle,
     toggleSelected,
     reloadList: loadList,
   }

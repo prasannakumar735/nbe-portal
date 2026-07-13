@@ -3,6 +3,14 @@
  * Requires app permission Mail.Send or delegated Mail.Send, and a user to send as.
  */
 
+export type GraphSendMailAttachment = {
+  name: string
+  contentType: string
+  contentBytes: string
+  isInline?: boolean
+  contentId?: string
+}
+
 export type GraphSendMailOptions = {
   to: string
   subject: string
@@ -16,6 +24,7 @@ export type GraphSendMailOptions = {
   correlationId?: string
   /** Request timeout ms (default 30000). */
   timeoutMs?: number
+  attachments?: GraphSendMailAttachment[]
 }
 
 export type GraphSendMailResult = {
@@ -26,6 +35,24 @@ export type GraphSendMailResult = {
 
 import { getGraphAccessToken, resolveGraphMailboxUserId } from '@/lib/graph/graphAuth'
 
+export function buildGraphFileAttachmentsPayload(
+  attachments: GraphSendMailAttachment[],
+): Record<string, unknown>[] {
+  return attachments.map((att) => {
+    const graphAtt: Record<string, unknown> = {
+      '@odata.type': '#microsoft.graph.fileAttachment',
+      name: att.name,
+      contentType: att.contentType,
+      contentBytes: att.contentBytes,
+    }
+    if (att.isInline) {
+      graphAtt.isInline = true
+      if (att.contentId) graphAtt.contentId = att.contentId
+    }
+    return graphAtt
+  })
+}
+
 /**
  * Send an email using Microsoft Graph API.
  * Uses POST /users/{userId}/sendMail.
@@ -33,7 +60,8 @@ import { getGraphAccessToken, resolveGraphMailboxUserId } from '@/lib/graph/grap
 export async function sendMailViaGraphWithResult(
   options: GraphSendMailOptions,
 ): Promise<GraphSendMailResult> {
-  const { to, subject, bodyText, bodyHtml, sendAsUserId, correlationId, timeoutMs } = options
+  const { to, subject, bodyText, bodyHtml, sendAsUserId, correlationId, timeoutMs, attachments } =
+    options
 
   const userId = resolveGraphMailboxUserId(sendAsUserId)
 
@@ -74,8 +102,18 @@ export async function sendMailViaGraphWithResult(
     saveToSentItems: true,
   }
 
+  if (attachments && attachments.length > 0) {
+    const message = payload.message as Record<string, unknown>
+    message.attachments = buildGraphFileAttachmentsPayload(attachments)
+  }
+
   const startedAt = Date.now()
-  const timeout = timeoutMs ?? Number(process.env.SALES_EMAIL_SEND_GRAPH_TIMEOUT_MS ?? 30_000)
+  const defaultTimeout = Number(process.env.SALES_EMAIL_SEND_GRAPH_TIMEOUT_MS ?? 30_000)
+  const timeout =
+    timeoutMs ??
+    (attachments && attachments.length > 0
+      ? Number(process.env.SALES_EMAIL_SEND_GRAPH_ATTACHMENTS_TIMEOUT_MS ?? 60_000)
+      : defaultTimeout)
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeout)
 

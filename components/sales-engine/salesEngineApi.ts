@@ -16,12 +16,15 @@ export class SalesEngineApiError extends Error {
 }
 
 export async function salesEngineFetch<T>(url: string, init?: RequestInit): Promise<T> {
+  const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData
   const res = await fetch(url, {
     ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...init?.headers,
-    },
+    headers: isFormData
+      ? { ...init?.headers }
+      : {
+          'Content-Type': 'application/json',
+          ...init?.headers,
+        },
   })
   const json = (await res.json()) as ApiOk<T> | ApiFail
   if (!json.ok) {

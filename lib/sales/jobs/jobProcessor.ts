@@ -1,16 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { executeBusinessDiscoveryJob } from '@/lib/sales/agents/businessDiscoveryExecutor'
-import { executeContactDiscoveryJob } from '@/lib/sales/agents/contactDiscoveryExecutor'
+import type { SalesCoreAgentId } from '@/lib/sales/agents/agent.types'
+import { runObservedSalesJobHandler } from '@/lib/sales/agents/runtime/agentJobRunner'
+import { resolveCoreAgentId } from '@/lib/sales/agents/runtime/salesAgentRegistry'
 import type {
   ProcessSalesJobsOptions,
   SalesJob,
   SalesJobProcessResult,
   SalesJobType,
 } from '@/lib/sales/jobs/job.types'
-import {
-  parseBusinessDiscoveryJobPayload,
-  parseContactDiscoveryJobPayload,
-} from '@/lib/sales/jobs/jobPayload'
 import {
   claimSalesJob,
   completeSalesJob,
@@ -22,26 +19,26 @@ import {
 
 const DEFAULT_BATCH_LIMIT = 10
 const DEFAULT_MAX_ATTEMPTS = 3
+const LOG_PREFIX = '[salesJobProcessor]'
 
-type JobHandler = (
-  supabase: SupabaseClient,
-  job: SalesJob,
-) => Promise<Record<string, unknown>>
-
-const JOB_HANDLERS: Partial<Record<SalesJobType, JobHandler>> = {
-  business_discovery: async (supabase, job) => {
-    const payload = parseBusinessDiscoveryJobPayload(job.payload)
-    return executeBusinessDiscoveryJob(supabase, payload)
-  },
-  contact_discovery: async (supabase, job) => {
-    const payload = parseContactDiscoveryJobPayload(job.payload)
-    return executeContactDiscoveryJob(supabase, payload)
-  },
+const JOB_TYPE_TO_AGENT: Partial<Record<SalesJobType, SalesCoreAgentId>> = {
+  business_discovery: 'business_discovery',
+  contact_discovery: 'contact_discovery',
+  prompt_resolution: 'prompt_resolution',
+  email_generation: 'email_generation',
+  quality_review: 'quality_review',
+  analytics: 'analytics',
 }
 
-function notImplementedHandler(jobType: SalesJobType): JobHandler {
-  return async () => {
-    throw new Error(`Job handler not implemented for type: ${jobType}`)
+function jobErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message: unknown }).message)
+  }
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return String(error)
   }
 }
 
@@ -69,10 +66,20 @@ export async function processSalesJob(
     }
   }
 
-  const handler = JOB_HANDLERS[claimed.job_type] ?? notImplementedHandler(claimed.job_type)
+  const agentId = JOB_TYPE_TO_AGENT[claimed.job_type]
+  if (!agentId) {
+    const message = `Job handler not implemented for type: ${claimed.job_type}`
+    const failed = await failSalesJob(supabase, claimed.id, message)
+    return {
+      job_id: failed.id,
+      job_type: failed.job_type,
+      status: failed.status,
+      error_message: failed.error_message,
+    }
+  }
 
   try {
-    const result = await handler(supabase, claimed)
+    const result = await runObservedSalesJobHandler(supabase, agentId, claimed)
     const completed = await completeSalesJob(supabase, claimed.id, { resultPayload: result })
     return {
       job_id: completed.id,
@@ -81,7 +88,8 @@ export async function processSalesJob(
       result,
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Job processing failed'
+    console.error(`${LOG_PREFIX} job handler raw error (before failSalesJob):`, error)
+    const message = jobErrorMessage(error)
     const failed = await failSalesJob(supabase, claimed.id, message)
     return {
       job_id: failed.id,

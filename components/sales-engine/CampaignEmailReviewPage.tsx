@@ -11,6 +11,9 @@ import { GenerateEmailsPanel } from '@/components/sales-engine/GenerateEmailsPan
 import { PromptPreviewPanel } from '@/components/sales-engine/PromptPreviewPanel'
 import { QueueApprovedEmailsPanel } from '@/components/sales-engine/QueueApprovedEmailsPanel'
 import { EmailSendQueueMonitorPanel } from '@/components/sales-engine/EmailSendQueueMonitorPanel'
+import { CampaignEngagementPanel } from '@/components/sales-engine/CampaignEngagementPanel'
+import { CampaignFollowupPanel } from '@/components/sales-engine/CampaignFollowupPanel'
+import { SalesEnginePilotModeBanner } from '@/components/sales-engine/admin/SalesEnginePilotModeBanner'
 import type { CampaignGeneratedEmailRow } from '@/lib/sales/review/campaignGeneratedEmailListService'
 import { useCampaignEmailReview } from '@/hooks/useCampaignEmailReview'
 import { useGeneratedEmailActions } from '@/hooks/useGeneratedEmailActions'
@@ -91,6 +94,8 @@ export function CampaignEmailReviewPage({ campaignId }: CampaignEmailReviewPageP
         <p className="mt-1 text-sm text-slate-600">Generate, review, approve, then queue for send.</p>
       </header>
 
+      <SalesEnginePilotModeBanner />
+
       <CampaignEmailStatsCard stats={review.stats} loading={review.loading} />
       <EmailTemplateSummary template={review.activeTemplate} loading={review.loading} />
       <PromptPreviewPanel campaignId={campaignId} />
@@ -119,6 +124,12 @@ export function CampaignEmailReviewPage({ campaignId }: CampaignEmailReviewPageP
         onBulkQueue={(ids) => void actions.bulkQueue(ids)}
       />
       <EmailSendQueueMonitorPanel campaignId={campaignId} onMutated={review.refresh} />
+      <CampaignEngagementPanel
+        campaignId={campaignId}
+        funnel={review.stats?.engagement ?? null}
+        onSynced={review.refresh}
+      />
+      <CampaignFollowupPanel campaignId={campaignId} onMutated={review.refresh} />
 
       <GeneratedEmailEditorModal
         open={editorRow != null}

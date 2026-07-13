@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useState } from 'react'
 import { salesEngineFetch } from '@/components/sales-engine/salesEngineApi'
 import { PromptPreviewMetaCard } from '@/components/sales-engine/PromptPreviewMetaCard'
@@ -91,7 +92,26 @@ export function PromptPreviewPanel(props: PromptPreviewPanelProps) {
       >
         {loading ? 'Loading…' : 'Preview resolved prompt'}
       </button>
-      {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
+      {error ? (
+        <div className="mt-2 space-y-2 text-sm text-red-600" role="alert">
+          <p>{error}</p>
+          {error.includes('No active prompt') ? (
+            <p>
+              <Link
+                href="/dashboard/sales-engine/prompt-library"
+                className="font-medium text-indigo-700 hover:text-indigo-900"
+              >
+                Open Prompt Library
+              </Link>
+              {' · '}
+              Seed all slots:{' '}
+              <code className="rounded bg-red-50 px-1 text-xs text-red-800">
+                npx tsx --env-file=.env.local scripts/seed-sales-ai-prompts.ts
+              </code>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {open && preview ? (
         <div className="mt-4 space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
           <PromptPreviewMetaCard meta={preview.meta} />

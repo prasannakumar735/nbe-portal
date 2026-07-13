@@ -4,15 +4,16 @@ import type { BusinessDiscoveryJobResult } from '@/lib/sales/agents/businessDisc
 import { PVC_DISCOVERY_CATEGORIES } from '@/lib/sales/constants/discoveryCategories'
 import { processSalesJobs } from '@/lib/sales/jobs/jobProcessor'
 import type { SalesJob, SalesJobProcessResult } from '@/lib/sales/jobs/job.types'
-import { createSalesJobs, listSalesJobsByIds } from '@/lib/sales/jobs/salesJobRepository'
-import { listSalesBusinessesByPostcodes } from '@/lib/sales/repositories/salesBusinessRepository'
-import { listSalesScanRunsByIds } from '@/lib/sales/repositories/salesScanRunRepository'
-import type { BusinessDiscoveryAgentResult } from '@/lib/sales/types/business.types'
+import { createSalesJobs } from '@/lib/sales/jobs/salesJobRepository'
+import type { BusinessDiscoveryScanApiResponse, BusinessDiscoveryScanResult } from '@/lib/sales/types/business.types'
+
+const LOG_PREFIX = '[businessDiscovery]'
 
 export type BusinessDiscoveryAgentInput = {
   postcodes: string[]
   createdBy: string
   categories?: string[]
+  refreshFromGoogle?: boolean
   /** When true (default), pending jobs are processed in-process after enqueue. */
   processImmediately?: boolean
 }
@@ -21,9 +22,6 @@ export type BusinessDiscoveryEnqueueResult = {
   jobs: SalesJob[]
 }
 
-/**
- * Enqueue one `business_discovery` job per postcode (no direct provider/repository calls).
- */
 export async function enqueueBusinessDiscoveryScan(
   supabase: SupabaseClient,
   input: BusinessDiscoveryAgentInput,
@@ -37,33 +35,58 @@ export async function enqueueBusinessDiscoveryScan(
         postcode,
         categories,
         created_by: input.createdBy,
+        refresh_from_google: input.refreshFromGoogle === true,
       },
     })),
   )
   return { jobs }
 }
 
-function summarizeProcessResults(processResults: SalesJobProcessResult[]) {
-  let inserted = 0
-  let skipped = 0
-  const scanRunIds: string[] = []
-  for (const r of processResults) {
-    const result = r.result as BusinessDiscoveryJobResult | undefined
-    if (!result) continue
-    inserted += result.inserted
-    skipped += result.skipped
-    scanRunIds.push(result.scan_run_id)
+function toScanResult(
+  jobId: string,
+  result: BusinessDiscoveryJobResult | undefined,
+  postcode: string,
+): BusinessDiscoveryScanResult {
+  if (!result) {
+    return {
+      jobId,
+      postcode,
+      cached: false,
+      durationMs: 0,
+      googleReturned: 0,
+      inserted: 0,
+      updated: 0,
+      existing: 0,
+      duplicatesSkipped: 0,
+      totalFound: 0,
+      failed: 0,
+    }
   }
-  return { inserted, skipped, scanRunIds }
+  return {
+    jobId,
+    postcode: result.postcode ?? postcode,
+    cached: result.cached,
+    durationMs: result.durationMs,
+    googleReturned: result.googleReturned,
+    inserted: result.inserted,
+    updated: result.updated,
+    existing: result.existing,
+    duplicatesSkipped: result.duplicatesSkipped,
+    totalFound: result.totalFound,
+    failed: result.failed,
+  }
 }
 
-/**
- * Request scan: enqueue jobs, optionally process via job queue, return summary for API.
- */
 export async function runBusinessDiscoveryAgent(
   supabase: SupabaseClient,
   input: BusinessDiscoveryAgentInput,
-): Promise<BusinessDiscoveryAgentResult & { jobs: SalesJob[] }> {
+): Promise<BusinessDiscoveryScanApiResponse> {
+  console.info(`${LOG_PREFIX} runBusinessDiscoveryAgent`, {
+    handler: 'lib/sales/agents/businessDiscoveryAgent.ts runBusinessDiscoveryAgent',
+    postcodes: input.postcodes,
+    refreshFromGoogle: Boolean(input.refreshFromGoogle),
+  })
+
   const { jobs } = await enqueueBusinessDiscoveryScan(supabase, input)
   const processImmediately = input.processImmediately !== false
 
@@ -75,26 +98,28 @@ export async function runBusinessDiscoveryAgent(
     })
   }
 
-  const { inserted, skipped, scanRunIds } = summarizeProcessResults(processResults)
-  const refreshedJobs = processImmediately
-    ? await listSalesJobsByIds(
-        supabase,
-        jobs.map((j) => j.id),
-      )
-    : jobs
-
-  const scan_runs = processImmediately ? await listSalesScanRunsByIds(supabase, scanRunIds) : []
-  const businesses = processImmediately
-    ? await listSalesBusinessesByPostcodes(supabase, input.postcodes)
-    : []
-
-  return {
-    inserted,
-    skipped,
-    scan_runs,
-    businesses,
-    jobs: refreshedJobs,
+  const results: BusinessDiscoveryScanResult[] = []
+  for (let i = 0; i < jobs.length; i++) {
+    const job = jobs[i]
+    const processed = processResults.find((p) => p.job_id === job.id)
+    const payloadPostcode =
+      typeof job.payload.postcode === 'string' ? job.payload.postcode : input.postcodes[i] ?? ''
+    results.push(
+      toScanResult(
+        job.id,
+        processed?.result as BusinessDiscoveryJobResult | undefined,
+        payloadPostcode,
+      ),
+    )
   }
+
+  if (processImmediately) {
+    for (const r of results) {
+      console.info(`${LOG_PREFIX} scan stats`, r)
+    }
+  }
+
+  return { results }
 }
 
 export { BUSINESS_DISCOVERY_AGENT_ID }

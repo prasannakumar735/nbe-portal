@@ -1,11 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
-  buildFollowupGenerationPrompt,
+  buildFollowupGenerationPromptBundle,
   generateFollowupEmailContent,
   resolveFollowupProvider,
 } from '@/lib/sales/followup/followupGenerator'
 import { shouldSendFollowup } from '@/lib/sales/followup/followupDecisionEngine'
-import { scheduleFollowup } from '@/lib/sales/followup/followupScheduler'
 import { classifyGenerationFailure } from '@/lib/sales/generation/generationFailureClassifier'
 import { scoreGeneratedEmail } from '@/lib/sales/quality/emailQualityScorer'
 import {
@@ -15,31 +14,26 @@ import {
 import { getSalesBusinessById } from '@/lib/sales/repositories/salesBusinessRepository'
 import { getSalesCampaignById } from '@/lib/sales/repositories/salesCampaignRepository'
 import { listSalesContactsByIds } from '@/lib/sales/repositories/salesContactRepository'
+import { getSalesContactEngagement } from '@/lib/sales/repositories/salesContactEngagementRepository'
 import {
-  getSalesContactEngagement,
-  incrementSalesContactFollowupCount,
-} from '@/lib/sales/repositories/salesContactEngagementRepository'
-import {
-  approveSalesGeneratedEmail,
   createSalesGeneratedEmail,
   getNextSalesGeneratedEmailVersion,
   getSalesGeneratedEmailById,
 } from '@/lib/sales/repositories/salesGeneratedEmailRepository'
 import { createSalesGenerationLog } from '@/lib/sales/repositories/salesGenerationLogRepository'
+import { copyOfferAttachmentsToGeneratedEmail } from '@/lib/sales/attachments/salesBrochureStorage'
 import {
   claimSalesFollowupQueueItem,
   getSalesFollowupQueueById,
-  markSalesFollowupQueueQueued,
+  markSalesFollowupQueueAwaitingReview,
   markSalesFollowupQueueSkipped,
 } from '@/lib/sales/repositories/salesFollowupQueueRepository'
 import { getSalesFollowupSequenceByCampaignId } from '@/lib/sales/repositories/salesFollowupSequenceRepository'
 import { upsertSalesEmailQualityScore } from '@/lib/sales/repositories/salesEmailQualityRepository'
-import { getSalesEmailSendQueueByGeneratedEmailId } from '@/lib/sales/repositories/salesEmailSendQueueRepository'
-import { queueApprovedEmail } from '@/lib/sales/sending/emailSendQueueService'
 
 export type FollowupWorkerResult = {
   queueId: string
-  outcome: 'queued' | 'skipped' | 'failed'
+  outcome: 'awaiting_review' | 'skipped' | 'failed'
   generatedEmailId?: string
   generationProvider?: string
   errorMessage?: string
@@ -57,6 +51,9 @@ function resolveNextSequencePosition(source: { sequence_position: number }): num
   return source.sequence_position + 1
 }
 
+/**
+ * Generate AI follow-up draft for a due queue row. Does not approve or send.
+ */
 export async function processScheduledFollowup(
   supabase: SupabaseClient,
   queueId: string,
@@ -137,17 +134,20 @@ export async function processScheduledFollowup(
     assertProviderRequestAllowed(provider)
     recordProviderRequest(provider)
 
-    const { prompt } = await buildFollowupGenerationPrompt(supabase, {
-      originalEmail: sourceEmail,
-      campaign,
-      contact,
-      business,
-      followupNumber: claimed.followup_number,
-      provider,
-      lastReplyAt: engagement?.last_reply_at ?? null,
-    })
+    const { bundle, systemPrompt, userPrompt } = await buildFollowupGenerationPromptBundle(
+      supabase,
+      {
+        originalEmail: sourceEmail,
+        campaign,
+        contact,
+        business,
+        followupNumber: claimed.followup_number,
+        provider,
+        lastReplyAt: engagement?.last_reply_at ?? null,
+      },
+    )
 
-    const execution = await generateFollowupEmailContent({ provider, prompt })
+    const execution = await generateFollowupEmailContent({ provider, systemPrompt, userPrompt })
     const resolvedProvider = execution.resolvedProvider
 
     const version = await getNextSalesGeneratedEmailVersion(supabase, {
@@ -166,6 +166,14 @@ export async function processScheduledFollowup(
       parent_generated_email_id: sourceEmail.id,
       thread_root_email_id: threadRootEmailId,
       sequence_position: sequencePosition,
+      prompt_library_id: bundle.promptLibraryId,
+      prompt_name: bundle.promptName,
+      prompt_version: bundle.promptVersion,
+    })
+
+    await copyOfferAttachmentsToGeneratedEmail(supabase, {
+      generatedEmailId: savedEmail.id,
+      offerTypeId: campaign.offer_type_id,
     })
 
     await createSalesGenerationLog(supabase, {
@@ -194,45 +202,22 @@ export async function processScheduledFollowup(
       recommendation: quality.recommendation,
     })
 
-    const reviewerId = campaign.created_by
-    if (!reviewerId) {
-      throw new Error('Campaign has no created_by user for autonomous follow-up approval.')
-    }
-
-    await approveSalesGeneratedEmail(supabase, savedEmail.id, reviewerId)
-
-    const existingSendQueue = await getSalesEmailSendQueueByGeneratedEmailId(
-      supabase,
-      savedEmail.id,
-    )
-    if (!existingSendQueue || existingSendQueue.status === 'cancelled') {
-      await queueApprovedEmail(supabase, savedEmail.id)
-    }
-
-    const queued = await markSalesFollowupQueueQueued(supabase, claimed.id, resolvedProvider)
-    if (!queued) {
+    const awaiting = await markSalesFollowupQueueAwaitingReview(supabase, claimed.id, {
+      resultGeneratedEmailId: savedEmail.id,
+      generationProvider: resolvedProvider,
+    })
+    if (!awaiting) {
       return {
         queueId: claimed.id,
         outcome: 'failed',
         generatedEmailId: savedEmail.id,
-        errorMessage: 'Follow-up could not be marked queued after send enqueue.',
+        errorMessage: 'Follow-up could not be marked awaiting review.',
       }
     }
 
-    await incrementSalesContactFollowupCount(supabase, {
-      contact_id: claimed.contact_id,
-      campaign_id: claimed.campaign_id,
-    })
-
-    await scheduleFollowup(supabase, {
-      generatedEmailId: savedEmail.id,
-      contactId: claimed.contact_id,
-      campaignId: claimed.campaign_id,
-    })
-
     return {
       queueId: claimed.id,
-      outcome: 'queued',
+      outcome: 'awaiting_review',
       generatedEmailId: savedEmail.id,
       generationProvider: resolvedProvider,
     }
@@ -251,4 +236,3 @@ export async function processScheduledFollowup(
     return { queueId: claimed.id, outcome: 'failed', errorMessage: failureReason }
   }
 }
-

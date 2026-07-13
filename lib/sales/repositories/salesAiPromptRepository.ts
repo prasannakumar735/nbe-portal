@@ -101,6 +101,8 @@ export async function getActiveSalesAiPrompt(
     .eq('industry_slug', slot.industrySlug)
     .eq('use_case_slug', slot.useCaseSlug)
     .eq('is_active', true)
+    .order('version', { ascending: false })
+    .limit(1)
     .maybeSingle()
   if (error) throw error
   if (!data) return null

@@ -1,6 +1,7 @@
 export const SALES_FOLLOWUP_QUEUE_STATUSES = [
   'scheduled',
   'generating',
+  'awaiting_review',
   'queued',
   'sent',
   'skipped',

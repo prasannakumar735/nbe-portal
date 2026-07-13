@@ -12,7 +12,7 @@ COMMENT ON COLUMN public.sales_contacts.discovery_page_title IS
 COMMENT ON COLUMN public.sales_contacts.discovery_method IS
   'How the contact was extracted (e.g. mailto, mailto_labeled, body_text).';
 COMMENT ON COLUMN public.sales_contacts.page_kind IS
-  'Crawl context: homepage, contact, branch, locations_hub, etc.';
+  'Canonical crawl context: homepage, contact, branch, location, quote, or other.';
 COMMENT ON COLUMN public.sales_contacts.recommended_for_outreach IS
   'True when the discovery job recommends this contact for campaigns.';
 COMMENT ON COLUMN public.sales_contacts.recommended_reason IS

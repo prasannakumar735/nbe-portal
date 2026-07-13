@@ -4,8 +4,8 @@ import { SALES_FOLLOWUP_QUEUE_STATUSES } from '@/lib/sales/constants/followupQue
 export const upsertSalesFollowupSequenceBodySchema = z.object({
   campaignId: z.string().uuid(),
   enabled: z.boolean().optional(),
-  maxFollowups: z.number().int().min(0).max(20).optional(),
-  followupDelayDays: z.number().int().min(0).max(90).optional(),
+  maxFollowups: z.number().int().min(0).max(3).optional(),
+  followupDelayDays: z.number().int().min(1).max(90).optional(),
   stopOnReply: z.boolean().optional(),
 })
 

@@ -1,13 +1,27 @@
 import type { BusinessProvider } from '@/lib/sales/providers/businessProvider.interface'
+import {
+  GooglePlacesProviderError,
+  searchGooglePlacesBusinesses,
+} from '@/lib/sales/providers/googlePlacesProvider'
 
-function notConfigured(providerId: string): BusinessProvider {
-  return {
-    providerId,
-    async searchBusinesses() {
-      throw new Error(`${providerId} provider is not configured.`)
-    },
-  }
+/**
+ * Registry adapter for Google Places API (New). Requires server-side GOOGLE_MAPS_API_KEY.
+ */
+export const googleMapsBusinessProvider: BusinessProvider = {
+  providerId: 'google_maps',
+
+  async searchBusinesses(postcode, categories) {
+    try {
+      return await searchGooglePlacesBusinesses(postcode, categories)
+    } catch (error) {
+      if (error instanceof GooglePlacesProviderError) {
+        throw error
+      }
+      throw new GooglePlacesProviderError(
+        error instanceof Error ? error.message : 'Google Places search failed.',
+      )
+    }
+  },
 }
 
-/** Phase 2+: Google Places / Maps API. */
-export const googleMapsBusinessProvider = notConfigured('google_maps')
+export { GooglePlacesProviderError } from '@/lib/sales/providers/googlePlacesProvider'

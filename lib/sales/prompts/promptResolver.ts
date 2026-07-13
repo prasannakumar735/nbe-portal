@@ -4,7 +4,8 @@ import { DEFAULT_SALES_PROMPT_USE_CASE } from '@/lib/sales/constants/useCaseSlug
 import type { SalesPromptUseCaseSlug } from '@/lib/sales/constants/useCaseSlugs'
 import type { SalesIndustrySlug } from '@/lib/sales/constants/industrySlugs'
 import type { SalesProductLineSlug } from '@/lib/sales/constants/productLineSlugs'
-import { getActiveSalesAiPrompt } from '@/lib/sales/repositories/salesAiPromptRepository'
+import { getActiveSalesAiPrompt, listSalesAiPrompts } from '@/lib/sales/repositories/salesAiPromptRepository'
+import { ensurePromptLibrarySlotWithFallbacks } from '@/lib/sales/prompts/seed/ensurePromptLibrarySlot'
 import { getSalesCampaignTypeById } from '@/lib/sales/repositories/salesCampaignTypeRepository'
 import {
   inferIndustrySlugFromBusinessCategory,
@@ -57,8 +58,51 @@ export async function resolveActivePromptForSlot(
   }
 
   if (!prompt) {
+    await ensurePromptLibrarySlotWithFallbacks(supabase, slot)
+    prompt = await getActiveSalesAiPrompt(supabase, {
+      productSlug: slot.productSlug,
+      industrySlug: slot.industrySlug,
+      useCaseSlug: slot.useCaseSlug,
+    })
+    if (prompt) {
+      resolutionPath.push('seeded:default_catalog')
+    }
+  }
+
+  if (!prompt && slot.industrySlug !== 'general') {
+    await ensurePromptLibrarySlotWithFallbacks(supabase, {
+      ...slot,
+      industrySlug: 'general',
+    })
+    prompt = await getActiveSalesAiPrompt(supabase, {
+      productSlug: slot.productSlug,
+      industrySlug: 'general',
+      useCaseSlug: slot.useCaseSlug,
+    })
+    if (prompt) {
+      resolutionPath.push('seeded:general_industry')
+    }
+  }
+
+  if (!prompt) {
+    const alternates = await listSalesAiPrompts(supabase, {
+      productSlug: slot.productSlug,
+      useCaseSlug: slot.useCaseSlug,
+      activeOnly: true,
+      limit: 50,
+    })
+    const generalAlt = alternates.find((p) => p.industry_slug === 'general')
+    prompt = generalAlt ?? alternates[0] ?? null
+    if (prompt) {
+      resolutionPath.push('fallback:any_active_product_use_case')
+    }
+  }
+
+  if (!prompt) {
     throw new Error(
-      `No active prompt for ${slot.productSlug} / ${slot.industrySlug} / ${slot.useCaseSlug}. Configure the Prompt Library.`,
+      `No active prompt for ${slot.productSlug} / ${slot.industrySlug} / ${slot.useCaseSlug}. ` +
+        'Open Prompt Library (/dashboard/sales-engine/prompt-library), publish and activate a row for this slot, ' +
+        'or seed defaults: npx tsx --env-file=.env.local scripts/seed-sales-ai-prompts.ts',
     )
   }
 
