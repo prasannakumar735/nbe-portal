@@ -120,11 +120,9 @@ function isWholeDoorSupply(input: PVCCalculatorInput): boolean {
   return (input.doorType ?? 'whole_door') !== 'strips_only'
 }
 
+/** Excel (R8): cover per side is a flat setting for every strip width, never stripWidth / 2. */
 function getDoorCoverPerSideMm(input: PVCCalculatorInput, settings: PVCPricingSettings): number {
-  if (input.stripWidth === 100) {
-    return settings.door_cover_mm
-  }
-  return input.stripWidth / 2
+  return settings.door_cover_mm
 }
 
 /** Excel: 100 mm curtains use hanger spacing; wider strips use overlap advance (strip width − overlap). */
@@ -192,17 +190,33 @@ export function calculateStripLayout(
   }
 }
 
+/** Excel (P66/AS28): headrail length for 100mm curtains follows hanger spacing; wider strips follow the overlap advance (strip width − overlap), same step as the strip count itself. */
+function calculateExcelHeadrailLengthMm(
+  input: PVCCalculatorInput,
+  stripLayout: PVCStripLayoutResult,
+): number {
+  if (input.stripWidth === 100) {
+    const stripSpacingMm = input.hangerWidthMm
+    const remainingWidthMm = Math.max(stripLayout.adjustedDoorWidthMm - input.hangerWidthMm, 0)
+    const roundedRemainingStrips = Math.ceil(remainingWidthMm / stripSpacingMm)
+    return input.hangerWidthMm + stripSpacingMm * roundedRemainingStrips
+  }
+
+  const stripCoverMm = input.stripWidth - input.overlapMm
+  if (stripCoverMm <= 0) {
+    return stripLayout.stripCount * input.stripWidth
+  }
+
+  return input.stripWidth + stripCoverMm * (stripLayout.stripCount - 1)
+}
+
 export function calculateHardware(
   input: PVCCalculatorInput,
   stripLayout: PVCStripLayoutResult,
   settings: PVCPricingSettings,
   rivetsPerStripOverride?: number | null,
 ): PVCHardwareResult {
-  const stripSpacingMm = input.hangerWidthMm
-  const remainingWidthMm = Math.max(stripLayout.adjustedDoorWidthMm - input.hangerWidthMm, 0)
-  const remainingStripUnits = remainingWidthMm / stripSpacingMm
-  const roundedRemainingStrips = Math.ceil(remainingStripUnits)
-  const excelHeadrailLengthMm = input.hangerWidthMm + stripSpacingMm * roundedRemainingStrips
+  const excelHeadrailLengthMm = calculateExcelHeadrailLengthMm(input, stripLayout)
 
   const rivetsPerStrip = Number.isFinite(rivetsPerStripOverride)
     ? Number(rivetsPerStripOverride)
@@ -258,12 +272,14 @@ export function calculatePVCQuote(
   const labour = calculateLabour(input, stripLayout.stripCount, settings)
   const includeHeadrail = isWholeDoorSupply(input)
 
+  // Excel gates only the headrail bar (and its assembly labour) on whole-door vs strips-only —
+  // brackets/hangers and rivets are billed either way, since strips still need hanging.
   const stripMeters = stripLayout.billableStripMeters
   const stripCost = round2(stripMeters * prices.stripUnitPrice)
   const headrailMetersRaw = includeHeadrail ? hardware.headrailLengthMm / 1000 : 0
   const headrailCost = includeHeadrail ? round2(headrailMetersRaw * prices.headrailUnitPrice) : 0
-  const bracketCost = includeHeadrail ? round2(hardware.bracketCount * prices.bracketUnitPrice) : 0
-  const rivetCost = includeHeadrail ? round2(hardware.rivetCount * prices.rivetUnitPrice) : 0
+  const bracketCost = round2(hardware.bracketCount * prices.bracketUnitPrice)
+  const rivetCost = round2(hardware.rivetCount * prices.rivetUnitPrice)
   const labourCost = round2(labour.labourCost)
   const packagingCost = round2(prices.packagingUnitPrice)
 
@@ -271,8 +287,8 @@ export function calculatePVCQuote(
   const subtotal = round2(materialTotal + labourCost)
   const markupMultiplier = 1 + settings.markup_percent / 100
   const ribbedLabourCost = round2(labour.ribbedLabourCost)
-  const subtotalSubjectToMarkup = round2(subtotal - ribbedLabourCost)
-  const retailBeforeInstallation = round2(subtotalSubjectToMarkup * markupMultiplier + ribbedLabourCost)
+  // Excel (R380 = R376 * markup) marks up the whole cost total, including ribbed labour — no carve-out.
+  const retailBeforeInstallation = round2(subtotal * markupMultiplier)
   const manualInstallation =
     input.installationType === 'supply_install' && Number.isFinite(input.manualInstallationPrice)
       ? round2(Math.max(0, input.manualInstallationPrice ?? 0))
@@ -294,7 +310,7 @@ export function calculatePVCQuote(
       'bracket',
       'Hanger / Brackets',
       prices.bracketProductId,
-      includeHeadrail ? hardware.bracketCount : 0,
+      hardware.bracketCount,
       prices.bracketUnitPrice,
       'ea',
     ),
@@ -302,7 +318,7 @@ export function calculatePVCQuote(
       'fitting',
       'Rivets / Fittings',
       prices.fittingProductId,
-      includeHeadrail ? hardware.rivetCount : 0,
+      hardware.rivetCount,
       prices.rivetUnitPrice,
       'ea',
     ),

@@ -306,6 +306,14 @@ export async function fetchProductPrices(
   const bracketRow =
     bracketRows.find(row => {
       const hangerWidth = toNumber(getValueFromRow(row, ['hanger_width_mm', 'hanger_width', 'width_mm', 'strip_width_mm']), NaN)
+      return (
+        Number.isFinite(hangerWidth) &&
+        hangerWidth === input.hangerWidthMm &&
+        rowMatches(row, ['headrail_type', 'type', 'material'], input.headrailType)
+      )
+    }) ||
+    bracketRows.find(row => {
+      const hangerWidth = toNumber(getValueFromRow(row, ['hanger_width_mm', 'hanger_width', 'width_mm', 'strip_width_mm']), NaN)
       return Number.isFinite(hangerWidth) && hangerWidth === input.hangerWidthMm
     }) ||
     bracketRows.find(row => rowMatches(row, ['headrail_type', 'type', 'material'], input.headrailType)) ||
@@ -388,20 +396,50 @@ export async function fetchProductPrices(
     throw new Error('Missing cost_price in Supabase for PVC Strip Material')
   }
   const headrailUnitPrice = resolveUnitPrice(headrailProduct, headrailRow, 'Headrail', ['cost_price', 'unit_price', 'price', 'rate'], true)
-  const bracketUnitPrice = toNumber(bracketProduct?.cost_price, NaN)
-  if (!Number.isFinite(bracketUnitPrice) || bracketUnitPrice <= 0) {
-    if (hangerSku) {
-      throw new Error(`Hanger price missing in Supabase for SKU ${hangerSku}`)
+
+  // Excel has no slotted-bracket line for aluminium headrails — strips are fixed with
+  // Nuts + Bolts + Washers instead of a bracket + rivet (same per-hanger-width quantity table).
+  const isAluminiumHeadrail = normalize(input.headrailType) === 'aluminium'
+
+  let bracketUnitPrice: number
+  let rivetUnitPrice: number
+  let fastenerProductId: string | null
+
+  if (isAluminiumHeadrail) {
+    bracketUnitPrice = 0
+    const findFastenerRow = (type: string) =>
+      fittingRows.find(row => normalize(String(getValueFromRow(row, ['fitting_type', 'type']) ?? '')) === type) || null
+    const nutRow = findFastenerRow('nut')
+    const boltRow = findFastenerRow('bolt')
+    const washerRow = findFastenerRow('washer')
+    const nutProduct = getProductFromRow(nutRow, products)
+    const boltProduct = getProductFromRow(boltRow, products)
+    const washerProduct = getProductFromRow(washerRow, products)
+    const nutPrice = resolveUnitPrice(nutProduct, nutRow, 'Nut', ['cost_price', 'unit_price', 'price', 'rate'], true)
+    const boltPrice = resolveUnitPrice(boltProduct, boltRow, 'Bolt', ['cost_price', 'unit_price', 'price', 'rate'], true)
+    const washerPrice = resolveUnitPrice(washerProduct, washerRow, 'Washer', ['cost_price', 'unit_price', 'price', 'rate'], true)
+    rivetUnitPrice = round2(nutPrice + boltPrice + washerPrice)
+    fastenerProductId = nutProduct?.id ?? null
+  } else {
+    bracketUnitPrice = toNumber(bracketProduct?.cost_price, NaN)
+    // $0 is a legitimate Excel price (e.g. 100mm/400mm brackets aren't sold as a separate
+    // item) — only a missing/unmatched product (NaN) or a negative price is an error.
+    if (!Number.isFinite(bracketUnitPrice) || bracketUnitPrice < 0) {
+      if (hangerSku) {
+        throw new Error(`Hanger price missing in Supabase for SKU ${hangerSku}`)
+      }
+      throw new Error(`Hanger price missing in Supabase for selected hanger width ${input.hangerWidthMm}mm`)
     }
-    throw new Error(`Hanger price missing in Supabase for selected hanger width ${input.hangerWidthMm}mm`)
+    rivetUnitPrice = resolveUnitPrice(fittingProduct, fittingRow, 'Rivets', ['cost_price', 'unit_price', 'price', 'rate'], true)
+    fastenerProductId = fittingProduct?.id ?? null
   }
-  const rivetUnitPrice = resolveUnitPrice(fittingProduct, fittingRow, 'Rivets', ['cost_price', 'unit_price', 'price', 'rate'], true)
+
   const packagingUnitPrice = resolveUnitPrice(packagingProduct, packagingRow, 'Packaging', ['cost_price', 'unit_price', 'price', 'rate'], true)
   return {
     stripProductId: stripProduct?.id ?? null,
     headrailProductId: headrailProduct?.id ?? null,
-    bracketProductId: bracketProduct?.id ?? null,
-    fittingProductId: fittingProduct?.id ?? null,
+    bracketProductId: isAluminiumHeadrail ? null : (bracketProduct?.id ?? null),
+    fittingProductId: fastenerProductId,
     labourProductId: labourProduct?.id ?? null,
     packagingProductId: packagingProduct?.id ?? null,
     stripUnitPrice,

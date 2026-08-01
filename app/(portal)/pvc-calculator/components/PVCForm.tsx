@@ -261,7 +261,7 @@ export function PVCForm({ values, isLoading, onChange, onSubmit }: PVCFormProps)
             ))}
           </select>
           <span className="text-xs text-slate-500">
-            Strips only prices PVC strip material (no headrail, hangers, or rivets). Whole door includes headrail assembly.
+            Strips only excludes the headrail rail (for reusing an existing headrail) but still includes hangers/brackets and rivets needed to hang the strips. Whole door includes the headrail rail and its assembly.
           </span>
         </label>
 

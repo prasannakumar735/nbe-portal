@@ -10,7 +10,11 @@ export type PVCHeadrailType = 'stainless' | 'galvanized' | 'aluminium' | 'plasti
 
 export type PVCInstallationType = 'supply_only' | 'supply_install'
 
-/** Whole door = strips + headrail hardware/labour; strips only = strip material (+ packaging, strip labour). */
+/**
+ * Whole door = strips + headrail rail/labour + brackets + rivets.
+ * Strips only = same, minus the headrail rail and its assembly labour — brackets and rivets
+ * are still billed either way, since strips still need hanging (matches Excel's formulas).
+ */
 export type PVCDoorType = 'whole_door' | 'strips_only'
 
 export interface PVCCalculatorInput {
