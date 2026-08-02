@@ -79,8 +79,13 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
+  // Never intercept OAuth flow (POST consent submission, redirects to external
+  // clients like ChatGPT/Claude) — following those redirects inside the SW gets
+  // silently canceled by the browser and breaks the authorization redirect.
+  if (url.pathname.startsWith('/oauth/') || url.pathname.startsWith('/api/oauth/')) return
+
   // Network-first for navigations; fallback to cached page/offline
-  if (req.mode === 'navigate') {
+  if (req.mode === 'navigate' && req.method === 'GET') {
     event.respondWith(
       (async () => {
         const cache = await caches.open(CACHE_NAME)
