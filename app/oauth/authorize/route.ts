@@ -147,7 +147,8 @@ export async function POST(request: NextRequest) {
 
   if (action !== 'allow') {
     redirectTarget.searchParams.set('error', 'access_denied')
-    return NextResponse.redirect(redirectTarget)
+    // 303: force the client to GET the redirect_uri instead of re-POSTing to it (307 default).
+    return NextResponse.redirect(redirectTarget, 303)
   }
 
   const supabase = await createServerClient()
@@ -181,5 +182,5 @@ export async function POST(request: NextRequest) {
   })
 
   redirectTarget.searchParams.set('code', code)
-  return NextResponse.redirect(redirectTarget)
+  return NextResponse.redirect(redirectTarget, 303)
 }
