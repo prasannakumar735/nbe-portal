@@ -54,6 +54,9 @@ export async function middleware(request: NextRequest) {
   // the PDF response to allow same-origin framing.
   const csp = buildContentSecurityPolicy(nonce, {
     frameAncestors: isReportPdfApiPath(request.nextUrl.pathname) ? "'self'" : "'none'",
+    // OAuth consent form redirects to a server-validated external client redirect_uri
+    // after Allow — Chrome enforces form-action against that redirect chain too.
+    formAction: request.nextUrl.pathname === '/oauth/authorize' ? "'self' https:" : undefined,
   })
   const requestHeaders = new Headers(request.headers)
   const incomingRequestId = request.headers.get(NBE_REQUEST_ID_HEADER)?.trim()

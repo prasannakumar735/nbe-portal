@@ -46,23 +46,15 @@ function renderConsentPage(params: {
 <head>
 <meta charset="utf-8">
 <title>Authorize ${escapeHtml(params.clientName)}</title>
-<style>
-  body { font-family: system-ui, sans-serif; max-width: 480px; margin: 80px auto; padding: 0 20px; color: #1a1a1a; }
-  h1 { font-size: 20px; }
-  p { color: #555; line-height: 1.5; }
-  .actions { display: flex; gap: 12px; margin-top: 24px; }
-  button { flex: 1; padding: 10px 16px; border-radius: 8px; border: 1px solid #ccc; font-size: 15px; cursor: pointer; }
-  button[name="action"][value="allow"] { background: #111; color: #fff; border-color: #111; }
-</style>
 </head>
-<body>
-  <h1>Authorize ${escapeHtml(params.clientName)}</h1>
-  <p>This will let <strong>${escapeHtml(params.clientName)}</strong> calculate NBE PVC strip curtain quotes on your behalf, using live pricing. It cannot save quotes or access anything else in the portal.</p>
+<body style="font-family: system-ui, sans-serif; max-width: 480px; margin: 80px auto; padding: 0 20px; color: #1a1a1a;">
+  <h1 style="font-size: 20px;">Authorize ${escapeHtml(params.clientName)}</h1>
+  <p style="color: #555; line-height: 1.5;">This will let <strong>${escapeHtml(params.clientName)}</strong> calculate NBE PVC strip curtain quotes on your behalf, using live pricing. It cannot save quotes or access anything else in the portal.</p>
   <form method="POST" action="${escapeHtml(params.formAction)}">
     ${hidden}
-    <div class="actions">
-      <button type="submit" name="action" value="deny">Deny</button>
-      <button type="submit" name="action" value="allow">Allow</button>
+    <div style="display: flex; gap: 12px; margin-top: 24px;">
+      <button type="submit" name="action" value="deny" style="flex: 1; padding: 10px 16px; border-radius: 8px; border: 1px solid #ccc; font-size: 15px; cursor: pointer;">Deny</button>
+      <button type="submit" name="action" value="allow" style="flex: 1; padding: 10px 16px; border-radius: 8px; border: 1px solid #111; font-size: 15px; cursor: pointer; background: #111; color: #fff;">Allow</button>
     </div>
   </form>
 </body>
