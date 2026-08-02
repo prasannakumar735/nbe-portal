@@ -45,6 +45,12 @@ export function registerPvcCalculatorTools(server: McpServer, supabase: Supabase
         'given by the user, ask the user for them before calling this tool — do not assume defaults and do not ' +
         'answer without calling this tool. Read-only — does not save a quote.',
       inputSchema: calculateInputSchema,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async input => {
       const calculatorInput = input as PVCCalculatorInput
