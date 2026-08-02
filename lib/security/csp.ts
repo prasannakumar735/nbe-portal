@@ -41,10 +41,19 @@ export function buildContentSecurityPolicy(
      * Default: `'none'` (most strict).
      */
     frameAncestors?: FrameAncestorsPolicy
+    /**
+     * Where `<form>` submissions (and any redirect chain they trigger) may target.
+     * Default: `'self'`. The OAuth authorize consent form redirects to an external,
+     * server-validated client `redirect_uri` after consent — Chrome enforces
+     * `form-action` against that whole redirect chain, not just the initial submit
+     * target, so that route needs a broader policy.
+     */
+    formAction?: string
   },
 ): string {
   const isDev = !isProd
   const frameAncestors: FrameAncestorsPolicy = options?.frameAncestors ?? "'none'"
+  const formAction = options?.formAction ?? "'self'"
 
   const scriptSrc = [
     "'self'",
@@ -95,7 +104,7 @@ export function buildContentSecurityPolicy(
     ].join(' '),
     "object-src 'none'",
     "base-uri 'self'",
-    "form-action 'self'",
+    `form-action ${formAction}`,
     `frame-ancestors ${frameAncestors}`,
     ...(isProd ? (['upgrade-insecure-requests'] as const) : []),
   ]
