@@ -23,7 +23,7 @@ const calculateInputSchema = {
   overlapMm: z.number().nonnegative().optional(),
   headrailType: z.enum(['stainless', 'galvanized', 'aluminium', 'plastic']),
   installationType: z.enum(['supply_only', 'supply_install']),
-  doorType: z.enum(['whole_door', 'strips_only']).optional(),
+  doorType: z.enum(['whole_door', 'strips_only']),
   manualInstallationPrice: z.number().nonnegative().optional(),
   manualFreightPrice: z.number().nonnegative().optional(),
   freightRequired: z.boolean().optional(),
@@ -42,7 +42,9 @@ export function registerPvcCalculatorTools(server: McpServer, supabase: Supabase
         'calculator uses) and is the ONLY source of truth for strip counts, quantities, and dollar pricing. ' +
         'Before calling, ask the user for whichever of these are not already given: openingWidthMm, ' +
         'openingHeightMm, stripType, stripWidth, hangerWidthMm, stripThicknessMm, headrailType (galvanized, ' +
-        'stainless, aluminium, or plastic), and installationType. Do NOT ask about overlapMm or stripsPerHanger — ' +
+        'stainless, aluminium, or plastic), installationType, and doorType — whole_door (strips + headrail ' +
+        'hardware/labour) or strips_only (strip material only, no headrail). Do NOT ask about overlapMm or ' +
+        'stripsPerHanger — ' +
         'omit them entirely and this tool applies NBE\'s standard defaults automatically (same rule the NBE ' +
         'portal calculator itself uses): overlapMm defaults to 15mm when stripWidth is 100mm, otherwise 50mm; ' +
         'stripsPerHanger defaults to 2 only when stripWidth is 100mm and hangerWidthMm is 150mm, otherwise 1. ' +
