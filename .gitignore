@@ -70,3 +70,5 @@ desktop.ini
 *.pfx
 supabase/.branches
 supabase/.temp
+
+.vercel
