@@ -18,9 +18,9 @@ const calculateInputSchema = {
     z.literal(1200),
     z.literal(1370),
   ]),
-  stripsPerHanger: z.union([z.literal(1), z.literal(2)]),
+  stripsPerHanger: z.union([z.literal(1), z.literal(2)]).optional(),
   stripThicknessMm: z.number().positive(),
-  overlapMm: z.number().nonnegative(),
+  overlapMm: z.number().nonnegative().optional(),
   headrailType: z.enum(['stainless', 'galvanized', 'aluminium', 'plastic']),
   installationType: z.enum(['supply_only', 'supply_install']),
   doorType: z.enum(['whole_door', 'strips_only']).optional(),
@@ -40,10 +40,14 @@ export function registerPvcCalculatorTools(server: McpServer, supabase: Supabase
         'weights, or pricing yourself — those numbers do not exist anywhere else and any number you invent ' +
         'will be wrong. This tool queries the real NBE Supabase pricing tables (the same engine the NBE portal ' +
         'calculator uses) and is the ONLY source of truth for strip counts, quantities, and dollar pricing. ' +
-        'If openingWidthMm/openingHeightMm are known but other required fields (stripType, stripWidth, ' +
-        'hangerWidthMm, stripsPerHanger, stripThicknessMm, overlapMm, headrailType, installationType) are not ' +
-        'given by the user, ask the user for them before calling this tool — do not assume defaults and do not ' +
-        'answer without calling this tool. Read-only — does not save a quote.',
+        'Before calling, ask the user for whichever of these are not already given: openingWidthMm, ' +
+        'openingHeightMm, stripType, stripWidth, hangerWidthMm, stripThicknessMm, headrailType (galvanized, ' +
+        'stainless, aluminium, or plastic), and installationType. Do NOT ask about overlapMm or stripsPerHanger — ' +
+        'omit them entirely and this tool applies NBE\'s standard defaults automatically (same rule the NBE ' +
+        'portal calculator itself uses): overlapMm defaults to 15mm when stripWidth is 100mm, otherwise 50mm; ' +
+        'stripsPerHanger defaults to 2 only when stripWidth is 100mm and hangerWidthMm is 150mm, otherwise 1. ' +
+        'Only pass overlapMm/stripsPerHanger explicitly if the user states a non-standard value themselves. ' +
+        'Do not answer without calling this tool. Read-only — does not save a quote.',
       inputSchema: calculateInputSchema,
       annotations: {
         readOnlyHint: true,
@@ -53,7 +57,17 @@ export function registerPvcCalculatorTools(server: McpServer, supabase: Supabase
       },
     },
     async input => {
-      const calculatorInput = input as PVCCalculatorInput
+      const raw = input as PVCCalculatorInput & { overlapMm?: number; stripsPerHanger?: 1 | 2 }
+
+      // Same defaulting rule as the NBE portal calculator UI itself
+      // (components/pvc/PVCCalculatorClient.tsx updateField('stripWidth')): overlap and
+      // strips-per-hanger vary predictably with stripWidth/hangerWidthMm, so callers
+      // shouldn't need to ask the user for them unless they want a non-standard value.
+      const overlapMm = raw.overlapMm ?? (raw.stripWidth === 100 ? 15 : 50)
+      const stripsPerHanger =
+        raw.stripsPerHanger ?? (raw.stripWidth === 100 && raw.hangerWidthMm === 150 ? 2 : 1)
+
+      const calculatorInput: PVCCalculatorInput = { ...raw, overlapMm, stripsPerHanger }
       const result = await generateQuote(supabase, calculatorInput, { persistQuote: false })
 
       return {
