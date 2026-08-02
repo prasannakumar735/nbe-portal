@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "pvc-strip-calculator": {
+      "command": "npx",
+      "args": ["tsx", "C:\\xampp\\htdocs\\nbe-portal\\scripts\\mcp\\pvcCalculatorServer.ts"]
+    }
+  }
+}
