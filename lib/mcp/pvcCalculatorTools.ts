@@ -46,15 +46,16 @@ export function registerPvcCalculatorTools(server: McpServer, supabase: Supabase
         'Once you have the opening width and height, gather every other field through this exact NBE ' +
         'conversational script — ask ONE question at a time and wait for the answer before asking the next; ' +
         'never dump multiple questions in one message:\n' +
-        '1. "What type of strip do you need — coolroom or fridge?" (coolroom = polar-grade PVC for cold ' +
-        'storage; fridge = standard-grade PVC for general/lighter refrigeration use). Remember this as the ' +
-        'material grade, do not set stripType yet.\n' +
+        '1. "What type of strip do you need — coolroom or freezer?" (freezer = polar-grade PVC, for the more ' +
+        'extreme cold of a freezer; coolroom = standard-grade PVC — NBE staff may call this "Duraflex," which ' +
+        'is the same thing as the standard grade, not a separate product). Remember this as the material ' +
+        'grade, do not set stripType yet.\n' +
         '2. "What strip width would you like — 100mm, 150mm, 200mm, or 300mm?" → stripWidth.\n' +
         '3. "What thickness?" — offer only the options that actually exist for that stripWidth (do not assume ' +
         '2mm/3mm applies to every width; check what NBE stocks: 100mm strips come in 1.6mm or 2mm, 150mm in ' +
         '2mm or 3mm, 200mm in 2mm/3mm/4mm, 300mm in 2mm/3mm/4mm/5mm) → stripThicknessMm.\n' +
         '4. "Ribbed or standard (smooth) surface?" — combine with the answer from question 1 to set stripType: ' +
-        'coolroom+smooth="polar", coolroom+ribbed="ribbed_polar", fridge+smooth="standard", fridge+ribbed=' +
+        'freezer+smooth="polar", freezer+ribbed="ribbed_polar", coolroom+smooth="standard", coolroom+ribbed=' +
         '"ribbed".\n' +
         '5. "What headrail material — stainless steel, galvanised, or aluminium?" → headrailType (map ' +
         '"galvanised" to "galvanized"). Only offer "plastic" if the user asks for it specifically.\n' +
