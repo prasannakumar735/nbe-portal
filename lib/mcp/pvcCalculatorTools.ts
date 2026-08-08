@@ -9,15 +9,17 @@ const calculateInputSchema = {
   openingHeightMm: z.number().positive(),
   stripType: z.enum(['standard', 'ribbed', 'colour', 'polar', 'ribbed_polar']),
   stripWidth: z.union([z.literal(100), z.literal(150), z.literal(200), z.literal(300)]),
-  hangerWidthMm: z.union([
-    z.literal(100),
-    z.literal(150),
-    z.literal(200),
-    z.literal(300),
-    z.literal(400),
-    z.literal(1200),
-    z.literal(1370),
-  ]),
+  hangerWidthMm: z
+    .union([
+      z.literal(100),
+      z.literal(150),
+      z.literal(200),
+      z.literal(300),
+      z.literal(400),
+      z.literal(1200),
+      z.literal(1370),
+    ])
+    .optional(),
   stripsPerHanger: z.union([z.literal(1), z.literal(2)]).optional(),
   stripThicknessMm: z.number().positive(),
   overlapMm: z.number().nonnegative().optional(),
@@ -36,19 +38,37 @@ export function registerPvcCalculatorTools(server: McpServer, supabase: Supabase
       title: 'Calculate PVC strip curtain quote',
       description:
         'MANDATORY for any NBE PVC strip curtain quote, price, or calculation request (e.g. "PVC quote for a ' +
-        '2000x2400mm opening"). Never estimate, guess, or hand-calculate strip counts, material quantities, ' +
-        'weights, or pricing yourself — those numbers do not exist anywhere else and any number you invent ' +
-        'will be wrong. This tool queries the real NBE Supabase pricing tables (the same engine the NBE portal ' +
-        'calculator uses) and is the ONLY source of truth for strip counts, quantities, and dollar pricing. ' +
-        'Before calling, ask the user for whichever of these are not already given: openingWidthMm, ' +
-        'openingHeightMm, stripType, stripWidth, hangerWidthMm, stripThicknessMm, headrailType (galvanized, ' +
-        'stainless, aluminium, or plastic), installationType, and doorType — whole_door (strips + headrail ' +
-        'hardware/labour) or strips_only (strip material only, no headrail). Do NOT ask about overlapMm or ' +
-        'stripsPerHanger — ' +
-        'omit them entirely and this tool applies NBE\'s standard defaults automatically (same rule the NBE ' +
-        'portal calculator itself uses): overlapMm defaults to 15mm when stripWidth is 100mm, otherwise 50mm; ' +
-        'stripsPerHanger defaults to 2 only when stripWidth is 100mm and hangerWidthMm is 150mm, otherwise 1. ' +
-        'Only pass overlapMm/stripsPerHanger explicitly if the user states a non-standard value themselves. ' +
+        '2000x2400mm opening", or just "2200h and 2500w"). Never estimate, guess, or hand-calculate strip ' +
+        'counts, material quantities, weights, or pricing yourself — those numbers do not exist anywhere else ' +
+        'and any number you invent will be wrong. This tool queries the real NBE Supabase pricing tables (the ' +
+        'same engine the NBE portal calculator uses) and is the ONLY source of truth for strip counts, ' +
+        'quantities, and dollar pricing.\n\n' +
+        'Once you have the opening width and height, gather every other field through this exact NBE ' +
+        'conversational script — ask ONE question at a time and wait for the answer before asking the next; ' +
+        'never dump multiple questions in one message:\n' +
+        '1. "What type of strip do you need — coolroom or fridge?" (coolroom = polar-grade PVC for cold ' +
+        'storage; fridge = standard-grade PVC for general/lighter refrigeration use). Remember this as the ' +
+        'material grade, do not set stripType yet.\n' +
+        '2. "What strip width would you like — 100mm, 150mm, 200mm, or 300mm?" → stripWidth.\n' +
+        '3. "What thickness?" — offer only the options that actually exist for that stripWidth (do not assume ' +
+        '2mm/3mm applies to every width; check what NBE stocks: 100mm strips come in 1.6mm or 2mm, 150mm in ' +
+        '2mm or 3mm, 200mm in 2mm/3mm/4mm, 300mm in 2mm/3mm/4mm/5mm) → stripThicknessMm.\n' +
+        '4. "Ribbed or standard (smooth) surface?" — combine with the answer from question 1 to set stripType: ' +
+        'coolroom+smooth="polar", coolroom+ribbed="ribbed_polar", fridge+smooth="standard", fridge+ribbed=' +
+        '"ribbed".\n' +
+        '5. "What headrail material — stainless steel, galvanised, or aluminium?" → headrailType (map ' +
+        '"galvanised" to "galvanized"). Only offer "plastic" if the user asks for it specifically.\n' +
+        '6. "Whole door (strips + headrail) or strips only?" → doorType (whole_door / strips_only).\n' +
+        '7. "Supply only, or supply and install?" → installationType. If they choose supply and install, also ' +
+        'ask "What installation price should I include?" and pass the answer as manualInstallationPrice — do ' +
+        'not silently default it to $0.\n\n' +
+        'Do NOT ask about hangerWidthMm — omit it entirely; it defaults to the same value as stripWidth ' +
+        '(matches the NBE portal calculator\'s own default) unless the user states a different hanger width ' +
+        'themselves. Do NOT ask about overlapMm or stripsPerHanger — omit them entirely and this tool applies ' +
+        'NBE\'s standard defaults automatically (same rule the NBE portal calculator itself uses): overlapMm ' +
+        'defaults to 15mm when stripWidth is 100mm, otherwise 50mm; stripsPerHanger defaults to 2 only when ' +
+        'stripWidth is 100mm and hangerWidthMm is 150mm, otherwise 1. Only pass overlapMm/stripsPerHanger/' +
+        'hangerWidthMm explicitly if the user states a non-standard value themselves. ' +
         'Do not answer without calling this tool. Read-only — does not save a quote.',
       inputSchema: calculateInputSchema,
       annotations: {
@@ -59,17 +79,19 @@ export function registerPvcCalculatorTools(server: McpServer, supabase: Supabase
       },
     },
     async input => {
-      const raw = input as PVCCalculatorInput & { overlapMm?: number; stripsPerHanger?: 1 | 2 }
+      const raw = input as PVCCalculatorInput & { overlapMm?: number; stripsPerHanger?: 1 | 2; hangerWidthMm?: number }
 
       // Same defaulting rule as the NBE portal calculator UI itself
-      // (components/pvc/PVCCalculatorClient.tsx updateField('stripWidth')): overlap and
-      // strips-per-hanger vary predictably with stripWidth/hangerWidthMm, so callers
-      // shouldn't need to ask the user for them unless they want a non-standard value.
+      // (components/pvc/PVCCalculatorClient.tsx updateField('stripWidth')): hanger width
+      // matches strip width, overlap/strips-per-hanger vary predictably with
+      // stripWidth/hangerWidthMm, so callers shouldn't need to ask the user for these
+      // unless they want a non-standard value.
+      const hangerWidthMm = (raw.hangerWidthMm ?? raw.stripWidth) as PVCCalculatorInput['hangerWidthMm']
       const overlapMm = raw.overlapMm ?? (raw.stripWidth === 100 ? 15 : 50)
       const stripsPerHanger =
-        raw.stripsPerHanger ?? (raw.stripWidth === 100 && raw.hangerWidthMm === 150 ? 2 : 1)
+        raw.stripsPerHanger ?? (raw.stripWidth === 100 && hangerWidthMm === 150 ? 2 : 1)
 
-      const calculatorInput: PVCCalculatorInput = { ...raw, overlapMm, stripsPerHanger }
+      const calculatorInput: PVCCalculatorInput = { ...raw, hangerWidthMm, overlapMm, stripsPerHanger }
       const result = await generateQuote(supabase, calculatorInput, { persistQuote: false })
 
       return {
