@@ -295,7 +295,7 @@ export function QuotePDF({ data }: QuotePDFProps) {
       <Page size="A4" style={styles.page} wrap>
         {/* ── Fixed header ── */}
         <View fixed style={styles.fixedHeader}>
-          <Image style={styles.logo} src="/nbe-logo.png" />
+          <Image style={styles.logo} src="/NBE_LOGO_BK_PL.png" />
           <View style={styles.headerCenter}>
             <Text style={styles.companyName}>NBE Australia</Text>
             <Text style={styles.headerAddress}>

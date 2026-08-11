@@ -2,7 +2,7 @@
  * Logo used on auth shells (/login, forgot password, etc.).
  * SVG + Tailwind alone can briefly paint huge before CSS applies — explicit attrs + inline caps prevent full-screen flashes.
  *
- * `legacy` — NBE Australia wordmark (`/nbe-logo.png`), used when signing in from client portal flows (`?next=/client…`).
+ * `legacy` — larger mark for client portal flows (`?next=/client…`); same asset as staff default.
  */
 export function AuthScreenLogo({
   className = '',
@@ -14,10 +14,10 @@ export function AuthScreenLogo({
   if (variant === 'legacy') {
     return (
       <img
-        src="/nbe-logo.png"
+        src="/NBE_LOGO_BK_PL.png"
         alt="NBE Australia"
         width={280}
-        height={112}
+        height={163}
         decoding="async"
         className={`h-16 w-auto max-h-16 max-w-[min(300px,92vw)] object-contain object-center ${className}`}
         style={{ maxHeight: '4rem', maxWidth: 'min(300px, 92vw)' }}

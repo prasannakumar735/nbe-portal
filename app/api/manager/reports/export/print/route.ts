@@ -189,7 +189,7 @@ export async function GET(request: NextRequest) {
 </head>
 <body>
   <div class="brand">
-    <img src="/nbe-logo.png" alt="NBE" />
+    <img src="/NBE_LOGO_BK_PL.png" alt="NBE" />
     <div>
       <h1>Reports &amp; Analytics</h1>
       <p class="sub">Operational export — filters apply to all sections below.</p>

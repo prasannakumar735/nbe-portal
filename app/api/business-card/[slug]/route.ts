@@ -38,7 +38,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     const qrDataUrl = await generateQRCode(getContactQrPayload(contact))
     const safeName = getContactDisplayName(contact).replace(/[^a-z0-9\-_. ]/gi, '').trim() || 'contact'
 
-    const logoUrl = new URL('/nbe-logo.png', request.url).toString()
+    const logoUrl = new URL('/NBE_LOGO_BK_PL.png', request.url).toString()
 
     const image = new ImageResponse(
       React.createElement(BusinessCard, {

@@ -346,7 +346,7 @@ export async function buildMaintenancePdfOptions(params: {
   const reportDate = form.inspection_date || form.submission_date || new Date().toISOString().slice(0, 10)
 
   let logoBytes: Uint8Array | null = null
-  for (const logoPath of ['nbe-logo.png', 'logo/nbe-logo.png', 'logo.png']) {
+  for (const logoPath of ['NBE_LOGO_BK_PL.png', 'nbe-logo.png', 'logo/nbe-logo.png', 'logo.png']) {
     try {
       logoBytes = new Uint8Array(await readFile(join(process.cwd(), 'public', logoPath)))
       break

@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     const filterLabels = await resolveReportsFilterLabels(supabase, filters)
     const filterRows = filterSummaryRows(filters, filterLabels)
 
-    const logoPath = join(process.cwd(), 'public', 'nbe-logo.png')
+    const logoPath = join(process.cwd(), 'public', 'NBE_LOGO_BK_PL.png')
     const logoBytes = readFileSync(logoPath)
     const logoSrc = `data:image/png;base64,${logoBytes.toString('base64')}`
 

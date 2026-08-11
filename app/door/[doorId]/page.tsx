@@ -167,7 +167,7 @@ export default async function DoorInfoPage({ params }: DoorPageProps) {
       <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
         <header className="text-center">
           <div className="mb-8 flex flex-col items-center">
-            <Image src="/nbe-logo.png" alt="NBE Australia" width={220} height={72} className="object-contain" priority/>
+            <Image src="/NBE_LOGO_BK_PL.png" alt="NBE Australia" width={220} height={128} className="object-contain" priority/>
             <p className="mt-2 text-xs tracking-wider text-slate-500 md:text-sm">INDUSTRIAL DOOR INFORMATION</p>
           </div>
         </header>
