@@ -121,11 +121,14 @@ export async function claimSalesEmailSendQueueItem(
     return null
   }
 
+  const claimStartedAt = new Date().toISOString()
   const { data, error } = await supabase
     .from(TABLE)
     .update({
       status: 'sending',
       attempts: existing.attempts + 1,
+      /** Claim timestamp for stuck-`sending` recovery (table has no `updated_at`). */
+      scheduled_at: claimStartedAt,
     })
     .eq('id', id)
     .eq('status', 'queued')
@@ -249,9 +252,10 @@ export async function cancelSalesEmailSendQueueItem(
 
 /**
  * Reset `sending` rows to `queued` after they've been stuck for more than
- * STUCK_THRESHOLD_MINUTES. Without this age guard, two overlapping dispatcher
- * invocations (cron + manual click) would reset each other's in-flight row and
- * send the same email twice.
+ * STUCK_THRESHOLD_MINUTES (uses `scheduled_at`, set to claim time in
+ * `claimSalesEmailSendQueueItem`). Without this age guard, two overlapping
+ * dispatcher invocations (cron + manual click) would reset each other's
+ * in-flight row and send the same email twice.
  *
  * We only requeue when there is no `success` delivery log for the row — a row
  * can stay in `sending` if the worker wrote the log and then crashed before
@@ -269,7 +273,7 @@ export async function requeueStuckSalesEmailSendQueueItems(
     .from(TABLE)
     .select('id')
     .eq('status', 'sending')
-    .lt('updated_at', cutoff)
+    .lt('scheduled_at', cutoff)
   if (fetchError) throw fetchError
   if (!candidates || candidates.length === 0) return 0
 

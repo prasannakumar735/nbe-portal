@@ -12,6 +12,15 @@ import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message: unknown }).message
+    if (typeof message === 'string' && message.trim()) return message
+  }
+  return 'Job failed'
+}
+
 const runJobBodySchema = z.object({
   job: z.enum([
     'email-send',
@@ -78,12 +87,8 @@ export async function POST(request: Request) {
     if (error instanceof ZodError) {
       return fail('Validation failed', 422, error.issues)
     }
-    const message = error instanceof Error ? error.message : String(error)
-    const detail =
-      error instanceof Error
-        ? { stack: error.stack }
-        : { raw: JSON.stringify(error, Object.getOwnPropertyNames(error)) }
-    console.error('[run-jobs] error:', message, detail)
-    return NextResponse.json({ ok: false, error: message, detail }, { status: 500 })
+    const message = toErrorMessage(error)
+    console.error('[run-jobs] error:', message, error)
+    return NextResponse.json({ ok: false, error: message }, { status: 500 })
   }
 }
