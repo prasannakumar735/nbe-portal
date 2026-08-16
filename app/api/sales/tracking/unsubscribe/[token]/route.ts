@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { recordCampaignEngagementEvent } from '@/lib/sales/engagement/campaignEngagementService'
 import { verifyUnsubscribeToken } from '@/lib/sales/engagement/engagementTrackingToken'
+import { addSalesEmailSuppression } from '@/lib/sales/repositories/salesEmailSuppressionRepository'
 import { listSalesContactsByIds } from '@/lib/sales/repositories/salesContactRepository'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 
@@ -80,6 +81,21 @@ export async function POST(_request: Request, context: RouteContext) {
     const payload = verifyUnsubscribeToken(token)
 
     const supabase = createServiceRoleClient()
+    const contacts = await listSalesContactsByIds(supabase, [payload.contactId])
+    const email = contacts[0]?.email?.trim()
+
+    // Write to the global suppression list first. This is the authoritative
+    // do-not-email record — the engagement event below is secondary telemetry.
+    // Both are idempotent, so repeat POSTs are safe.
+    if (email) {
+      await addSalesEmailSuppression(supabase, {
+        email_address: email,
+        reason: 'unsubscribed',
+        contact_id: payload.contactId,
+        campaign_id: payload.campaignId,
+      })
+    }
+
     await recordCampaignEngagementEvent(supabase, {
       campaignId: payload.campaignId,
       contactId: payload.contactId,

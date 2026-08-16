@@ -6,6 +6,11 @@ import { calculateNextRetryTime } from '@/lib/sales/sending/retryScheduler'
 import { MAX_EMAIL_SEND_ATTEMPTS } from '@/lib/sales/sending/emailSendQueue.constants'
 import { createSalesEmailDeliveryLog } from '@/lib/sales/repositories/salesEmailDeliveryLogRepository'
 import {
+  addSalesEmailSuppression,
+  isSalesEmailSuppressed,
+} from '@/lib/sales/repositories/salesEmailSuppressionRepository'
+import {
+  cancelSalesEmailSendQueueItem,
   claimSalesEmailSendQueueItem,
   getSalesEmailSendQueueById,
   markSalesEmailSendQueueBounced,
@@ -42,7 +47,8 @@ import type { SalesEmailSendQueue } from '@/lib/sales/types/emailSendQueue.types
 
 export type EmailSenderWorkerResult = {
   queueId: string
-  outcome: 'sent' | 'failed' | 'bounced' | 'retry' | 'skipped'
+  /** `suppressed` = recipient is on the do-not-email list; not an error. */
+  outcome: 'sent' | 'failed' | 'bounced' | 'retry' | 'skipped' | 'suppressed'
   errorMessage?: string
 }
 
@@ -138,6 +144,19 @@ async function executeSendForQueueRecord(
       failure_reason: 'Contact has no email address.',
     })
     return { queueId: queue.id, outcome: 'failed', errorMessage: 'Contact has no email address.' }
+  }
+
+  // Do-not-email gate. Must run before the send and before Safe Delivery
+  // redirection, so it is the intended recipient that is checked — not the
+  // testing mailbox. Cancels the queue item rather than failing it: a
+  // suppressed address is a permanent, correct stop, not a retryable error.
+  if (await isSalesEmailSuppressed(supabase, intendedRecipient)) {
+    await cancelSalesEmailSendQueueItem(supabase, queue.id)
+    return {
+      queueId: queue.id,
+      outcome: 'suppressed',
+      errorMessage: `Recipient is on the do-not-email list (${intendedRecipient}).`,
+    }
   }
 
   const recipientResolution = resolveOutboundRecipient(settings, intendedRecipient)
@@ -258,6 +277,16 @@ async function executeSendForQueueRecord(
       await markBounceDetected(supabase, {
         contact_id: queue.contact_id,
         campaign_id: queue.campaign_id,
+      })
+      // A hard bounce suppresses the address globally: continuing to send to a
+      // dead mailbox damages domain reputation, and rediscovery would otherwise
+      // re-add it as a fresh contact row.
+      await addSalesEmailSuppression(supabase, {
+        email_address: intendedRecipient,
+        reason: 'bounced',
+        contact_id: queue.contact_id,
+        campaign_id: queue.campaign_id,
+        notes: classification.failureReason,
       })
       return { queueId: queue.id, outcome: 'bounced', errorMessage: classification.failureReason }
     }
