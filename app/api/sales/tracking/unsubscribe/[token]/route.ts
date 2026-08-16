@@ -33,27 +33,29 @@ function page(bodyHtml: string, status = 200): NextResponse {
  * "Keep me subscribed" — still a GET so no state is mutated.
  */
 export async function GET(request: Request, context: RouteContext) {
+  const nonce = request.headers.get('x-nonce') ?? undefined
   try {
     const { token } = await context.params
     const payload = verifyUnsubscribeToken(token)
 
     const url = new URL(request.url)
     if (url.searchParams.get('cancel') === '1') {
-      return page(renderUnsubscribePageHtml({ kind: 'cancelled' }))
+      return page(renderUnsubscribePageHtml({ kind: 'cancelled' }, nonce))
     }
 
     const supabase = createServiceRoleClient()
     const contacts = await listSalesContactsByIds(supabase, [payload.contactId])
     const email = contacts[0]?.email?.trim()
 
-    return page(renderUnsubscribePageHtml({ kind: 'confirm', email }))
+    return page(renderUnsubscribePageHtml({ kind: 'confirm', email }, nonce))
   } catch {
-    return page(renderUnsubscribePageHtml({ kind: 'invalid' }), 400)
+    return page(renderUnsubscribePageHtml({ kind: 'invalid' }, nonce), 400)
   }
 }
 
 /** Performs the opt-out. Idempotent — repeat POSTs are safe. */
-export async function POST(_request: Request, context: RouteContext) {
+export async function POST(request: Request, context: RouteContext) {
+  const nonce = request.headers.get('x-nonce') ?? undefined
   try {
     const { token } = await context.params
     const payload = verifyUnsubscribeToken(token)
@@ -83,8 +85,8 @@ export async function POST(_request: Request, context: RouteContext) {
       idempotencyKey: `unsub:${payload.contactId}:${payload.campaignId}`,
     })
 
-    return page(renderUnsubscribePageHtml({ kind: 'done' }))
+    return page(renderUnsubscribePageHtml({ kind: 'done' }, nonce))
   } catch {
-    return page(renderUnsubscribePageHtml({ kind: 'invalid' }), 400)
+    return page(renderUnsubscribePageHtml({ kind: 'invalid' }, nonce), 400)
   }
 }

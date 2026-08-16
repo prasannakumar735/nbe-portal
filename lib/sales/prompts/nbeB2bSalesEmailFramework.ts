@@ -161,11 +161,9 @@ export const NBE_PERSONALISATION_RULES: readonly string[] = [
 ]
 
 export const NBE_SIGNATURE_GUIDANCE = [
-  'Close professionally, e.g. Kind regards,',
-  '[Salesperson name if known, otherwise omit personal name]',
-  'NBE Australia',
-  'Industrial Door Solutions',
-  'Include phone and website only if provided in context; keep the signature simple.',
+  'Close professionally with "Kind regards," followed by a blank line, then "NBE Australia" on its own line.',
+  'Do NOT include phone, email, or website in the sign-off — the system appends a formatted signature block automatically.',
+  'Do NOT invent or guess any contact details.',
 ].join(' ')
 
 const PRODUCT_GUIDANCE: Record<SalesProductLineSlug, { problems: string[]; focus: string[] }> = {

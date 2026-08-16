@@ -8,7 +8,8 @@ export type UnsubscribePageView =
 
 const NBE_WEBSITE = 'https://www.nbeaustralia.com.au/'
 
-function shell(inner: string, title = 'Unsubscribe — NBE Australia'): string {
+function shell(inner: string, title = 'Unsubscribe — NBE Australia', nonce?: string): string {
+  const nonceAttr = nonce ? ` nonce="${escapeHtml(nonce)}"` : ''
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -16,7 +17,7 @@ function shell(inner: string, title = 'Unsubscribe — NBE Australia'): string {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex, nofollow" />
 <title>${escapeHtml(title)}</title>
-<style>
+<style${nonceAttr}>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
 body {
@@ -159,7 +160,7 @@ body {
 </html>`
 }
 
-export function renderUnsubscribePageHtml(view: UnsubscribePageView): string {
+export function renderUnsubscribePageHtml(view: UnsubscribePageView, nonce?: string): string {
   if (view.kind === 'invalid') {
     return shell(
       `<span class="icon">&#x26A0;&#xFE0F;</span>
@@ -169,6 +170,7 @@ export function renderUnsubscribePageHtml(view: UnsubscribePageView): string {
         <a class="btn btn-keep" href="${NBE_WEBSITE}" target="_blank" rel="noopener">Visit NBE Australia</a>
       </div>`,
       'Unsubscribe — NBE Australia',
+      nonce,
     )
   }
 
@@ -181,6 +183,7 @@ export function renderUnsubscribePageHtml(view: UnsubscribePageView): string {
         <a class="btn btn-keep" href="${NBE_WEBSITE}" target="_blank" rel="noopener">Visit NBE Australia</a>
       </div>`,
       "You've been unsubscribed — NBE Australia",
+      nonce,
     )
   }
 
@@ -193,6 +196,7 @@ export function renderUnsubscribePageHtml(view: UnsubscribePageView): string {
         <a class="btn btn-keep" href="${NBE_WEBSITE}" target="_blank" rel="noopener">Visit NBE Australia</a>
       </div>`,
       'No changes — NBE Australia',
+      nonce,
     )
   }
 
@@ -214,5 +218,6 @@ export function renderUnsubscribePageHtml(view: UnsubscribePageView): string {
       </form>
     </div>`,
     'Unsubscribe — NBE Australia',
+    nonce,
   )
 }

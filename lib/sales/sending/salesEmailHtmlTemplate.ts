@@ -45,7 +45,9 @@ export const NBE_SALES_EMAIL_SIGNATURE: SalesEmailSignature = {
 
 /** Turn bare URLs in already-escaped text into anchors. */
 function linkifyEscapedText(escaped: string): string {
-  return escaped.replace(/(https?:\/\/[^\s<]+)/g, (match) => {
+  // Exclude " { } from URL characters — they never appear in valid URLs and
+  // their presence indicates JSON corruption (e.g. "} closing a raw LLM body).
+  return escaped.replace(/(https?:\/\/[^\s<"{}]+)/g, (match) => {
     const trailing = /[.,;:!?)]+$/.exec(match)?.[0] ?? ''
     const url = trailing ? match.slice(0, -trailing.length) : match
     return `<a href="${url}" style="color:${BRAND_ACCENT};text-decoration:underline;">${url}</a>${trailing}`
