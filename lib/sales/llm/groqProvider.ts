@@ -14,7 +14,9 @@ function resolveGroqModel(): string {
 function requireGroqApiKey(): string {
   const apiKey = process.env.GROQ_API_KEY?.trim()
   if (!apiKey) {
-    throw new Error('GROQ_API_KEY is not configured. Add it to .env.local for local dev.')
+    throw new Error(
+      'GROQ_API_KEY is not configured. Set it in server environment variables (Vercel → Settings → Environment Variables, or .env.local locally).',
+    )
   }
   return apiKey
 }

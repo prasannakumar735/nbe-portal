@@ -39,6 +39,10 @@ import { injectTrackingPixel } from '@/lib/sales/engagement/injectTrackingPixel'
 import { getSalesContactEngagement } from '@/lib/sales/repositories/salesContactEngagementRepository'
 import { resolveOutboundEmailWithAttachments } from '@/lib/sales/sending/resolveOutboundEmailAttachments'
 import {
+  renderSalesEmailContentHtml,
+  wrapSalesEmailDocument,
+} from '@/lib/sales/sending/salesEmailHtmlTemplate'
+import {
   isFeatureEnabled,
   loadSalesEngineSettings,
   resolveOutboundRecipient,
@@ -181,9 +185,12 @@ async function executeSendForQueueRecord(
   const { actualRecipient, safeDeliveryActive } = recipientResolution.resolved
 
   try {
+    // Render to HTML first so attachment blocks, the compliance footer, and the
+    // tracking pixel all take their HTML branch instead of appending plain-text
+    // markers to the recipient's message.
     const outbound = await resolveOutboundEmailWithAttachments(supabase, {
       generatedEmailId: email.id,
-      body: email.body,
+      body: renderSalesEmailContentHtml({ body: email.body }),
     })
 
     const attachments = isFeatureEnabled(settings, SALES_ENGINE_SETTING_KEYS.ATTACHMENT_SENDING_ENABLED)
@@ -210,16 +217,19 @@ async function executeSendForQueueRecord(
     })
     const emailNumber = (engagement?.followup_count ?? 0) + 1
 
-    let body = buildComplianceFooter({
-      body: outbound.body,
+    let body = outbound.body
+    if (isFeatureEnabled(settings, SALES_ENGINE_SETTING_KEYS.EMAIL_TRACKING_ENABLED)) {
+      body = injectTrackingPixel(body, openUrl)
+    }
+
+    body = buildComplianceFooter({
+      body,
       unsubscribeUrl,
       recipientEmail: intendedRecipient,
       presentation: resolveUnsubscribePresentation(emailNumber),
     })
 
-    if (isFeatureEnabled(settings, SALES_ENGINE_SETTING_KEYS.EMAIL_TRACKING_ENABLED)) {
-      body = injectTrackingPixel(body, openUrl)
-    }
+    body = wrapSalesEmailDocument(body, { previewText: email.subject })
 
     const result = await sendEmail({
       recipient: actualRecipient,

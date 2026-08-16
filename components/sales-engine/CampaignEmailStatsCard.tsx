@@ -76,6 +76,28 @@ export function CampaignEmailStatsCard({ stats, loading }: CampaignEmailStatsCar
           {job.failedCount > 0 ? ` · ${job.failedCount} failed` : ''}
         </p>
       ) : null}
+      {stats.recentGenerationFailures.length > 0 ? (
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50/80 p-3">
+          <p className="text-sm font-medium text-red-900">Recent generation errors</p>
+          <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto text-xs text-red-800">
+            {stats.recentGenerationFailures.map((row) => (
+              <li key={`${row.contactId}-${row.createdAt}`}>
+                <span className="font-mono text-[10px] text-red-600">{row.contactId.slice(0, 8)}…</span>
+                {row.status !== 'failed' ? (
+                  <span className="text-red-700"> ({row.status})</span>
+                ) : null}
+                {' — '}
+                {row.failureReason}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-red-700">
+            If every contact fails with Groq or API key errors, set{' '}
+            <code className="rounded bg-red-100 px-1">GROQ_API_KEY</code> on the server (e.g. Vercel
+            project env).
+          </p>
+        </div>
+      ) : null}
     </section>
   )
 }

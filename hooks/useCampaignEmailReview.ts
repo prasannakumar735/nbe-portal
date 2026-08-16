@@ -13,6 +13,14 @@ type StatsResponse = { stats: CampaignEmailStats }
 type RowsResponse = { rows: CampaignGeneratedEmailRow[] }
 type TemplatesResponse = { templates: SalesEmailTemplate[] }
 
+type GenerateEmailsResponse = {
+  job: { status: string }
+  generationJob: { success_count: number; failed_count: number } | null
+  processResult?: {
+    result?: { success_count?: number; failed_count?: number }
+  }
+}
+
 export function useCampaignEmailReview(campaignId: string) {
   const [campaign, setCampaign] = useState<SalesCampaign | null>(null)
   const [stats, setStats] = useState<CampaignEmailStats | null>(null)
@@ -84,11 +92,31 @@ export function useCampaignEmailReview(campaignId: string) {
   const generateAll = useCallback(async () => {
     setGenerating(true)
     try {
-      await salesEngineFetch(`/api/sales/campaigns/${campaignId}/generate-emails`, {
-        method: 'POST',
-        body: JSON.stringify({ processImmediately: true }),
-      })
-      toast.success('Email generation started')
+      const result = await salesEngineFetch<GenerateEmailsResponse>(
+        `/api/sales/campaigns/${campaignId}/generate-emails`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ processImmediately: true }),
+        },
+      )
+      const failed =
+        result.generationJob?.failed_count ??
+        result.processResult?.result?.failed_count ??
+        0
+      const success =
+        result.generationJob?.success_count ??
+        result.processResult?.result?.success_count ??
+        0
+      if (failed > 0 && success === 0) {
+        toast.error(
+          `Generation finished with ${failed} failure${failed === 1 ? '' : 's'} and no drafts. See “Recent generation errors” below.`,
+          { duration: 8000 },
+        )
+      } else if (failed > 0) {
+        toast.warning(`Generation finished: ${success} succeeded, ${failed} failed.`)
+      } else {
+        toast.success('Email generation finished')
+      }
       startPolling()
       await refresh()
     } catch (e) {

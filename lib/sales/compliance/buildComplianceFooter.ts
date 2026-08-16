@@ -42,17 +42,18 @@ function buildHtmlFooter(input: ComplianceFooterInput): string {
   const url = escapeHtml(input.unsubscribeUrl)
   const recipient = escapeHtml(input.recipientEmail)
   const identityLine = escapeHtml(formatSenderIdentityLine(identity))
+  const font = 'Arial,Helvetica,sans-serif'
 
   const unsubscribeBlock =
     input.presentation === 'button'
-      ? `<p style="margin:0 0 12px;"><a href="${url}" style="display:inline-block;padding:8px 14px;border:1px solid #999;border-radius:4px;color:#333;text-decoration:none;font-size:12px;">Unsubscribe</a></p>`
-      : `<p style="margin:0 0 8px;"><a href="${url}" style="color:#666;font-size:12px;">Unsubscribe from these emails</a></p>`
+      ? `<p style="margin:0 0 12px;"><a href="${url}" style="display:inline-block;padding:8px 14px;border:1px solid #c4b5fd;border-radius:4px;color:#5B21B6;text-decoration:none;font-size:12px;font-family:${font};">Unsubscribe from these emails</a></p>`
+      : `<p style="margin:0 0 10px;font-size:12px;line-height:1.6;font-family:${font};"><a href="${url}" style="color:#5B21B6;text-decoration:underline;">Unsubscribe</a> from future sales emails from NBE.</p>`
 
   return [
-    `<div ${COMPLIANCE_FOOTER_MARKER}="true" style="margin-top:24px;padding-top:12px;border-top:1px solid #ddd;color:#666;font-size:12px;font-family:Arial,Helvetica,sans-serif;">`,
+    `<div ${COMPLIANCE_FOOTER_MARKER}="true" style="color:#6b7280;font-size:12px;line-height:1.6;font-family:${font};">`,
+    `<p style="margin:0 0 10px;">You received this at <strong style="color:#4b5563;">${recipient}</strong> because it is listed as a business contact address for your organisation.</p>`,
     unsubscribeBlock,
-    `<p style="margin:0 0 4px;">You received this at ${recipient} because it is listed as a business contact address for your organisation.</p>`,
-    `<p style="margin:0;">${identityLine}</p>`,
+    `<p style="margin:0;font-size:11px;color:#9ca3af;">${identityLine}</p>`,
     '</div>',
   ].join('\n')
 }

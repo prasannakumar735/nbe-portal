@@ -10,11 +10,20 @@ import type { CampaignEngagementFunnel } from '@/lib/sales/types/engagementEvent
 
 export type CampaignEmailStatusCounts = Record<SalesGeneratedEmailStatus, number>
 
+export type CampaignGenerationFailureSummary = {
+  contactId: string
+  status: string
+  failureReason: string
+  createdAt: string
+}
+
 export type CampaignEmailStats = {
   campaignId: string
   audienceContacts: number
   latestByStatus: CampaignEmailStatusCounts
   withoutDraft: number
+  /** Latest failed generation attempts (for debugging 0-success batches). */
+  recentGenerationFailures: CampaignGenerationFailureSummary[]
   generationJob: {
     id: string
     status: string
@@ -67,9 +76,22 @@ export async function getCampaignEmailStats(
   const logs = await listSalesGenerationLogs(supabase, { campaignId, limit: 500 })
   let promptTokens = 0
   let completionTokens = 0
+  const recentGenerationFailures: CampaignGenerationFailureSummary[] = []
   for (const log of logs) {
     promptTokens += log.prompt_tokens
     completionTokens += log.completion_tokens
+    if (
+      log.status !== 'success' &&
+      log.failure_reason?.trim() &&
+      recentGenerationFailures.length < 12
+    ) {
+      recentGenerationFailures.push({
+        contactId: log.contact_id,
+        status: log.status,
+        failureReason: log.failure_reason.trim(),
+        createdAt: log.created_at,
+      })
+    }
   }
 
   const queueRows = await listSalesEmailSendQueue(supabase, { campaignId, limit: 500 })
@@ -89,6 +111,7 @@ export async function getCampaignEmailStats(
     audienceContacts: campaign.total_contacts,
     latestByStatus,
     withoutDraft,
+    recentGenerationFailures,
     generationJob: activeJob
       ? {
           id: activeJob.id,

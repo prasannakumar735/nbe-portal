@@ -28,27 +28,33 @@ export function enrichEmailBodyWithAttachments(input: {
 
   const lines: string[] = []
   if (htmlMode && images.length > 0) {
+    lines.push(
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 20px;background-color:#f8f7fb;border:1px solid #e5e7eb;border-radius:8px;">',
+      '<tr><td style="padding:16px;">',
+      '<p style="margin:0 0 10px;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#6b7280;font-family:Arial,Helvetica,sans-serif;">Product brochure</p>',
+    )
     for (const img of images) {
       const cid = img.contentId ?? buildOutboundAttachmentContentId(img.attachmentRowId ?? img.fileName)
       lines.push(
-        `<p><img src="cid:${escapeHtml(cid)}" alt="${escapeHtml(img.fileName)}" style="max-width:100%;height:auto;" /></p>`,
+        `<img src="cid:${escapeHtml(cid)}" alt="NBE product brochure" width="536" style="display:block;width:100%;max-width:536px;height:auto;border:0;border-radius:4px;" />`,
       )
     }
+    lines.push('</td></tr></table>')
   }
 
   if (pdfs.length > 0) {
     if (htmlMode) {
-      lines.push('<p><strong>Brochures</strong></p><ul>')
+      lines.push(
+        '<p style="margin:0 0 12px;font-size:13px;color:#374151;font-family:Arial,Helvetica,sans-serif;">Further product information is attached as a PDF brochure.</p>',
+      )
       for (const pdf of pdfs) {
         const url = pdfLinkByName.get(pdf.fileName)
-        const label = escapeHtml(pdf.fileName)
         if (url) {
-          lines.push(`<li>Attached: <a href="${escapeHtml(url)}">${label}</a></li>`)
-        } else {
-          lines.push(`<li>Attached: ${label}</li>`)
+          lines.push(
+            `<p style="margin:0 0 12px;"><a href="${escapeHtml(url)}" style="display:inline-block;padding:10px 16px;background-color:#5B21B6;color:#ffffff;text-decoration:none;border-radius:4px;font-size:13px;font-family:Arial,Helvetica,sans-serif;">Download brochure (PDF)</a></p>`,
+          )
         }
       }
-      lines.push('</ul>')
     }
   }
 
@@ -67,5 +73,5 @@ export function enrichEmailBodyWithAttachments(input: {
   if (lines.length === 0) return body
 
   const block = lines.join('\n')
-  return `${body}\n<hr />\n<div data-nbe-attachments="true">\n${block}\n</div>`
+  return `${body}\n<div data-nbe-attachments="true" style="margin-top:8px;">\n${block}\n</div>`
 }

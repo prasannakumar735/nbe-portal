@@ -45,6 +45,10 @@ function normalizeFailureReason(raw: string): string {
 function messageFromError(error: unknown): string {
   if (error instanceof Error) return error.message
   if (typeof error === 'string') return error
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message: unknown }).message
+    if (typeof message === 'string' && message.trim()) return message
+  }
   try {
     return JSON.stringify(error)
   } catch {

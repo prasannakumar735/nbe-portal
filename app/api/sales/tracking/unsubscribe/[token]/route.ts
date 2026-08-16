@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { renderUnsubscribePageHtml } from '@/lib/sales/compliance/unsubscribePageHtml'
 import { recordCampaignEngagementEvent } from '@/lib/sales/engagement/campaignEngagementService'
 import { verifyUnsubscribeToken } from '@/lib/sales/engagement/engagementTrackingToken'
 import { addSalesEmailSuppression } from '@/lib/sales/repositories/salesEmailSuppressionRepository'
@@ -9,28 +10,8 @@ export const runtime = 'nodejs'
 
 type RouteContext = { params: Promise<{ token: string }> }
 
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
 function page(bodyHtml: string, status = 200): NextResponse {
-  const html = [
-    '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" />',
-    '<meta name="viewport" content="width=device-width, initial-scale=1" />',
-    '<meta name="robots" content="noindex, nofollow" />',
-    '<title>Unsubscribe — NBE</title>',
-    '<style>body{font-family:Arial,Helvetica,sans-serif;max-width:34rem;margin:4rem auto;padding:0 1.25rem;color:#222;line-height:1.5}',
-    'button{font-size:1rem;padding:.7rem 1.2rem;border:0;border-radius:4px;background:#b3271e;color:#fff;cursor:pointer}',
-    'p{margin:0 0 1rem}small{color:#666}</style></head><body>',
-    bodyHtml,
-    '</body></html>',
-  ].join('')
-
-  return new NextResponse(html, {
+  return new NextResponse(bodyHtml, {
     status,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
@@ -57,20 +38,9 @@ export async function GET(_request: Request, context: RouteContext) {
     const contacts = await listSalesContactsByIds(supabase, [payload.contactId])
     const email = contacts[0]?.email?.trim()
 
-    return page(
-      [
-        '<h1>Unsubscribe</h1>',
-        email
-          ? `<p>Stop receiving sales emails from NBE at <strong>${escapeHtml(email)}</strong>?</p>`
-          : '<p>Stop receiving sales emails from NBE?</p>',
-        `<form method="POST" action="">`,
-        '<button type="submit">Yes, unsubscribe me</button>',
-        '</form>',
-        '<p><small>You can close this page if you did not mean to unsubscribe.</small></p>',
-      ].join(''),
-    )
+    return page(renderUnsubscribePageHtml({ kind: 'confirm', email }))
   } catch {
-    return page('<h1>Unsubscribe</h1><p>This unsubscribe link is not valid.</p>', 400)
+    return page(renderUnsubscribePageHtml({ kind: 'invalid' }), 400)
   }
 }
 
@@ -105,14 +75,8 @@ export async function POST(_request: Request, context: RouteContext) {
       idempotencyKey: `unsub:${payload.contactId}:${payload.campaignId}`,
     })
 
-    return page(
-      [
-        '<h1>You have been unsubscribed</h1>',
-        '<p>You will not receive further sales emails from NBE.</p>',
-        '<p><small>NBE Australia Pty Ltd — 22A Humeside Drive, Campbellfield VIC 3061</small></p>',
-      ].join(''),
-    )
+    return page(renderUnsubscribePageHtml({ kind: 'done' }))
   } catch {
-    return page('<h1>Unsubscribe</h1><p>This unsubscribe link is not valid.</p>', 400)
+    return page(renderUnsubscribePageHtml({ kind: 'invalid' }), 400)
   }
 }
