@@ -4,7 +4,7 @@ import type { GeneratedEmailResult, LLMProvider } from '@/lib/sales/llm/llmProvi
 import { SALES_EMAIL_GENERATION_SYSTEM_PROMPT } from '@/lib/sales/llm/emailGenerationSystemPrompt'
 import { parseLlmEmailResponse } from '@/lib/sales/llm/parseLlmEmailResponse'
 
-const DEFAULT_GROQ_MODEL = 'llama-3.3-70b-versatile'
+const DEFAULT_GROQ_MODEL = 'llama-3.1-8b-instant'
 
 function resolveGroqModel(): string {
   const fromEnv = process.env.GROQ_MODEL?.trim()
