@@ -25,6 +25,13 @@ import {
   markBounceDetected,
   onOutboundEmailSent,
 } from '@/lib/sales/followup/engagementTracker'
+import {
+  buildComplianceFooter,
+  resolveUnsubscribePresentation,
+} from '@/lib/sales/compliance/buildComplianceFooter'
+import { buildEngagementTrackingUrls } from '@/lib/sales/engagement/engagementTrackingToken'
+import { injectTrackingPixel } from '@/lib/sales/engagement/injectTrackingPixel'
+import { getSalesContactEngagement } from '@/lib/sales/repositories/salesContactEngagementRepository'
 import { resolveOutboundEmailWithAttachments } from '@/lib/sales/sending/resolveOutboundEmailAttachments'
 import {
   isFeatureEnabled,
@@ -164,12 +171,44 @@ async function executeSendForQueueRecord(
       ? outbound.attachments
       : []
 
+    // Mandatory unsubscribe facility + sender identification on every message
+    // (Spam Act 2003 s17/s18). Not behind a feature flag — only the open pixel is.
+    const { openUrl, unsubscribeUrl } = buildEngagementTrackingUrls({
+      campaignId: queue.campaign_id,
+      contactId: queue.contact_id,
+      generatedEmailId: email.id,
+    })
+
+    // Sequence position drives only how prominent the unsubscribe control is,
+    // never whether it exists. followup_count is incremented by
+    // onOutboundEmailSent, which is itself gated on EMAIL_TRACKING_ENABLED — so
+    // with tracking off this stays at 1 and every email uses the discreet link.
+    // That degrades safely (link is always compliant); revisit if the counter
+    // moves out from behind the tracking flag.
+    const engagement = await getSalesContactEngagement(supabase, {
+      contact_id: queue.contact_id,
+      campaign_id: queue.campaign_id,
+    })
+    const emailNumber = (engagement?.followup_count ?? 0) + 1
+
+    let body = buildComplianceFooter({
+      body: outbound.body,
+      unsubscribeUrl,
+      recipientEmail: intendedRecipient,
+      presentation: resolveUnsubscribePresentation(emailNumber),
+    })
+
+    if (isFeatureEnabled(settings, SALES_ENGINE_SETTING_KEYS.EMAIL_TRACKING_ENABLED)) {
+      body = injectTrackingPixel(body, openUrl)
+    }
+
     const result = await sendEmail({
       recipient: actualRecipient,
       subject: email.subject,
-      body: outbound.body,
+      body,
       provider: queue.provider,
       attachments,
+      unsubscribeUrl,
     })
 
     await createSalesEmailDeliveryLog(supabase, {

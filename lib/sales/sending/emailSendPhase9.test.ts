@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { classifyDeliveryFailure } from '@/lib/sales/sending/deliveryFailureClassifier'
+import { sendEmail } from '@/lib/sales/sending/emailSenderAdapter'
 import {
   acquireEmailSendRateLimit,
   getEmailSendRateLimitPerMinute,
@@ -24,6 +25,32 @@ describe('classifyDeliveryFailure (Graph)', () => {
     )
     assert.equal(result.status, 'provider_error')
     assert.equal(result.queueStatus, 'failed')
+  })
+})
+
+describe('sendEmail compliance gate', () => {
+  const base = {
+    recipient: 'ops@warehouse.example.com',
+    subject: 'Cold store strip curtains',
+    provider: 'microsoft365',
+  }
+
+  it('refuses to send without an unsubscribe URL', async () => {
+    await assert.rejects(
+      sendEmail({ ...base, body: 'Hello there', unsubscribeUrl: '' }),
+      /unsubscribe URL is required/i,
+    )
+  })
+
+  it('refuses to send when the body does not contain the unsubscribe link', async () => {
+    await assert.rejects(
+      sendEmail({
+        ...base,
+        body: 'Hello there — no footer here',
+        unsubscribeUrl: 'https://portal.example.com/api/sales/tracking/unsubscribe/tok.sig',
+      }),
+      /compliance footer missing/i,
+    )
   })
 })
 

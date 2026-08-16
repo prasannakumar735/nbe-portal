@@ -1,21 +1,10 @@
 import { isImageSalesEmailAttachmentMimeType } from '@/lib/sales/constants/salesEmailAttachmentLimits'
+import { escapeHtml, looksLikeHtml } from '@/lib/sales/sending/emailBodyFormat'
 import type { OutboundEmailAttachmentInput } from '@/lib/sales/sending/emailSenderAdapter.types'
 
 export type AttachmentBodyLink = {
   fileName: string
   signedUrl: string | null
-}
-
-function looksLikeHtml(body: string): boolean {
-  return /<\/?[a-z][\s\S]*>/i.test(body)
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
 }
 
 export function buildOutboundAttachmentContentId(attachmentRowId: string): string {

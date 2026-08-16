@@ -25,6 +25,16 @@ export type GraphSendMailOptions = {
   /** Request timeout ms (default 30000). */
   timeoutMs?: number
   attachments?: GraphSendMailAttachment[]
+  /**
+   * Unsubscribe URL for the RFC 2369 List-Unsubscribe header.
+   *
+   * Graph rejects standard header names in `internetMessageHeaders` (they must
+   * start with `x-`), so this is set via the MAPI named property PidTagListUnsubscribe
+   * (`String 0x1045`) instead. Note this yields List-Unsubscribe only —
+   * List-Unsubscribe-Post (RFC 8058 one-click) is not settable through Graph's
+   * JSON sendMail and would require sending full MIME.
+   */
+  listUnsubscribeUrl?: string
 }
 
 export type GraphSendMailResult = {
@@ -60,8 +70,17 @@ export function buildGraphFileAttachmentsPayload(
 export async function sendMailViaGraphWithResult(
   options: GraphSendMailOptions,
 ): Promise<GraphSendMailResult> {
-  const { to, subject, bodyText, bodyHtml, sendAsUserId, correlationId, timeoutMs, attachments } =
-    options
+  const {
+    to,
+    subject,
+    bodyText,
+    bodyHtml,
+    sendAsUserId,
+    correlationId,
+    timeoutMs,
+    attachments,
+    listUnsubscribeUrl,
+  } = options
 
   const userId = resolveGraphMailboxUserId(sendAsUserId)
 
@@ -105,6 +124,15 @@ export async function sendMailViaGraphWithResult(
   if (attachments && attachments.length > 0) {
     const message = payload.message as Record<string, unknown>
     message.attachments = buildGraphFileAttachmentsPayload(attachments)
+  }
+
+  const unsubscribeUrl = listUnsubscribeUrl?.trim()
+  if (unsubscribeUrl) {
+    const message = payload.message as Record<string, unknown>
+    message.singleValueExtendedProperties = [
+      // PidTagListUnsubscribe (PtypString). RFC 2369 requires angle brackets.
+      { id: 'String 0x1045', value: `<${unsubscribeUrl}>` },
+    ]
   }
 
   const startedAt = Date.now()

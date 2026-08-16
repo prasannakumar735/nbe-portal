@@ -1,9 +1,6 @@
 import { sendMailViaGraphWithResult } from '@/lib/graph/sendMail'
+import { looksLikeHtml } from '@/lib/sales/sending/emailBodyFormat'
 import type { SendEmailInput, SendEmailResult } from '@/lib/sales/sending/emailSenderAdapter.types'
-
-function looksLikeHtml(body: string): boolean {
-  return /<\/?[a-z][\s\S]*>/i.test(body)
-}
 
 /** Send a single outbound sales email via Microsoft 365 (Graph sendMail). */
 export async function sendOutboundEmailViaMicrosoft365(
@@ -25,6 +22,7 @@ export async function sendOutboundEmailViaMicrosoft365(
     bodyHtml: looksLikeHtml(body) ? body : undefined,
     bodyText: looksLikeHtml(body) ? undefined : body,
     attachments: graphAttachments.length > 0 ? graphAttachments : undefined,
+    listUnsubscribeUrl: input.unsubscribeUrl,
     timeoutMs:
       graphAttachments.length > 0
         ? Number(process.env.SALES_EMAIL_SEND_GRAPH_ATTACHMENTS_TIMEOUT_MS ?? 60_000)

@@ -16,6 +16,12 @@ export type SendEmailInput = {
   body: string
   provider: string
   attachments?: OutboundEmailAttachmentInput[]
+  /**
+   * Unsubscribe URL for the List-Unsubscribe header. Required: every outbound
+   * commercial message must carry a functional unsubscribe facility, and the
+   * adapter refuses to send without it.
+   */
+  unsubscribeUrl: string
 }
 
 export type SendEmailResult = {
