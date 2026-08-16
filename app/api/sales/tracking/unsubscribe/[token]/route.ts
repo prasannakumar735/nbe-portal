@@ -28,11 +28,19 @@ function page(bodyHtml: string, status = 200): NextResponse {
  * Mail security scanners (Outlook SafeLinks, antivirus gateways) prefetch links
  * in email, so a GET that mutated state would silently unsubscribe contacts who
  * never clicked. The button below POSTs to perform the opt-out.
+ *
+ * ?cancel=1 shows the "no changes made" confirmation when the user clicks
+ * "Keep me subscribed" — still a GET so no state is mutated.
  */
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   try {
     const { token } = await context.params
     const payload = verifyUnsubscribeToken(token)
+
+    const url = new URL(request.url)
+    if (url.searchParams.get('cancel') === '1') {
+      return page(renderUnsubscribePageHtml({ kind: 'cancelled' }))
+    }
 
     const supabase = createServiceRoleClient()
     const contacts = await listSalesContactsByIds(supabase, [payload.contactId])
