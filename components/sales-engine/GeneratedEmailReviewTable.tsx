@@ -11,6 +11,17 @@ const STATUS_STYLES: Record<string, string> = {
   sent: 'bg-slate-200 text-slate-800',
 }
 
+/** Strip raw-JSON subject stored by early-generation emails. */
+function displaySubject(subject: string): string {
+  const s = subject.trim()
+  if (!s.startsWith('{')) return s
+  try {
+    const parsed = JSON.parse(s) as Record<string, unknown>
+    if (typeof parsed.subject === 'string' && parsed.subject.trim()) return parsed.subject.trim()
+  } catch { /* not JSON */ }
+  return s
+}
+
 function engagementLabels(row: CampaignGeneratedEmailRow): string {
   const e = row.engagement
   if (!e) return '—'
@@ -104,7 +115,7 @@ export function GeneratedEmailReviewTable({
                   </div>
                 ) : null}
                   </td>
-                  <td className="max-w-xs px-2 py-3 text-slate-800">{row.subject}</td>
+                  <td className="max-w-xs px-2 py-3 text-slate-800">{displaySubject(row.subject)}</td>
                   <td className="px-2 py-3">
                     <span
                       className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold uppercase ${STATUS_STYLES[row.status] ?? STATUS_STYLES.draft}`}

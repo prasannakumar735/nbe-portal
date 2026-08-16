@@ -258,7 +258,7 @@ async function executeSendForQueueRecord(
     const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim()
     body = wrapSalesEmailDocument(body, {
       previewText: subject,
-      logoUrl: appUrl ? `${appUrl}/nbe-logo.png` : undefined,
+      logoUrl: appUrl ? `${appUrl}/NBE_LOGO_BK_PL.png` : undefined,
     })
 
     const result = await sendEmail({
