@@ -51,8 +51,8 @@ function resolveNotificationPriority(
     if (mapped === 'low') priority = 'low'
   }
 
-  if (urgency === 'high' && priority !== 'high') {
-    return 'medium'
+  if (urgency === 'high') {
+    return 'high'
   }
 
   return priority
