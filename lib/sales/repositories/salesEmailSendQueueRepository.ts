@@ -27,6 +27,7 @@ function mapRow(row: Record<string, unknown>): SalesEmailSendQueue {
     scheduled_at: String(row.scheduled_at),
     sent_at: row.sent_at != null ? String(row.sent_at) : null,
     created_at: String(row.created_at),
+    updated_at: String(row.updated_at ?? row.created_at),
   }
 }
 

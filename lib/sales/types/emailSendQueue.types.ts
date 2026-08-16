@@ -15,6 +15,7 @@ export type SalesEmailSendQueue = {
   scheduled_at: string
   sent_at: string | null
   created_at: string
+  updated_at: string
 }
 
 export type SalesEmailSendQueueInsert = {
