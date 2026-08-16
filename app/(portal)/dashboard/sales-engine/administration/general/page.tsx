@@ -1,5 +1,5 @@
 import { SalesEngineAdminGeneralPage } from '@/components/sales-engine/admin/SalesEngineAdminGeneralPage'
 
-export default function Page() {
+export default function SalesEngineAdministrationGeneralPage() {
   return <SalesEngineAdminGeneralPage />
 }
