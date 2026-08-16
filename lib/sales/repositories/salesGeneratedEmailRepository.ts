@@ -374,16 +374,16 @@ export async function bulkApproveSalesGeneratedEmails(
   supabase: SupabaseClient,
   emailIds: string[],
   reviewedBy: string,
-): Promise<{ succeeded: SalesGeneratedEmail[]; failed: { id: string; reason: string }[] }> {
+): Promise<{ succeeded: SalesGeneratedEmail[]; failed: { emailId: string; reason: string }[] }> {
   const succeeded: SalesGeneratedEmail[] = []
-  const failed: { id: string; reason: string }[] = []
+  const failed: { emailId: string; reason: string }[] = []
 
   for (const id of emailIds) {
     try {
       succeeded.push(await approveSalesGeneratedEmail(supabase, id, reviewedBy))
     } catch (error) {
       failed.push({
-        id,
+        emailId: id,
         reason: error instanceof Error ? error.message : 'Approve failed.',
       })
     }
@@ -396,16 +396,16 @@ export async function bulkRejectSalesGeneratedEmails(
   supabase: SupabaseClient,
   emailIds: string[],
   reviewedBy: string,
-): Promise<{ succeeded: SalesGeneratedEmail[]; failed: { id: string; reason: string }[] }> {
+): Promise<{ succeeded: SalesGeneratedEmail[]; failed: { emailId: string; reason: string }[] }> {
   const succeeded: SalesGeneratedEmail[] = []
-  const failed: { id: string; reason: string }[] = []
+  const failed: { emailId: string; reason: string }[] = []
 
   for (const id of emailIds) {
     try {
       succeeded.push(await rejectSalesGeneratedEmail(supabase, id, reviewedBy))
     } catch (error) {
       failed.push({
-        id,
+        emailId: id,
         reason: error instanceof Error ? error.message : 'Reject failed.',
       })
     }
