@@ -247,13 +247,53 @@ export async function cancelSalesEmailSendQueueItem(
   return mapRow(data as Record<string, unknown>)
 }
 
-/** Reset `sending` rows to `queued` (e.g. after worker timeout). Returns count updated. */
+/**
+ * Reset `sending` rows to `queued` after they've been stuck for more than
+ * STUCK_THRESHOLD_MINUTES. Without this age guard, two overlapping dispatcher
+ * invocations (cron + manual click) would reset each other's in-flight row and
+ * send the same email twice.
+ *
+ * We only requeue when there is no `success` delivery log for the row — a row
+ * can stay in `sending` if the worker wrote the log and then crashed before
+ * calling markSent; in that case we must NOT requeue.
+ */
+const STUCK_THRESHOLD_MINUTES = 15
+
 export async function requeueStuckSalesEmailSendQueueItems(
   supabase: SupabaseClient,
 ): Promise<number> {
+  const cutoff = new Date(Date.now() - STUCK_THRESHOLD_MINUTES * 60 * 1000).toISOString()
+
+  // Fetch candidate rows (stuck in `sending` for long enough)
+  const { data: candidates, error: fetchError } = await supabase
+    .from(TABLE)
+    .select('id')
+    .eq('status', 'sending')
+    .lt('updated_at', cutoff)
+  if (fetchError) throw fetchError
+  if (!candidates || candidates.length === 0) return 0
+
+  const ids = (candidates as { id: string }[]).map((r) => r.id)
+
+  // Exclude rows that already have a successful delivery log (worker sent but
+  // crashed before updating queue status — do not re-send).
+  const { data: sentLogs, error: logError } = await supabase
+    .from('sales_email_delivery_log')
+    .select('queue_id')
+    .in('queue_id', ids)
+    .eq('status', 'success')
+  if (logError) throw logError
+
+  const alreadySentIds = new Set(
+    (sentLogs ?? []).map((r) => (r as { queue_id: string }).queue_id),
+  )
+  const requeueIds = ids.filter((id) => !alreadySentIds.has(id))
+  if (requeueIds.length === 0) return 0
+
   const { data, error } = await supabase
     .from(TABLE)
     .update({ status: 'queued' })
+    .in('id', requeueIds)
     .eq('status', 'sending')
     .select('id')
   if (error) throw error

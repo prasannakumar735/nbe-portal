@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { ZodError } from 'zod'
 import { recordCampaignEngagementEvent } from '@/lib/sales/engagement/campaignEngagementService'
-import { verifyEngagementTrackingToken } from '@/lib/sales/engagement/engagementTrackingToken'
+import { verifyClickToken } from '@/lib/sales/engagement/engagementTrackingToken'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { engagementTrackingClickQuerySchema } from '@/lib/sales/validators/engagement.validators'
 
@@ -12,11 +12,13 @@ type RouteContext = { params: Promise<{ token: string }> }
 export async function GET(request: Request, context: RouteContext) {
   try {
     const { token } = await context.params
-    const payload = verifyEngagementTrackingToken(token)
     const { searchParams } = new URL(request.url)
     const { url } = engagementTrackingClickQuerySchema.parse({
       url: searchParams.get('url'),
     })
+    // Verifies signature AND that the destination URL matches the hash signed
+    // into the token, preventing open redirect.
+    const payload = verifyClickToken(token, url)
 
     const supabase = createServiceRoleClient()
     await recordCampaignEngagementEvent(supabase, {

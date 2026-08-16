@@ -72,8 +72,12 @@ export function buildSalesEngineSettingsSnapshot(
 ): SalesEngineSettings {
   return {
     salesEngineEnabled: asBoolean(raw[SALES_ENGINE_SETTING_KEYS.SALES_ENGINE_ENABLED], true),
-    campaignSendingEnabled: asBoolean(raw[SALES_ENGINE_SETTING_KEYS.CAMPAIGN_SENDING_ENABLED], true),
-    safeDeliveryEnabled: asBoolean(raw[SALES_ENGINE_SETTING_KEYS.SAFE_DELIVERY_ENABLED], false),
+    // Default false until an admin explicitly enables sending — the system has
+    // not yet sent production mail and fail-open here would blast real prospects.
+    campaignSendingEnabled: asBoolean(raw[SALES_ENGINE_SETTING_KEYS.CAMPAIGN_SENDING_ENABLED], false),
+    // Default true so safe delivery (redirect-to-test-mailbox) is on until an
+    // admin explicitly disables it and configures a live send mailbox.
+    safeDeliveryEnabled: asBoolean(raw[SALES_ENGINE_SETTING_KEYS.SAFE_DELIVERY_ENABLED], true),
     safeDeliveryRedirectEmail: asString(
       raw[SALES_ENGINE_SETTING_KEYS.SAFE_DELIVERY_REDIRECT_EMAIL],
       '',

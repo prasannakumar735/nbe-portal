@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 
 /**
  * `engagement` tokens expire (open/click pixels are only interesting for a
@@ -16,6 +16,13 @@ export type EngagementTrackingPayload = {
   exp?: number
   /** Absent on tokens issued before purpose scoping; treated as 'engagement'. */
   purpose?: EngagementTokenPurpose
+  /**
+   * SHA-256 hex digest of the destination URL. Present on click tokens only.
+   * The click route verifies the received `?url=` matches this hash to prevent
+   * open redirect — any recipient holds a valid engagement token and without
+   * this check they can redirect to any URL.
+   */
+  urlHash?: string
 }
 
 function secret(): string {
@@ -115,4 +122,49 @@ export function buildEngagementTrackingUrls(payload: TrackingTokenSubject): {
     openUrl: `${base}/api/sales/tracking/open/${signEngagementTrackingToken(payload)}`,
     unsubscribeUrl: `${base}/api/sales/tracking/unsubscribe/${signUnsubscribeToken(payload)}`,
   }
+}
+
+/**
+ * Build a click-tracking redirect URL.
+ *
+ * The destination URL is hashed into the token payload so the click route can
+ * reject requests where `?url=` was tampered with (open redirect). Without
+ * this, every recipient holds a valid engagement token and can redirect any
+ * link to any destination.
+ */
+export function buildClickTrackingUrl(
+  payload: TrackingTokenSubject,
+  destinationUrl: string,
+): string {
+  const base = appBaseUrl()
+  const urlHash = createHash('sha256').update(destinationUrl).digest('hex')
+  const full: EngagementTrackingPayload = {
+    ...payload,
+    purpose: 'engagement',
+    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 90,
+    urlHash,
+  }
+  const body = encodePayload(full)
+  const sig = createHmac('sha256', secret()).update(body).digest('base64url')
+  const token = `${body}.${sig}`
+  const encoded = encodeURIComponent(destinationUrl)
+  return `${base}/api/sales/tracking/click/${token}?url=${encoded}`
+}
+
+/**
+ * Verify a click token and confirm the received destination URL matches what
+ * was signed into the token. Throws if they don't match.
+ */
+export function verifyClickToken(
+  token: string,
+  destinationUrl: string,
+): EngagementTrackingPayload {
+  const payload = verifyEngagementTrackingToken(token)
+  if (payload.urlHash) {
+    const actual = createHash('sha256').update(destinationUrl).digest('hex')
+    if (actual !== payload.urlHash) {
+      throw new Error('Click token: destination URL does not match signed hash.')
+    }
+  }
+  return payload
 }
