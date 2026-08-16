@@ -33,19 +33,24 @@ function shell(inner: string): string {
     overflow: hidden;
     box-shadow: 0 8px 24px rgba(17, 24, 39, 0.06);
   }
+  .logo-bar {
+    background: #fff;
+    padding: 1rem 1.5rem 0.85rem;
+    border-bottom: 4px solid #5B21B6;
+  }
+  .logo-bar img { height: 40px; width: auto; display: block; }
   .header {
     background: #5B21B6;
-    padding: 1.35rem 1.5rem;
+    padding: 0.85rem 1.5rem;
     color: #fff;
   }
   .header p { margin: 0; }
   .kicker {
-    font-size: 0.7rem;
-    letter-spacing: 0.16em;
-    font-weight: 700;
-    color: #ddd6fe;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    color: #e9d5ff;
   }
-  .title { margin-top: 0.35rem; font-size: 1.15rem; font-weight: 700; }
   .body { padding: 1.5rem 1.5rem 1.75rem; }
   h1 { margin: 0 0 0.75rem; font-size: 1.25rem; }
   p { margin: 0 0 1rem; color: #4b5563; }
@@ -68,9 +73,11 @@ function shell(inner: string): string {
 <body>
   <div class="wrap">
     <div class="card">
+      <div class="logo-bar">
+        <img src="/nbe-logo.png" alt="NBE Australia" />
+      </div>
       <div class="header">
-        <p class="kicker">NBE AUSTRALIA</p>
-        <p class="title">Sales communications</p>
+        <p class="kicker">Industrial rapid doors &amp; PVC door systems</p>
       </div>
       <div class="body">
         ${inner}

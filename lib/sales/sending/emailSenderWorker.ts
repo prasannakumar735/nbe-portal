@@ -39,6 +39,7 @@ import { injectTrackingPixel } from '@/lib/sales/engagement/injectTrackingPixel'
 import { getSalesContactEngagement } from '@/lib/sales/repositories/salesContactEngagementRepository'
 import { resolveOutboundEmailWithAttachments } from '@/lib/sales/sending/resolveOutboundEmailAttachments'
 import {
+  appendSalesEmailSignature,
   renderSalesEmailContentHtml,
   wrapSalesEmailDocument,
 } from '@/lib/sales/sending/salesEmailHtmlTemplate'
@@ -54,6 +55,24 @@ export type EmailSenderWorkerResult = {
   /** `suppressed` = recipient is on the do-not-email list; not an error. */
   outcome: 'sent' | 'failed' | 'bounced' | 'retry' | 'skipped' | 'suppressed'
   errorMessage?: string
+}
+
+/**
+ * Some early-generation emails were stored with the raw LLM JSON response as
+ * the subject (and body). Extract the real values if that's the case.
+ */
+function extractEmailFields(raw: { subject: string; body: string }): { subject: string; body: string } {
+  const s = raw.subject.trim()
+  if (!s.startsWith('{')) return raw
+  try {
+    const parsed = JSON.parse(s) as Record<string, unknown>
+    const subject = typeof parsed.subject === 'string' ? parsed.subject.trim() : ''
+    const body = typeof parsed.body === 'string' ? parsed.body.trim() : ''
+    if (subject && body) return { subject, body }
+  } catch {
+    // not JSON — use as-is
+  }
+  return raw
 }
 
 export async function processEmailSendQueueItem(
@@ -185,12 +204,16 @@ async function executeSendForQueueRecord(
   const { actualRecipient, safeDeliveryActive } = recipientResolution.resolved
 
   try {
-    // Render to HTML first so attachment blocks, the compliance footer, and the
-    // tracking pixel all take their HTML branch instead of appending plain-text
-    // markers to the recipient's message.
+    const { subject, body: rawBody } = extractEmailFields({
+      subject: email.subject,
+      body: email.body,
+    })
+
+    // Render body text to HTML without signature so brochure images can be
+    // injected between the body paragraphs and the sign-off.
     const outbound = await resolveOutboundEmailWithAttachments(supabase, {
       generatedEmailId: email.id,
-      body: renderSalesEmailContentHtml({ body: email.body }),
+      body: renderSalesEmailContentHtml({ body: rawBody, signature: null }),
     })
 
     const attachments = isFeatureEnabled(settings, SALES_ENGINE_SETTING_KEYS.ATTACHMENT_SENDING_ENABLED)
@@ -217,7 +240,10 @@ async function executeSendForQueueRecord(
     })
     const emailNumber = (engagement?.followup_count ?? 0) + 1
 
-    let body = outbound.body
+    // Append signature AFTER attachments so brochure images sit between
+    // the body content and the sign-off.
+    let body = appendSalesEmailSignature(outbound.body)
+
     if (isFeatureEnabled(settings, SALES_ENGINE_SETTING_KEYS.EMAIL_TRACKING_ENABLED)) {
       body = injectTrackingPixel(body, openUrl)
     }
@@ -229,11 +255,15 @@ async function executeSendForQueueRecord(
       presentation: resolveUnsubscribePresentation(emailNumber),
     })
 
-    body = wrapSalesEmailDocument(body, { previewText: email.subject })
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim()
+    body = wrapSalesEmailDocument(body, {
+      previewText: subject,
+      logoUrl: appUrl ? `${appUrl}/nbe-logo.png` : undefined,
+    })
 
     const result = await sendEmail({
       recipient: actualRecipient,
-      subject: email.subject,
+      subject,
       body,
       provider: queue.provider,
       attachments,

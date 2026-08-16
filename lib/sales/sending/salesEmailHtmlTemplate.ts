@@ -95,12 +95,14 @@ function renderSignature(signature: SalesEmailSignature, includeSignOff: boolean
 
 export type RenderSalesEmailContentInput = {
   body: string
+  /** Pass `null` to omit the signature (caller will append it after attachments). */
   signature?: SalesEmailSignature | null
 }
 
 /**
  * Convert the generated plain-text body into styled HTML paragraphs.
  * Bodies that are already HTML are returned untouched.
+ * Pass `signature: null` when you want to inject attachments before the sign-off.
  */
 export function renderSalesEmailContentHtml(input: RenderSalesEmailContentInput): string {
   const body = input.body.trim()
@@ -118,11 +120,27 @@ export function renderSalesEmailContentHtml(input: RenderSalesEmailContentInput)
   return [...blocks, renderSignature(signature, !SIGN_OFF_PATTERN.test(body))].join('\n')
 }
 
+/**
+ * Append the NBE signature block to an already-rendered HTML body.
+ * Call this AFTER attachment injection so brochure images appear before sign-off.
+ */
+export function appendSalesEmailSignature(
+  html: string,
+  signature: SalesEmailSignature = NBE_SALES_EMAIL_SIGNATURE,
+): string {
+  const hasSignOff = SIGN_OFF_PATTERN.test(
+    html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+  )
+  return `${html}\n${renderSignature(signature, !hasSignOff)}`
+}
+
 export type WrapSalesEmailDocumentOptions = {
   /** Inbox preview line shown after the subject; falls back to the body opening. */
   previewText?: string
   brandName?: string
   brandTagline?: string
+  /** Absolute URL for the NBE logo image shown in the email header. */
+  logoUrl?: string
 }
 
 function derivePreviewText(innerHtml: string): string {
@@ -153,9 +171,10 @@ export function wrapSalesEmailDocument(
 ): string {
   if (innerHtml.includes(SALES_EMAIL_SHELL_MARKER)) return innerHtml
 
-  const brandName = options?.brandName?.trim() || 'NBE AUSTRALIA'
+  const brandName = options?.brandName?.trim() || 'NBE Australia'
   const brandTagline =
     options?.brandTagline?.trim() || 'Industrial rapid doors & PVC door systems'
+  const logoUrl = options?.logoUrl?.trim()
   const { main, footer } = splitSalesEmailFooter(innerHtml)
   const preview = escapeHtml(options?.previewText?.trim() || derivePreviewText(main))
 
@@ -166,6 +185,25 @@ ${footer}
           </td>
         </tr>`
     : ''
+
+  const logoRow = logoUrl
+    ? `<tr>
+          <td style="background-color:#ffffff;padding:20px 32px 16px;border-bottom:4px solid ${BRAND_ACCENT};">
+            <img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(brandName)}" height="48" style="display:block;height:48px;width:auto;max-height:48px;border:0;" />
+          </td>
+        </tr>
+        <tr>
+          <td class="nbe-header" style="background-color:${BRAND_ACCENT};background:linear-gradient(180deg, ${BRAND_ACCENT} 0%, ${BRAND_ACCENT_DARK} 100%);padding:14px 32px;">
+            <p style="margin:0;font-size:13px;color:#e9d5ff;font-family:${FONT_STACK};">${escapeHtml(brandTagline)}</p>
+          </td>
+        </tr>`
+    : `<tr>
+          <td class="nbe-header" style="background-color:${BRAND_ACCENT};background:linear-gradient(180deg, ${BRAND_ACCENT} 0%, ${BRAND_ACCENT_DARK} 100%);padding:24px 32px;">
+            <p style="margin:0;font-size:11px;letter-spacing:2px;font-weight:bold;color:#ddd6fe;font-family:${FONT_STACK};">NBE AUSTRALIA</p>
+            <p style="margin:6px 0 0;font-size:20px;font-weight:bold;letter-spacing:0.4px;color:#ffffff;font-family:${FONT_STACK};">${escapeHtml(brandName)}</p>
+            <p style="margin:6px 0 0;font-size:13px;color:#e9d5ff;font-family:${FONT_STACK};">${escapeHtml(brandTagline)}</p>
+          </td>
+        </tr>`
 
   return `<!doctype html>
 <html lang="en">
@@ -185,7 +223,7 @@ ${footer}
   @media only screen and (max-width: 620px) {
     .nbe-card { width: 100% !important; }
     .nbe-pad { padding: 24px 20px !important; }
-    .nbe-header { padding: 22px 20px !important; }
+    .nbe-header { padding: 14px 20px !important; }
   }
 </style>
 </head>
@@ -195,13 +233,7 @@ ${footer}
   <tr>
     <td align="center">
       <table role="presentation" class="nbe-card" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:#ffffff;border:1px solid ${CARD_BORDER};border-radius:10px;overflow:hidden;">
-        <tr>
-          <td class="nbe-header" style="background-color:${BRAND_ACCENT};background:linear-gradient(180deg, ${BRAND_ACCENT} 0%, ${BRAND_ACCENT_DARK} 100%);padding:24px 32px;">
-            <p style="margin:0;font-size:11px;letter-spacing:2px;font-weight:bold;color:#ddd6fe;font-family:${FONT_STACK};">NBE AUSTRALIA</p>
-            <p style="margin:6px 0 0;font-size:20px;font-weight:bold;letter-spacing:0.4px;color:#ffffff;font-family:${FONT_STACK};">${escapeHtml(brandName)}</p>
-            <p style="margin:6px 0 0;font-size:13px;color:#e9d5ff;font-family:${FONT_STACK};">${escapeHtml(brandTagline)}</p>
-          </td>
-        </tr>
+        ${logoRow}
         <tr>
           <td class="nbe-pad" style="padding:36px 32px 28px;">
 ${main}
