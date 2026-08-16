@@ -79,6 +79,7 @@ export async function POST(request: Request) {
       return fail('Validation failed', 422, error.issues)
     }
     const message = error instanceof Error ? error.message : 'Job failed'
+    console.error('[run-jobs] error:', message, error)
     return NextResponse.json({ ok: false, error: message }, { status: 500 })
   }
 }
