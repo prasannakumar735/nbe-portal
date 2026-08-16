@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
-import { isManagerOrAdminRole } from '@/lib/auth/roles'
+import { isAdmin, isManagerOrAdminRole } from '@/lib/auth/roles'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { securityLogApiForbidden, securityLogApiUnauthorized } from '@/lib/security/securityLogger'
 import { getApiSecurityContext, type SecurityRequest } from '@/lib/security/withSecurityLogging'
@@ -61,6 +61,70 @@ export async function requireManagerOrAdminApi(request?: SecurityRequest): Promi
           ip: sec.ip,
           userId: user.id,
           reason: 'not_manager_or_admin',
+          user_agent: sec.user_agent,
+          route_name: sec.route_name,
+          correlation_id: sec.correlation_id,
+        },
+        request,
+      )
+    }
+    return {
+      ok: false,
+      response: NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 }),
+    }
+  }
+
+  return { ok: true, userId: user.id, role, supabase: createServiceRoleClient() }
+}
+
+/** Confirms JWT + admin role before returning a service role client. */
+export async function requireAdminApi(request?: SecurityRequest): Promise<AuthResult> {
+  const supabase = await createServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user?.id) {
+    if (request) {
+      const path = 'nextUrl' in request ? request.nextUrl.pathname : new URL(request.url).pathname
+      const sec = getApiSecurityContext(request, `${request.method} ${path}`)
+      securityLogApiUnauthorized(
+        {
+          path: sec.path,
+          method: sec.method,
+          ip: sec.ip,
+          reason: 'no_session',
+          user_agent: sec.user_agent,
+          route_name: sec.route_name,
+          correlation_id: sec.correlation_id,
+        },
+        request,
+      )
+    }
+    return {
+      ok: false,
+      response: NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 }),
+    }
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  const role = String((profile as { role?: string } | null)?.role ?? '').trim()
+  if (!isAdmin({ role })) {
+    if (request) {
+      const path = 'nextUrl' in request ? request.nextUrl.pathname : new URL(request.url).pathname
+      const sec = getApiSecurityContext(request, `${request.method} ${path}`)
+      securityLogApiForbidden(
+        {
+          path: sec.path,
+          method: sec.method,
+          ip: sec.ip,
+          userId: user.id,
+          reason: 'not_admin',
           user_agent: sec.user_agent,
           route_name: sec.route_name,
           correlation_id: sec.correlation_id,

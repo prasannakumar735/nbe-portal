@@ -3,6 +3,14 @@
  * Requires app permission Mail.Send or delegated Mail.Send, and a user to send as.
  */
 
+export type GraphSendMailAttachment = {
+  name: string
+  contentType: string
+  contentBytes: string
+  isInline?: boolean
+  contentId?: string
+}
+
 export type GraphSendMailOptions = {
   to: string
   subject: string
@@ -12,64 +20,69 @@ export type GraphSendMailOptions = {
   bodyHtml?: string
   /** Optional; defaults to process.env.MS_GRAPH_MAIL_USER_ID or MS_ONEDRIVE_USER_ID */
   sendAsUserId?: string
+  /** Correlation id for delivery logs (Graph sendMail returns no message id). */
+  correlationId?: string
+  /** Request timeout ms (default 30000). */
+  timeoutMs?: number
+  attachments?: GraphSendMailAttachment[]
+  /**
+   * Unsubscribe URL for the RFC 2369 List-Unsubscribe header.
+   *
+   * Graph rejects standard header names in `internetMessageHeaders` (they must
+   * start with `x-`), so this is set via the MAPI named property PidTagListUnsubscribe
+   * (`String 0x1045`) instead. Note this yields List-Unsubscribe only —
+   * List-Unsubscribe-Post (RFC 8058 one-click) is not settable through Graph's
+   * JSON sendMail and would require sending full MIME.
+   */
+  listUnsubscribeUrl?: string
 }
 
-async function getGraphAccessToken(): Promise<string> {
-  if (process.env.MS_GRAPH_ACCESS_TOKEN?.trim()) {
-    return process.env.MS_GRAPH_ACCESS_TOKEN.trim()
-  }
+export type GraphSendMailResult = {
+  correlationId: string
+  latencyMs: number
+  httpStatus: number
+}
 
-  const tenantId = process.env.MS_TENANT_ID
-  const clientId = process.env.MS_CLIENT_ID
-  const clientSecret = process.env.MS_CLIENT_SECRET
+import { getGraphAccessToken, resolveGraphMailboxUserId } from '@/lib/graph/graphAuth'
 
-  if (!tenantId || !clientId || !clientSecret) {
-    throw new Error(
-      'Missing Microsoft Graph credentials. Set MS_GRAPH_ACCESS_TOKEN or MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET.',
-    )
-  }
-
-  const tokenRes = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      scope: 'https://graph.microsoft.com/.default',
-      grant_type: 'client_credentials',
-    }),
+export function buildGraphFileAttachmentsPayload(
+  attachments: GraphSendMailAttachment[],
+): Record<string, unknown>[] {
+  return attachments.map((att) => {
+    const graphAtt: Record<string, unknown> = {
+      '@odata.type': '#microsoft.graph.fileAttachment',
+      name: att.name,
+      contentType: att.contentType,
+      contentBytes: att.contentBytes,
+    }
+    if (att.isInline) {
+      graphAtt.isInline = true
+      if (att.contentId) graphAtt.contentId = att.contentId
+    }
+    return graphAtt
   })
-
-  if (!tokenRes.ok) {
-    const body = await tokenRes.text()
-    throw new Error(`Failed to get Microsoft Graph token: ${body}`)
-  }
-
-  const tokenJson = (await tokenRes.json()) as { access_token?: string }
-  if (!tokenJson.access_token) {
-    throw new Error('Microsoft Graph token response did not include access_token.')
-  }
-
-  return tokenJson.access_token
 }
 
 /**
  * Send an email using Microsoft Graph API.
  * Uses POST /users/{userId}/sendMail.
  */
-export async function sendMailViaGraph(options: GraphSendMailOptions): Promise<void> {
-  const { to, subject, bodyText, bodyHtml, sendAsUserId } = options
+export async function sendMailViaGraphWithResult(
+  options: GraphSendMailOptions,
+): Promise<GraphSendMailResult> {
+  const {
+    to,
+    subject,
+    bodyText,
+    bodyHtml,
+    sendAsUserId,
+    correlationId,
+    timeoutMs,
+    attachments,
+    listUnsubscribeUrl,
+  } = options
 
-  const userId =
-    sendAsUserId?.trim() ||
-    process.env.MS_GRAPH_MAIL_USER_ID?.trim() ||
-    process.env.MS_ONEDRIVE_USER_ID?.trim()
-
-  if (!userId) {
-    throw new Error(
-      'No user to send mail as. Set MS_GRAPH_MAIL_USER_ID or MS_ONEDRIVE_USER_ID.',
-    )
-  }
+  const userId = resolveGraphMailboxUserId(sendAsUserId)
 
   const html = bodyHtml?.trim()
   const text = bodyText?.trim()
@@ -78,8 +91,13 @@ export async function sendMailViaGraph(options: GraphSendMailOptions): Promise<v
   }
 
   const token = await getGraphAccessToken()
+  const id =
+    correlationId?.trim() ||
+    (typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `nbe-${Date.now()}`)
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     message: {
       subject,
       body: html
@@ -93,21 +111,75 @@ export async function sendMailViaGraph(options: GraphSendMailOptions): Promise<v
           },
         },
       ],
+      internetMessageHeaders: [
+        {
+          name: 'X-NBE-Correlation-Id',
+          value: id.slice(0, 200),
+        },
+      ],
     },
     saveToSentItems: true,
   }
 
-  const res = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}/sendMail`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  })
+  if (attachments && attachments.length > 0) {
+    const message = payload.message as Record<string, unknown>
+    message.attachments = buildGraphFileAttachmentsPayload(attachments)
+  }
+
+  const unsubscribeUrl = listUnsubscribeUrl?.trim()
+  if (unsubscribeUrl) {
+    const message = payload.message as Record<string, unknown>
+    message.singleValueExtendedProperties = [
+      // PidTagListUnsubscribe (PtypString). RFC 2369 requires angle brackets.
+      { id: 'String 0x1045', value: `<${unsubscribeUrl}>` },
+    ]
+  }
+
+  const startedAt = Date.now()
+  const defaultTimeout = Number(process.env.SALES_EMAIL_SEND_GRAPH_TIMEOUT_MS ?? 30_000)
+  const timeout =
+    timeoutMs ??
+    (attachments && attachments.length > 0
+      ? Number(process.env.SALES_EMAIL_SEND_GRAPH_ATTACHMENTS_TIMEOUT_MS ?? 60_000)
+      : defaultTimeout)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeout)
+
+  let res: Response
+  try {
+    res = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}/sendMail`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Microsoft Graph sendMail timed out after ${timeout}ms.`)
+    }
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
+
+  const latencyMs = Math.max(0, Date.now() - startedAt)
 
   if (!res.ok) {
     const body = await res.text()
     throw new Error(`Microsoft Graph sendMail failed (${res.status}): ${body}`)
   }
+
+  return {
+    correlationId: id,
+    latencyMs,
+    httpStatus: res.status,
+  }
+}
+
+/** @deprecated Prefer sendMailViaGraphWithResult for delivery logging. */
+export async function sendMailViaGraph(options: GraphSendMailOptions): Promise<void> {
+  await sendMailViaGraphWithResult(options)
 }

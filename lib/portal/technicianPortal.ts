@@ -19,6 +19,7 @@ export const PORTAL_NAV_ITEMS_ALL: PortalNavItem[] = [
 
 const ADMIN_EXTRA_NAV_ITEMS: PortalNavItem[] = [
   { label: 'People', icon: 'groups', href: '/dashboard/people' },
+  { label: 'Sales Engine', icon: 'storefront', href: '/dashboard/sales-engine' },
   { label: 'Service reminders', icon: 'notifications_active', href: '/service-reminders' },
   { label: 'Inventory', icon: 'inventory_2', href: '/admin/inventory' },
   { label: 'Clients', icon: 'domain', href: '/admin/clients' },

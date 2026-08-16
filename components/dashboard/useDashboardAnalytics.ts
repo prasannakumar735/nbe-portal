@@ -6,6 +6,12 @@ import type { PeriodFilter } from './DashboardFilters'
 import type { WeeklyChartDatum } from './DashboardWeeklyChart'
 import type { ProjectPieDatum } from './DashboardProjectPie'
 import { isLeaveLegacyTimeEntry } from '@/lib/timecard/leaveWorkType'
+import {
+  DASHBOARD_TIME_ENTRY_SELECT,
+  mapDashboardTimeEntryRows,
+  type DashboardTimeEntryRaw,
+} from '@/lib/analytics/normalizeDashboardTimeEntries'
+import { loadLevel1CodeMap } from '@/lib/timecard/loadLevel1CodeMap'
 
 interface TimeEntryRow {
   id: string
@@ -101,7 +107,7 @@ export function useDashboardAnalytics(userId: string) {
 
       const { data, error } = await supabase
         .from('time_entries')
-        .select('id, client_id, start_time, end_time, hours, status, work_type_level1_id')
+        .select(DASHBOARD_TIME_ENTRY_SELECT)
         .eq('employee_id', userId)
         .neq('status', 'active')
         .gte('start_time', start.toISOString())
@@ -110,7 +116,12 @@ export function useDashboardAnalytics(userId: string) {
 
       if (error) throw error
 
-      const rows = (data || []) as TimeEntryRow[]
+      const raw = (data || []) as DashboardTimeEntryRaw[]
+      const level1CodeById = await loadLevel1CodeMap(
+        supabase,
+        raw.map(r => (r.level1_id != null ? String(r.level1_id) : '')).filter(Boolean),
+      )
+      const rows = mapDashboardTimeEntryRows(raw, level1CodeById)
       setEntries(rows)
 
       const clientIds = Array.from(new Set(rows.map(entry => entry.client_id).filter(Boolean)))
