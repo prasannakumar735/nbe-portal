@@ -31,7 +31,7 @@ export function QuotePDFTemplate({ values, subtotal, gst, total }: QuotePDFTempl
     >
       <div className="flex items-start justify-between border-b border-slate-300 pb-4">
         <div className="flex items-start gap-3">
-          <img src="/Logo_black.png" alt="NBE Australia" className="h-16 w-auto object-contain" />
+          <img src="/NBE_LOGO_BK_PL.png" alt="NBE Australia" className="h-16 w-auto object-contain" />
           <div className="space-y-0.5 leading-5">
             <p className="text-xl font-bold">NBE Australia</p>
             <p>22A Humeside Dr</p>

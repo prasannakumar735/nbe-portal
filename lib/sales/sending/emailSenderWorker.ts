@@ -30,6 +30,8 @@ import {
   markBounceDetected,
   onOutboundEmailSent,
 } from '@/lib/sales/followup/engagementTracker'
+import { scheduleFollowup } from '@/lib/sales/followup/followupScheduler'
+import { advanceSalesCampaignStatus } from '@/lib/sales/repositories/salesCampaignRepository'
 import {
   buildComplianceFooter,
   resolveUnsubscribePresentation,
@@ -283,6 +285,21 @@ async function executeSendForQueueRecord(
 
     await markSalesEmailSendQueueSent(supabase, queue.id)
     await markSalesGeneratedEmailSent(supabase, email.id)
+
+    // Advance campaign ready → sending on first successful send.
+    await advanceSalesCampaignStatus(supabase, queue.campaign_id, 'ready', 'sending').catch(() => {
+      // Non-fatal: already sending or completed.
+    })
+
+    // Follow-up scheduling runs unconditionally — it doesn't depend on tracking.
+    // onOutboundEmailSent (engagement recording + followup_count increment) is
+    // still gated on EMAIL_TRACKING_ENABLED because those writes power the open/
+    // click funnel and the unsubscribe-prominence escalation.
+    await scheduleFollowup(supabase, {
+      generatedEmailId: email.id,
+      contactId: queue.contact_id,
+      campaignId: queue.campaign_id,
+    })
 
     if (isFeatureEnabled(settings, SALES_ENGINE_SETTING_KEYS.EMAIL_TRACKING_ENABLED)) {
       await onOutboundEmailSent(supabase, {

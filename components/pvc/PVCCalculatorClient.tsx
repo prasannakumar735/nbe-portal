@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PVCForm, type PVCFormValues } from '@/app/(portal)/pvc-calculator/components/PVCForm'
 import { PVCResults } from '@/app/(portal)/pvc-calculator/components/PVCResults'
 import { PVCQuoteSummary } from '@/app/(portal)/pvc-calculator/components/PVCQuoteSummary'
@@ -109,6 +109,74 @@ export function PVCCalculatorClient({
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
+  // Send-email modal state
+  const [showSendEmail, setShowSendEmail] = useState(false)
+  const [emailRecipients, setEmailRecipients] = useState('')
+  const [emailBody, setEmailBody] = useState('')
+  const [attachPdf, setAttachPdf] = useState(true)
+  const [isSendingEmail, setIsSendingEmail] = useState(false)
+  const [emailError, setEmailError] = useState<string | null>(null)
+
+  function buildEmailBody() {
+    const customer = formValues.customer.trim() || '[customer]'
+    const attn = formValues.attn.trim()
+    const customerLine = attn ? `${attn} (${customer})` : customer
+    const doorLines = quoteLines.flatMap((line, i) => [
+      `  * Door ${i + 1}${line.doorQuantity > 1 ? ` (×${line.doorQuantity})` : ''}`,
+      `     * ${line.config.stripWidth} mm × ${line.config.thickness} mm PVC Strips`,
+      `     * Internal Dimensions: ${line.config.width}W × ${line.config.height}H mm`,
+    ])
+    const measurementsSection = quoteLines.length > 0
+      ? ['Please also find the opening measurements below:', '', ...doorLines, '']
+      : []
+    return [
+      'Hi,',
+      '',
+      `Please find attached the PVC Strip Curtain quotation for ${customerLine}.`,
+      '',
+      ...measurementsSection,
+      'Please let me know if you require any further information or any changes to the quotation.',
+      '',
+      'Kind regards',
+    ].join('\n')
+  }
+
+  function openSendEmailModal() {
+    setEmailBody(buildEmailBody())
+    setEmailRecipients('')
+    setAttachPdf(true)
+    setEmailError(null)
+    setShowSendEmail(true)
+  }
+
+  const handleSendEmail = async () => {
+    if (!draftId) return
+    const trimmedRecipients = emailRecipients.trim()
+    if (!trimmedRecipients) { setEmailError('Enter at least one email address.'); return }
+    setIsSendingEmail(true)
+    setEmailError(null)
+    try {
+      const res = await fetch(`/api/pvc/quotes/${draftId}/send-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipient_emails: trimmedRecipients,
+          email_body: emailBody,
+          attach_pdf: attachPdf,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to send email')
+      setShowSendEmail(false)
+      const sentTo = Array.isArray(data.sent_to) ? data.sent_to.join(', ') : String(data.sent_to)
+      setSuccess(`Email sent to ${sentTo}`)
+    } catch (e) {
+      setEmailError(e instanceof Error ? e.message : 'Failed to send email')
+    } finally {
+      setIsSendingEmail(false)
+    }
+  }
+
   const jobCardDefaults = useMemo(
     () => derivePvcJobCardDefaults(quoteLines, formValues, result?.breakdown.headrailLength ?? null),
     [quoteLines, formValues, result],
@@ -176,18 +244,34 @@ export function PVCCalculatorClient({
     }
   }
 
+  const [editingLineId, setEditingLineId] = useState<string | null>(null)
+
   const handleAddToQuote = useCallback(() => {
     if (!result) {
       setError('Calculate this door first, then add it to the quote.')
       return
     }
-    const line: PVCQuoteLine = {
-      id: crypto.randomUUID(),
-      doorQuantity: clampDoorQuantity(formValues.doorQuantity),
-      config: pickDoorConfig(formValues),
-      result,
+    if (editingLineId) {
+      // Replace the existing line in-place
+      const updated: PVCQuoteLine = {
+        id: editingLineId,
+        doorQuantity: clampDoorQuantity(formValues.doorQuantity),
+        config: pickDoorConfig(formValues),
+        result,
+      }
+      setQuoteLines(current => current.map(l => l.id === editingLineId ? updated : l))
+      setEditingLineId(null)
+      setSuccess('Door updated.')
+    } else {
+      const line: PVCQuoteLine = {
+        id: crypto.randomUUID(),
+        doorQuantity: clampDoorQuantity(formValues.doorQuantity),
+        config: pickDoorConfig(formValues),
+        result,
+      }
+      setQuoteLines(current => [...current, line])
+      setSuccess('Door added to quote. Enter another size and calculate, or save or generate the PDF.')
     }
-    setQuoteLines(current => [...current, line])
     setQuoteExtras({
       installationPrice: result.totals.installationPrice,
       freightPrice: result.totals.freightPrice,
@@ -195,12 +279,23 @@ export function PVCCalculatorClient({
     setCalculationResult(null)
     setFormValues(current => ({ ...current, doorQuantity: 1 }))
     setError(null)
-    setSuccess('Door added to quote. Enter another size and calculate, or save or generate the PDF.')
-  }, [formValues, result])
+  }, [formValues, result, editingLineId])
 
   const handleRemoveQuoteLine = useCallback((id: string) => {
     setQuoteLines(current => current.filter(line => line.id !== id))
+    setEditingLineId(current => current === id ? null : current)
   }, [])
+
+  const handleEditQuoteLine = useCallback((id: string) => {
+    const line = quoteLines.find(l => l.id === id)
+    if (!line) return
+    setFormValues(v => ({ ...v, ...line.config, doorQuantity: line.doorQuantity }))
+    setCalculationResult(null)
+    setEditingLineId(id)
+    setTimeout(() => {
+      document.getElementById('pvc-calculator-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 50)
+  }, [quoteLines])
 
   const buildCurrentSnapshot = useCallback(() => {
     return buildSnapshotV1({
@@ -236,6 +331,7 @@ export function PVCCalculatorClient({
         setDraftId(String(data.quote_id))
         router.replace(`/pvc-calculator/${data.quote_id}/edit`)
       }
+      setEditingLineId(null)
       setSuccess(isEdit ? 'Quote updated.' : 'Quote saved.')
       onQuotesChanged?.()
     } catch (apiError) {
@@ -361,17 +457,19 @@ export function PVCCalculatorClient({
         >
           Back to saved quotes
         </Link>
-        {mode === 'edit' && draftId ? (
-          <Link
-            href="/pvc-calculator/new"
-            className="text-sm font-medium text-slate-700 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
-          >
-            New quote
-          </Link>
-        ) : null}
+        <div className="flex items-center gap-3">
+          {mode === 'edit' && draftId ? (
+            <Link
+              href="/pvc-calculator/new"
+              className="text-sm font-medium text-slate-700 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
+            >
+              New quote
+            </Link>
+          ) : null}
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div id="pvc-calculator-form" className="flex flex-wrap items-center justify-between gap-4">
         <NBELogo />
         <div className="text-right">
           <h1 className="text-xl font-bold text-slate-900">PVC Strip Curtain Calculator</h1>
@@ -391,7 +489,7 @@ export function PVCCalculatorClient({
         </div>
       )}
 
-      <PVCQuoteLines lines={quoteLines} onRemove={handleRemoveQuoteLine} />
+      <PVCQuoteLines lines={quoteLines} onRemove={handleRemoveQuoteLine} onEdit={handleEditQuoteLine} editingLineId={editingLineId} />
 
       <PVCForm values={formValues} isLoading={isCalculating} onChange={updateField} onSubmit={handleCalculate} />
 
@@ -406,11 +504,21 @@ export function PVCCalculatorClient({
                   onClick={handleAddToQuote}
                   className="rounded-lg border border-indigo-600 bg-white px-4 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50"
                 >
-                  Add door to quote
+                  {editingLineId ? 'Update door' : 'Add door to quote'}
                 </button>
-                <p className="self-center text-xs text-slate-500">
-                  Use again for each different opening size on the same quote.
-                </p>
+                {editingLineId ? (
+                  <button
+                    type="button"
+                    onClick={() => { setEditingLineId(null); setCalculationResult(null); setFormValues(v => ({ ...v, doorQuantity: 1 })) }}
+                    className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+                  >
+                    Cancel edit
+                  </button>
+                ) : (
+                  <p className="self-center text-xs text-slate-500">
+                    Use again for each different opening size on the same quote.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -427,6 +535,8 @@ export function PVCCalculatorClient({
               saveLabel={draftId ? 'Update saved quote' : 'Save quote'}
               onSaveQuote={handleSaveQuote}
               onGenerateQuote={handleGenerateQuote}
+              onSendEmail={mode === 'edit' ? openSendEmailModal : undefined}
+              canSendEmail={!!draftId && quoteLines.length > 0}
             />
           </div>
         </div>
@@ -459,6 +569,90 @@ export function PVCCalculatorClient({
           </p>
         ) : null}
       </div>
+
+      {/* Send Email Modal */}
+      {showSendEmail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-xl">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-slate-900">Send quote by email</h2>
+              <button
+                type="button"
+                onClick={() => setShowSendEmail(false)}
+                className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Close"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="space-y-4 px-6 py-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  To <span className="text-slate-400 font-normal">(separate multiple addresses with commas)</span>
+                </label>
+                <input
+                  type="text"
+                  value={emailRecipients}
+                  onChange={e => setEmailRecipients(e.target.value)}
+                  placeholder="manager@example.com, another@example.com"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Email body</label>
+                <textarea
+                  value={emailBody}
+                  onChange={e => setEmailBody(e.target.value)}
+                  rows={12}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-mono leading-relaxed focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={attachPdf}
+                  onChange={e => setAttachPdf(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                Attach quote PDF
+              </label>
+
+              {emailError && (
+                <p className="text-sm text-red-600">{emailError}</p>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setShowSendEmail(false)}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSendingEmail || !emailRecipients.trim()}
+                onClick={() => void handleSendEmail()}
+                className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
+                {isSendingEmail ? 'Sending…' : 'Send email'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

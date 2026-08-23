@@ -32,32 +32,36 @@ export async function generateQuotePdf(quoteData: QuoteData): Promise<Uint8Array
   let y = 800
   const left = 40
 
+  // Fixed logo height of 40pt; width scaled proportionally
+  const logoHeight = 40
+  let logoDrawn = false
   try {
-    const logoPath = path.join(process.cwd(), 'public', 'Logo_black.png')
+    const logoPath = path.join(process.cwd(), 'public', 'NBE_LOGO_BK_PL.png')
     const logoBytes = await readFile(logoPath)
     const logoImage = await pdfDoc.embedPng(logoBytes)
-    const logoDims = logoImage.scale(0.22)
+    const { width: nw, height: nh } = logoImage
+    const logoWidth = (nw / nh) * logoHeight
     page.drawImage(logoImage, {
       x: left,
-      y: y - logoDims.height,
-      width: logoDims.width,
-      height: logoDims.height,
+      y: y - logoHeight,
+      width: logoWidth,
+      height: logoHeight,
     })
+    logoDrawn = true
   } catch {
-    page.drawText('NBE Australia', {
-      x: left,
-      y: y - 12,
-      size: 18,
-      font: boldFont,
-      color: rgb(0.1, 0.1, 0.1),
-    })
+    // fallback text drawn below
+  }
+
+  if (!logoDrawn) {
+    page.drawText('NBE Australia', { x: left, y: y - 14, size: 14, font: boldFont, color: rgb(0.1, 0.1, 0.1) })
   }
 
   page.drawText('NBE Australia', { x: 380, y: y - 8, size: 12, font: boldFont })
-  page.drawText('7 Kibble Place, Menai NSW 2234', { x: 380, y: y - 24, size: 10, font: regularFont })
-  page.drawText('Phone: +61 2 0000 0000', { x: 380, y: y - 38, size: 10, font: regularFont })
+  page.drawText('Fact 22A Humeside Dr', { x: 380, y: y - 22, size: 10, font: regularFont })
+  page.drawText('Campbellfield VIC 3061', { x: 380, y: y - 36, size: 10, font: regularFont })
+  page.drawText('Ph: 03 9357 5858', { x: 380, y: y - 50, size: 10, font: regularFont })
 
-  y -= 90
+  y -= 70
 
   page.drawText('PVC Strip Door Quote', {
     x: left,

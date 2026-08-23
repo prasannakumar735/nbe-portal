@@ -4,6 +4,22 @@ import type { ContactReviewGroup } from '@/hooks/useSelectedContacts'
 import { LoadingSkeleton } from '@/components/ui/LoadingSkeleton'
 import { outreachPriorityForContact } from '@/lib/sales/providers/contactOutreachRanking'
 
+function pageUrlDomain(url: string | null): string | null {
+  if (!url) return null
+  try {
+    return new URL(url).hostname.replace(/^www\./i, '')
+  } catch {
+    return null
+  }
+}
+
+function shortPageTitle(title: string | null): string | null {
+  if (!title) return null
+  // Strip trailing " | Site Name" or " - Site Name" (keep just the section label)
+  const stripped = title.replace(/\s*[|\-–—]\s*.+$/, '').trim()
+  return stripped || title
+}
+
 const VERIFICATION_STYLES: Record<string, string> = {
   unknown: 'bg-slate-100 text-slate-700',
   valid: 'bg-emerald-100 text-emerald-800',
@@ -159,10 +175,10 @@ export function ContactReviewTable({
                               href={contact.contact_page}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="block max-w-xs truncate text-indigo-700 hover:underline"
+                              className="text-xs text-indigo-600 hover:underline"
                               title={contact.contact_page}
                             >
-                              {contact.contact_page}
+                              {pageUrlDomain(contact.contact_page) ?? contact.contact_page}
                             </a>
                           ) : (
                             '—'
@@ -170,10 +186,10 @@ export function ContactReviewTable({
                         </td>
                         <td className="px-3 py-2 text-slate-700">
                           <div
-                            className="max-w-[10rem] truncate sm:max-w-xs"
+                            className="max-w-[10rem] truncate text-xs sm:max-w-xs"
                             title={contact.discovery_page_title ?? undefined}
                           >
-                            {contact.discovery_page_title ?? '—'}
+                            {shortPageTitle(contact.discovery_page_title) ?? '—'}
                           </div>
                         </td>
                       </tr>

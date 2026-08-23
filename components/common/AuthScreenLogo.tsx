@@ -19,21 +19,19 @@ export function AuthScreenLogo({
         width={280}
         height={163}
         decoding="async"
-        className={`h-16 w-auto max-h-16 max-w-[min(300px,92vw)] object-contain object-center ${className}`}
-        style={{ maxHeight: '4rem', maxWidth: 'min(300px, 92vw)' }}
+        className={`h-16 w-auto object-contain object-center ${className}`}
       />
     )
   }
 
   return (
     <img
-      src="/NBE_LOGO_BK_PL.png"
-      alt="NBE Australia"
-      width={160}
-      height={93}
+      src="/Portal_logo.png"
+      alt="NBE Portal"
+      width={240}
+      height={140}
       decoding="async"
-      className={`h-14 w-auto max-h-14 max-w-[min(200px,90vw)] object-contain ${className}`}
-      style={{ maxHeight: '3.5rem', maxWidth: 'min(200px, 90vw)' }}
+      className={`h-24 w-auto object-contain ${className}`}
     />
   )
 }

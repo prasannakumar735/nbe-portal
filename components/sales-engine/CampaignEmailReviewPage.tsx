@@ -88,9 +88,26 @@ export function CampaignEmailReviewPage({ campaignId }: CampaignEmailReviewPageP
         >
           ← Campaign builder
         </Link>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900">
-          {review.campaign?.name ?? 'Campaign emails'}
-        </h1>
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-bold text-slate-900">
+            {review.campaign?.name ?? 'Campaign emails'}
+          </h1>
+          {review.campaign?.status ? (
+            <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+              review.campaign.status === 'completed'
+                ? 'bg-emerald-100 text-emerald-800'
+                : review.campaign.status === 'sending'
+                ? 'bg-indigo-100 text-indigo-800'
+                : review.campaign.status === 'ready'
+                ? 'bg-blue-100 text-blue-800'
+                : review.campaign.status === 'paused'
+                ? 'bg-yellow-100 text-yellow-800'
+                : 'bg-slate-100 text-slate-700'
+            }`}>
+              {review.campaign.status}
+            </span>
+          ) : null}
+        </div>
         <p className="mt-1 text-sm text-slate-600">Generate, review, approve, then queue for send.</p>
       </header>
 

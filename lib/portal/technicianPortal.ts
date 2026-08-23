@@ -1,6 +1,13 @@
 import { isTechnicianRole } from '@/lib/auth/roles'
+import type { FeatureFlags } from '@/lib/featureFlags'
 
-export type PortalNavItem = { label: string; icon: string; href: string }
+export type PortalNavItem = {
+  label: string
+  icon: string
+  href: string
+  flagKey?: string
+  children?: Array<{ label: string; icon: string; href: string }>
+}
 
 /** Full portal sidebar order for admin / manager / non-technician staff. */
 export const PORTAL_NAV_ITEMS_ALL: PortalNavItem[] = [
@@ -8,21 +15,30 @@ export const PORTAL_NAV_ITEMS_ALL: PortalNavItem[] = [
   { label: 'Quote', icon: 'request_quote', href: '/dashboard/quotes/service' },
   { label: 'Timecards', icon: 'schedule', href: '/dashboard/timecards' },
   { label: 'Maintenance Service', icon: 'build', href: '/maintenance' },
-  { label: 'QR Codes', icon: 'qr_code_2', href: '/qr-codes' },
-  { label: 'Reimbursement', icon: 'payments', href: '/reimbursement' },
+  { label: 'QR Codes', icon: 'qr_code_2', href: '/qr-codes', flagKey: 'nav_qr_codes' },
+  { label: 'Reimbursement', icon: 'payments', href: '/reimbursement', flagKey: 'nav_reimbursement' },
   { label: 'PVC Strip Calculator', icon: 'calculate', href: '/pvc-calculator' },
-  { label: 'Shared Calendar', icon: 'calendar_today', href: '/calendar' },
+  { label: 'Shared Calendar', icon: 'calendar_today', href: '/calendar', flagKey: 'nav_calendar' },
   { label: 'Job Card & Client GPS', icon: 'location_on', href: '/job-card' },
-  { label: 'Knowledge Share', icon: 'menu_book', href: '/knowledge' },
+  { label: 'Knowledge Share', icon: 'menu_book', href: '/knowledge', flagKey: 'nav_knowledge' },
   { label: 'Reports', icon: 'bar_chart', href: '/reports' },
 ]
 
 const ADMIN_EXTRA_NAV_ITEMS: PortalNavItem[] = [
   { label: 'People', icon: 'groups', href: '/dashboard/people' },
-  { label: 'Sales Engine', icon: 'storefront', href: '/dashboard/sales-engine' },
+  {
+    label: 'Sales Engine',
+    icon: 'storefront',
+    href: '/dashboard/sales-engine',
+    children: [
+      { label: 'SE Settings', icon: 'manage_accounts', href: '/dashboard/sales-engine/administration' },
+      { label: 'Tools', icon: 'build_circle', href: '/dashboard/sales-engine/tools' },
+    ],
+  },
   { label: 'Service reminders', icon: 'notifications_active', href: '/service-reminders' },
   { label: 'Inventory', icon: 'inventory_2', href: '/admin/inventory' },
   { label: 'Clients', icon: 'domain', href: '/admin/clients' },
+  { label: 'Portal Settings', icon: 'settings', href: '/admin/settings' },
 ]
 
 /** Technician (and legacy employee): dashboard, timecards, maintenance, reimbursement, calendar, job card, knowledge. */
@@ -42,12 +58,21 @@ const TECHNICIAN_NAV_ITEMS: PortalNavItem[] = TECHNICIAN_HREF_ORDER.map((href) =
   return item
 })
 
+function applyFeatureFlags(items: PortalNavItem[], flags: FeatureFlags): PortalNavItem[] {
+  return items.filter((item) => {
+    if (!item.flagKey) return true
+    return flags[item.flagKey] !== false
+  })
+}
+
 export function buildPortalSidebarNavItems(
   role: string | null | undefined,
   managerOrAdmin: boolean,
+  flags: FeatureFlags = {},
 ): PortalNavItem[] {
   const base = isTechnicianRole(role) ? TECHNICIAN_NAV_ITEMS : PORTAL_NAV_ITEMS_ALL
-  return managerOrAdmin ? [...base, ...ADMIN_EXTRA_NAV_ITEMS] : base
+  const all = managerOrAdmin ? [...base, ...ADMIN_EXTRA_NAV_ITEMS] : base
+  return applyFeatureFlags(all, flags)
 }
 
 function normalizePortalPathname(pathname: string): string {

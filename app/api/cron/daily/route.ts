@@ -14,6 +14,7 @@ import { runMailboxDeltaSyncPage } from '@/lib/sales/replies/mailboxDeltaSyncSer
 import { resolveGraphMailboxUserId } from '@/lib/graph/graphAuth'
 import { listSalesEmailSendQueue } from '@/lib/sales/repositories/salesEmailSendQueueRepository'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
+import { purgeSoftDeletedMergedReportsOlderThan } from '@/lib/merged-reports/deleteMergedReport'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -92,6 +93,11 @@ export async function GET(request: NextRequest) {
       return { messagesProcessed: result.messagesProcessed }
     })
 
+    const purgeMergedReports = await runJobSafe('purgeMergedReports', async () => {
+      const result = await purgeSoftDeletedMergedReportsOlderThan(supabase, 30)
+      return { purged: result.purged, errors: result.errors }
+    })
+
     const jobs = {
       forgottenOfficeClose,
       calendarReminders,
@@ -103,6 +109,7 @@ export async function GET(request: NextRequest) {
       salesJobs,
       salesEngagementSync,
       salesInboundMailSync,
+      purgeMergedReports,
     }
 
     const anyHardFail = Object.values(jobs).some(

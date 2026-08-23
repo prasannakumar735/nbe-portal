@@ -14,6 +14,7 @@ import {
   getSalesGeneratedEmailById,
   markSalesGeneratedEmailQueued,
 } from '@/lib/sales/repositories/salesGeneratedEmailRepository'
+import { advanceSalesCampaignStatus } from '@/lib/sales/repositories/salesCampaignRepository'
 import type { SalesEmailSendQueue } from '@/lib/sales/types/emailSendQueue.types'
 
 export type BulkQueueApprovedEmailsResult = {
@@ -84,6 +85,15 @@ export async function bulkQueueApprovedEmails(
         reason: error instanceof Error ? error.message : 'Queue failed.',
       })
     }
+  }
+
+  // Advance campaign from draft → ready when at least one email was queued.
+  // Uses a conditional update so concurrent calls are idempotent.
+  if (succeeded.length > 0) {
+    const campaignId = succeeded[0].campaign_id
+    await advanceSalesCampaignStatus(supabase, campaignId, 'draft', 'ready').catch(() => {
+      // Non-fatal: status may already be ready/sending/completed from a prior queue action.
+    })
   }
 
   return { succeeded, failed }

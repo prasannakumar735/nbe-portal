@@ -9,7 +9,7 @@ const PRECACHE_URLS = [
   '/maintenance/new',
   '/maintenance/new?fresh=1',
   '/offline.html',
-  '/Logo_black.png',
+  '/NBE_LOGO_BK_PL.png',
 ]
 
 self.addEventListener('install', (event) => {

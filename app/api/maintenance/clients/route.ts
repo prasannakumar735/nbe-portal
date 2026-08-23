@@ -15,8 +15,10 @@ function mapClientRow(row: Record<string, unknown>) {
 
 export async function GET() {
   try {
-    const supabase = await createServerClient()
-    const { data, error } = await supabase
+    const auth = await requireMaintenanceStaffApi()
+    if (!auth.ok) return auth.response
+
+    const { data, error } = await auth.supabase
       .from('clients')
       .select('*')
       .order('created_at', { ascending: false })

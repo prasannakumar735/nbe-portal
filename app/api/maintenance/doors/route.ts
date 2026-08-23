@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { requireMaintenanceStaffApi } from '@/lib/maintenance/requireMaintenanceStaffApi'
 import { compareDoorRecordsByLabel } from '@/lib/door/doorLabelSort'
 
 function strOrNull(row: Record<string, unknown>, key: string): string | null {
@@ -26,13 +26,15 @@ function mapDoorRow(row: Record<string, unknown>) {
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireMaintenanceStaffApi()
+    if (!auth.ok) return auth.response
+
     const locationId = request.nextUrl.searchParams.get('locationId')
     if (!locationId) {
       return NextResponse.json({ doors: [] })
     }
 
-    const supabase = await createServerClient()
-    const { data, error } = await supabase
+    const { data, error } = await auth.supabase
       .from('doors')
       .select('*')
       .eq('client_location_id', locationId)

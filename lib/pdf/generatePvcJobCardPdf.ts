@@ -50,19 +50,27 @@ export async function generatePvcJobCardPdf(input: PvcJobCardPdfInput): Promise<
   const left = 40
   let y = 800
 
+  const logoHeight = 40
+  let logoDrawn = false
   try {
-    const logoPath = path.join(process.cwd(), 'public', 'Logo_black.png')
+    const logoPath = path.join(process.cwd(), 'public', 'NBE_LOGO_BK_PL.png')
     const logoBytes = await readFile(logoPath)
     const logoImage = await pdfDoc.embedPng(logoBytes)
-    const logoDims = logoImage.scale(0.2)
+    const { width: nw, height: nh } = logoImage
+    const logoWidth = (nw / nh) * logoHeight
     page.drawImage(logoImage, {
       x: left,
-      y: y - logoDims.height,
-      width: logoDims.width,
-      height: logoDims.height,
+      y: y - logoHeight,
+      width: logoWidth,
+      height: logoHeight,
     })
+    logoDrawn = true
   } catch {
-    page.drawText('NBE Australia', { x: left, y: y - 8, size: 16, font: boldFont })
+    // fallback below
+  }
+
+  if (!logoDrawn) {
+    page.drawText('NBE Australia', { x: left, y: y - 14, size: 14, font: boldFont })
   }
 
   page.drawText('NBE Australia', { x: 360, y: y - 6, size: 11, font: boldFont })
@@ -70,7 +78,7 @@ export async function generatePvcJobCardPdf(input: PvcJobCardPdfInput): Promise<
   page.drawText('Campbellfield VIC 3061', { x: 360, y: y - 34, size: 10, font: regularFont })
   page.drawText('Ph: 03 9357 5858', { x: 360, y: y - 48, size: 10, font: regularFont })
 
-  y -= 90
+  y -= 70
 
   page.drawText('PVC Strip Curtain — Job Card', {
     x: left,

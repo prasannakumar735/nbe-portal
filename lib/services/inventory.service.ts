@@ -5,6 +5,7 @@ import type {
   InventoryMovementRow,
   InventoryPreviewItem,
   ProcessOrderResult,
+  ProcessOrderResultItem,
 } from '@/lib/types/inventory.types'
 
 function createServiceClient() {
@@ -165,24 +166,85 @@ export class InventoryService {
 
   static async getLowStockAlerts(): Promise<ComponentRow[]> {
     const supabase = createServiceClient()
+    // PostgREST cannot compare two columns directly — fetch active components
+    // and filter in application code so the comparison is correct.
     const { data, error } = await supabase
       .from('components')
       .select('id, sku, name, unit, stock_quantity, min_stock, is_active')
       .eq('is_active', true)
-      .filter('stock_quantity', 'lte', 'min_stock')
       .order('stock_quantity', { ascending: true })
 
     if (error) throw new Error(error.message)
 
-    return (data ?? []).map((row) => ({
-      id: String(row.id),
-      sku: String(row.sku),
-      name: String(row.name),
-      unit: String(row.unit ?? 'pcs'),
-      stock_quantity: toNumber(row.stock_quantity),
-      min_stock: toNumber(row.min_stock),
-      is_active: Boolean(row.is_active),
-    }))
+    return (data ?? [])
+      .filter((row) => toNumber(row.stock_quantity) <= toNumber(row.min_stock))
+      .map((row) => ({
+        id: String(row.id),
+        sku: String(row.sku),
+        name: String(row.name),
+        unit: String(row.unit ?? 'pcs'),
+        stock_quantity: toNumber(row.stock_quantity),
+        min_stock: toNumber(row.min_stock),
+        is_active: Boolean(row.is_active),
+      }))
+  }
+
+  static async recordMovement(input: {
+    component_id: string
+    movement_type: 'in' | 'out' | 'adjustment'
+    quantity: number
+    note?: string
+    user_id: string
+  }): Promise<InventoryMovementRow> {
+    const supabase = createServiceClient()
+
+    const delta =
+      input.movement_type === 'out' ? -input.quantity : input.quantity
+
+    const { data: component, error: fetchError } = await supabase
+      .from('components')
+      .select('stock_quantity')
+      .eq('id', input.component_id)
+      .single()
+
+    if (fetchError || !component) throw new Error('Component not found')
+
+    const newQty = toNumber(component.stock_quantity) + delta
+    if (newQty < 0) throw new Error('Insufficient stock for this adjustment')
+
+    const { error: updateError } = await supabase
+      .from('components')
+      .update({ stock_quantity: newQty })
+      .eq('id', input.component_id)
+
+    if (updateError) throw new Error(updateError.message)
+
+    const { data, error } = await supabase
+      .from('inventory_movements')
+      .insert({
+        component_id: input.component_id,
+        movement_type: input.movement_type,
+        quantity: input.quantity,
+        reference_type: 'manual',
+        note: input.note ?? null,
+        created_by: input.user_id,
+      })
+      .select('id, component_id, movement_type, quantity, reference_type, reference_id, note, created_by, created_at')
+      .single()
+
+    if (error) throw new Error(error.message)
+
+    return {
+      id: String(data.id),
+      component_id: String(data.component_id),
+      movement_type: data.movement_type as InventoryMovementRow['movement_type'],
+      quantity: toNumber(data.quantity),
+      reference_type: data.reference_type ? String(data.reference_type) : null,
+      reference_id: data.reference_id ? String(data.reference_id) : null,
+      note: data.note ? String(data.note) : null,
+      created_by: data.created_by ? String(data.created_by) : null,
+      created_at: String(data.created_at),
+    }
   }
 
   static async previewInventory(productId: string, quantity: number): Promise<InventoryPreviewItem[]> {
@@ -333,13 +395,13 @@ export class InventoryService {
 
     if (error) throw new Error(error.message)
 
-    const items = (data ?? []).map((row: Record<string, unknown>) => ({
+    const items: ProcessOrderResultItem[] = (data ?? []).map((row: Record<string, unknown>) => ({
       component_id: String(row.component_id),
       component_name: String(row.component_name),
       required_qty: toNumber(row.required_qty),
       available_qty: toNumber(row.available_qty),
       remaining_qty: toNumber(row.remaining_qty),
-      status: String(row.status) as ProcessOrderResult['items'][number]['status'],
+      status: String(row.status) as ProcessOrderResultItem['status'],
     }))
 
     return {

@@ -26,6 +26,7 @@ const PROTECTED_PREFIXES = [
   '/admin/inventory',
   '/admin/contacts',
   '/admin/orders',
+  '/admin/settings',
   '/reports',
   '/knowledge',
   '/job-card',

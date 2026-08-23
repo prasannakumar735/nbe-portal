@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { cancelScheduledFollowup, scheduleFollowup } from '@/lib/sales/followup/followupScheduler'
+import { cancelScheduledFollowup } from '@/lib/sales/followup/followupScheduler'
 import {
   getSalesFollowupQueueByResultEmailId,
   markSalesFollowupQueueSent,
@@ -25,6 +25,12 @@ export async function ensureEngagementAfterOutboundSend(
   await recordSalesContactEmailSentAt(supabase, key, sentAt)
 }
 
+/**
+ * Records engagement state (sent timestamp, followup_count) after an outbound
+ * send. Follow-up *scheduling* is handled unconditionally by the send worker —
+ * this function must not call scheduleFollowup to avoid double-scheduling when
+ * EMAIL_TRACKING_ENABLED is on.
+ */
 export async function onOutboundEmailSent(
   supabase: SupabaseClient,
   input: OutboundEmailSentInput,
@@ -50,22 +56,8 @@ export async function onOutboundEmailSent(
         contact_id: input.contact_id,
         campaign_id: input.campaign_id,
       })
-      await scheduleFollowup(supabase, {
-        generatedEmailId: input.generatedEmailId,
-        contactId: input.contact_id,
-        campaignId: input.campaign_id,
-        sentAt,
-      })
     }
-    return
   }
-
-  await scheduleFollowup(supabase, {
-    generatedEmailId: input.generatedEmailId,
-    contactId: input.contact_id,
-    campaignId: input.campaign_id,
-    sentAt,
-  })
 }
 
 export async function markReplyDetected(

@@ -47,3 +47,23 @@ export async function getSalesCampaignById(
   if (!data) return null
   return mapRow(data as Record<string, unknown>)
 }
+
+/**
+ * Advance campaign status only if it is currently `fromStatus`.
+ * Returns true if the row was updated, false if no row matched (already advanced or wrong id).
+ */
+export async function advanceSalesCampaignStatus(
+  supabase: SupabaseClient,
+  id: string,
+  fromStatus: SalesCampaign['status'],
+  toStatus: SalesCampaign['status'],
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update({ status: toStatus })
+    .eq('id', id)
+    .eq('status', fromStatus)
+    .select('id')
+  if (error) throw error
+  return Array.isArray(data) && data.length > 0
+}

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ZodError } from 'zod'
-import { createServerClient } from '@/lib/supabase/server'
 import { locationLabelFromDbRow } from '@/lib/supabase/clientLocationsDb'
 import { requireMaintenanceStaffApi } from '@/lib/maintenance/requireMaintenanceStaffApi'
 import { createLocationSchema } from '@/lib/validation/admin-clients'
@@ -22,13 +21,15 @@ function mapLocationRow(row: Record<string, unknown>) {
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireMaintenanceStaffApi()
+    if (!auth.ok) return auth.response
+
     const clientId = request.nextUrl.searchParams.get('clientId')
     if (!clientId) {
       return NextResponse.json({ locations: [] })
     }
 
-    const supabase = await createServerClient()
-    const { data, error } = await supabase
+    const { data, error } = await auth.supabase
       .from('client_locations')
       .select('*')
       .eq('client_id', clientId)

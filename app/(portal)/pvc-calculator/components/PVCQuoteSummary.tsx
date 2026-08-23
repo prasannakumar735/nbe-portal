@@ -17,6 +17,8 @@ interface PVCQuoteSummaryProps {
   saveLabel?: string
   onSaveQuote?: () => void
   onGenerateQuote: () => void
+  onSendEmail?: () => void
+  canSendEmail?: boolean
 }
 
 function currency(value: number): string {
@@ -40,6 +42,8 @@ export function PVCQuoteSummary({
   saveLabel = 'Save quote',
   onSaveQuote,
   onGenerateQuote,
+  onSendEmail,
+  canSendEmail = false,
 }: PVCQuoteSummaryProps) {
   const pdfBusy = isGeneratingPdf || isSavingQuote
   const supplyTotal = aggregateQuoteSupply(quoteLines, pendingLine)
@@ -96,6 +100,22 @@ export function PVCQuoteSummary({
       >
         {pdfBusy ? 'Generating Quote...' : 'Generate Quote PDF'}
       </button>
+
+      {onSendEmail && (
+        <button
+          type="button"
+          onClick={onSendEmail}
+          disabled={!canSendEmail || pdfBusy || isSavingDraft}
+          className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </svg>
+          Send email
+        </button>
+      )}
+
       {!canGenerate && (
         <p className="mt-2 text-xs text-slate-500">Calculate a door to see pricing, then generate the PDF.</p>
       )}

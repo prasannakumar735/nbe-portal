@@ -45,8 +45,7 @@ export async function GET(request: NextRequest) {
       errors: result.errors,
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Purge failed'
     console.error('[cron/purge-merged-reports]', err)
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: 'Purge failed' }, { status: 500 })
   }
 }

@@ -70,28 +70,35 @@ export async function generateProposalPdf(quoteData: QuoteData): Promise<Uint8Ar
   const right = 555
   let y = 800
 
+  const logoHeight = 40
+  let logoDrawn = false
   try {
-    const logoPath = path.join(process.cwd(), 'public', 'Logo_black.png')
+    const logoPath = path.join(process.cwd(), 'public', 'NBE_LOGO_BK_PL.png')
     const logoBytes = await readFile(logoPath)
     const logoImage = await pdfDoc.embedPng(logoBytes)
-    const logoDims = logoImage.scale(0.2)
-
+    const { width: nw, height: nh } = logoImage
+    const logoWidth = (nw / nh) * logoHeight
     page.drawImage(logoImage, {
       x: left,
-      y: y - logoDims.height,
-      width: logoDims.width,
-      height: logoDims.height,
+      y: y - logoHeight,
+      width: logoWidth,
+      height: logoHeight,
     })
+    logoDrawn = true
   } catch {
-    page.drawText('NBE Australia', { x: left, y: y - 8, size: 16, font: boldFont })
+    // fallback below
   }
 
-  page.drawText('NBE Australia', { x: 360, y: y - 6, size: 11, font: boldFont })
-  page.drawText('Fact 22A Humeside Dr', { x: 360, y: y - 20, size: 10, font: regularFont })
-  page.drawText('Campbellfield VIC 3061', { x: 360, y: y - 34, size: 10, font: regularFont })
-  page.drawText('Ph: 03 9357 5858', { x: 360, y: y - 48, size: 10, font: regularFont })
+  if (!logoDrawn) {
+    page.drawText('NBE Australia', { x: left, y: y - 14, size: 14, font: boldFont })
+  }
 
-  y -= 90
+  page.drawText('NBE Australia', { x: 450, y: y - 6, size: 11, font: boldFont })
+  page.drawText('Fact 22A Humeside Dr', { x: 450, y: y - 20, size: 10, font: regularFont })
+  page.drawText('Campbellfield VIC 3061', { x: 450, y: y - 34, size: 10, font: regularFont })
+  page.drawText('Ph: 03 9357 5858', { x: 450, y: y - 48, size: 10, font: regularFont })
+
+  y -= 70
 
   page.drawText('PVC Strip Door Proposal', {
     x: left,
@@ -122,15 +129,18 @@ export async function generateProposalPdf(quoteData: QuoteData): Promise<Uint8Ar
 
   y -= 10
 
-  const qtyColX = left + 6
-  const descriptionColX = left + 36
-  const calcColX = 398
-  const unitColX = 430
-  const totalColX = 510
+  const snoColX = left + 6
+  const descriptionColX = left + 50
+  const calcColX = 330
+  const qtyColX = 355
+  const unitColX = 405
+  const totalColX = 480
   const calcGrey = rgb(0.55, 0.55, 0.55)
 
-  page.drawRectangle({ x: left, y: y - 3, width: right - left, height: 18, color: rgb(0.94, 0.95, 0.99) })
+  page.drawRectangle({ x: left, y: y - 4, width: right - left, height: 20, color: rgb(0.94, 0.95, 0.99) })
+  page.drawText('S.No.', { x: snoColX, y: y + 1, size: 10, font: boldFont })
   page.drawText('Description Of The Item', { x: descriptionColX, y: y + 1, size: 10, font: boldFont })
+  page.drawText('Qty.', { x: qtyColX, y: y + 1, size: 10, font: boldFont })
   page.drawText('Unit Cost', { x: unitColX, y: y + 1, size: 10, font: boldFont })
   page.drawText('Total Cost', { x: totalColX, y: y + 1, size: 10, font: boldFont })
 
@@ -138,10 +148,9 @@ export async function generateProposalPdf(quoteData: QuoteData): Promise<Uint8Ar
 
   const doors = deriveDoors(quoteData)
 
-  doors.forEach(door => {
+  doors.forEach((door, doorIndex) => {
     const headrailLabel = formatProposalHeadrailLabel(door.headrail_type)
     const profileLabel = toLegacyStripProfileLabel(door)
-    const qty = Math.min(99, Math.max(1, Math.trunc(door.quantity ?? 1) || 1))
     const unitPrice = door.final_door_price
     const lineTotal = doorLineTotal(door)
 
@@ -152,8 +161,11 @@ export async function generateProposalPdf(quoteData: QuoteData): Promise<Uint8Ar
       `Strip Type ${profileLabel}`,
     ]
 
+    const qty = Math.min(99, Math.max(1, Math.trunc(door.quantity ?? 1) || 1))
+
     detailLines.forEach((line, index) => {
       if (index === 0) {
+        page.drawText(String(doorIndex + 1), { x: snoColX, y, size: 10, font: regularFont })
         page.drawText(String(qty), { x: qtyColX, y, size: 10, font: regularFont })
         page.drawText(currency(unitPrice), { x: unitColX, y, size: 10, font: regularFont })
         page.drawText(currency(lineTotal), { x: totalColX, y, size: 10, font: regularFont })
@@ -180,15 +192,16 @@ export async function generateProposalPdf(quoteData: QuoteData): Promise<Uint8Ar
   const freightCost = Number.isFinite(quoteData.freightCost) ? Number(quoteData.freightCost) : undefined
   const installationCost = Number.isFinite(quoteData.installationCost) ? Number(quoteData.installationCost) : undefined
 
+  let extraSno = doors.length + 1
   if (freightCost !== undefined) {
-    page.drawText('1', { x: qtyColX, y, size: 10, font: regularFont })
+    page.drawText(String(extraSno++), { x: snoColX, y, size: 10, font: regularFont })
     page.drawText('Freight', { x: descriptionColX, y, size: 10, font: regularFont })
     page.drawText(currency(freightCost), { x: totalColX, y, size: 10, font: regularFont })
     y -= 14
   }
 
   if (installationCost !== undefined) {
-    page.drawText('1', { x: qtyColX, y, size: 10, font: regularFont })
+    page.drawText(String(extraSno++), { x: snoColX, y, size: 10, font: regularFont })
     page.drawText('Installation Of PVC Strip Door/s', { x: descriptionColX, y, size: 10, font: regularFont })
     page.drawText(currency(installationCost), { x: totalColX, y, size: 10, font: regularFont })
     y -= 14
@@ -211,7 +224,7 @@ export async function generateProposalPdf(quoteData: QuoteData): Promise<Uint8Ar
   page.drawText(currency(gst), { x: totalColX, y, size: 11, font: regularFont })
   y -= 18
 
-  page.drawRectangle({ x: unitColX - 54, y: y - 4, width: 160, height: 22, color: rgb(0.9, 0.95, 1) })
+  page.drawRectangle({ x: unitColX - 54, y: y - 4, width: right - (unitColX - 54), height: 22, color: rgb(0.9, 0.95, 1) })
   page.drawText('Total Cost', { x: unitColX - 40, y: y + 2, size: 11, font: boldFont, color: rgb(0.1, 0.2, 0.5) })
   page.drawText(currency(totalCost), { x: totalColX, y: y + 2, size: 11, font: boldFont, color: rgb(0.1, 0.2, 0.5) })
 

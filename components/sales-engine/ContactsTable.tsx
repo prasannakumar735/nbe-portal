@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useMemo } from 'react'
 import type { SalesContactDisplayRow } from '@/hooks/useContactDiscovery'
 import { LoadingSkeleton } from '@/components/ui/LoadingSkeleton'
 
@@ -11,6 +12,35 @@ const VERIFICATION_STYLES: Record<string, string> = {
   blocked: 'bg-slate-200 text-slate-800',
 }
 
+const CONTACT_TYPE_OPTIONS = ['all', 'sales', 'general', 'unknown'] as const
+
+function emailDomain(email: string | null): string | null {
+  if (!email) return null
+  const at = email.indexOf('@')
+  if (at < 0) return null
+  return email.slice(at + 1).toLowerCase()
+}
+
+function domainToCompanyLabel(domain: string): string {
+  const clean = domain.replace(/^www\./i, '')
+  const name = clean
+    .replace(/\.(com\.au|net\.au|org\.au|gov\.au|edu\.au|asn\.au|id\.au|com|net|org|io|co\.uk|co\.nz)$/i, '')
+    .replace(/\.(co|ac|gov|edu|sch)$/, '')
+  return name
+    .split(/[-.]/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
+
+function pageUrlDomain(url: string | null): string | null {
+  if (!url) return null
+  try {
+    return new URL(url).hostname.replace(/^www\./i, '')
+  } catch {
+    return null
+  }
+}
+
 type ContactsTableProps = {
   rows: SalesContactDisplayRow[]
   loading: boolean
@@ -18,12 +48,90 @@ type ContactsTableProps = {
 }
 
 export function ContactsTable({ rows, loading, error }: ContactsTableProps) {
+  const [typeFilter, setTypeFilter] = useState<string>('all')
+  const [minConfidence, setMinConfidence] = useState(0)
+  const [showFilters, setShowFilters] = useState(false)
+
+  const filtered = useMemo(() => {
+    return rows.filter((r) => {
+      if (typeFilter !== 'all' && r.contact_type !== typeFilter) return false
+      if (r.confidence_score < minConfidence) return false
+      return true
+    })
+  }, [rows, typeFilter, minConfidence])
+
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-slate-900">Extracted Contacts</h2>
-      <p className="mt-1 text-sm text-slate-600">
-        Contacts discovered from selected business websites.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Extracted Contacts</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Contacts discovered from selected business websites.{' '}
+            {rows.length > 0 && (
+              <span className="text-slate-400">
+                {filtered.length === rows.length
+                  ? `${rows.length} total`
+                  : `${filtered.length} of ${rows.length} shown`}
+              </span>
+            )}
+          </p>
+        </div>
+        {rows.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowFilters((v) => !v)}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
+          >
+            <span className="material-symbols-outlined text-[16px]">filter_list</span>
+            Filters
+            {(typeFilter !== 'all' || minConfidence > 0) && (
+              <span className="ml-1 h-2 w-2 rounded-full bg-indigo-500" />
+            )}
+          </button>
+        )}
+      </div>
+
+      {showFilters && (
+        <div className="mt-3 flex flex-wrap items-center gap-4 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-slate-600">Contact type</label>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm text-slate-800"
+            >
+              {CONTACT_TYPE_OPTIONS.map((t) => (
+                <option key={t} value={t}>
+                  {t === 'all' ? 'All types' : t.charAt(0).toUpperCase() + t.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-slate-600">
+              Min confidence: <span className="font-semibold text-slate-800">{minConfidence}%</span>
+            </label>
+            <input
+              type="range"
+              min={0}
+              max={95}
+              step={5}
+              value={minConfidence}
+              onChange={(e) => setMinConfidence(Number(e.target.value))}
+              className="w-28 accent-indigo-600"
+            />
+          </div>
+          {(typeFilter !== 'all' || minConfidence > 0) && (
+            <button
+              type="button"
+              onClick={() => { setTypeFilter('all'); setMinConfidence(0) }}
+              className="text-xs text-indigo-600 hover:underline"
+            >
+              Reset
+            </button>
+          )}
+        </div>
+      )}
 
       {error ? (
         <div
@@ -41,45 +149,97 @@ export function ContactsTable({ rows, loading, error }: ContactsTableProps) {
       ) : null}
 
       <div className="mt-4 overflow-x-auto">
-        <table className="w-full min-w-[720px] text-left text-sm">
+        <table className="w-full min-w-[780px] text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
-              <th className="px-3 py-2 font-medium text-slate-700">Company Name</th>
+              <th className="px-3 py-2 font-medium text-slate-700">Contact Company</th>
               <th className="px-3 py-2 font-medium text-slate-700">Email</th>
               <th className="px-3 py-2 font-medium text-slate-700">Phone</th>
-              <th className="px-3 py-2 font-medium text-slate-700">Contact Type</th>
-              <th className="px-3 py-2 font-medium text-slate-700">Confidence Score</th>
-              <th className="px-3 py-2 font-medium text-slate-700">Verification Status</th>
-              <th className="px-3 py-2 font-medium text-slate-700">Source</th>
+              <th className="px-3 py-2 font-medium text-slate-700">Type</th>
+              <th className="px-3 py-2 font-medium text-slate-700">Confidence</th>
+              <th className="px-3 py-2 font-medium text-slate-700">Status</th>
+              <th className="px-3 py-2 font-medium text-slate-700">Found On</th>
             </tr>
           </thead>
           <tbody>
-            {!loading && rows.length === 0 ? (
+            {!loading && filtered.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-3 py-10 text-center text-slate-500">
-                  No contacts yet. Select businesses and run Extract Contacts.
+                  {rows.length === 0
+                    ? 'No contacts yet. Select businesses and run Extract Contacts.'
+                    : 'No contacts match the current filters.'}
                 </td>
               </tr>
             ) : null}
-            {rows.map((row) => (
-              <tr key={row.id} className="border-b border-slate-100">
-                <td className="px-3 py-2 font-medium text-slate-900">{row.company_name}</td>
-                <td className="px-3 py-2 text-slate-700">{row.email ?? '—'}</td>
-                <td className="px-3 py-2 text-slate-700">{row.phone ?? '—'}</td>
-                <td className="px-3 py-2 capitalize text-slate-700">{row.contact_type}</td>
-                <td className="px-3 py-2 text-slate-700">{row.confidence_score}%</td>
-                <td className="px-3 py-2">
-                  <span
-                    className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
-                      VERIFICATION_STYLES[row.verification_status] ?? VERIFICATION_STYLES.unknown
-                    }`}
-                  >
-                    {row.verification_status}
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-slate-700">{row.source}</td>
-              </tr>
-            ))}
+            {filtered.map((row) => {
+              const domain = emailDomain(row.email)
+              const companyLabel = domain ? domainToCompanyLabel(domain) : null
+              const sourceDomain = pageUrlDomain(row.contact_page)
+              const isOwnDomain = domain && sourceDomain && domain === sourceDomain
+              return (
+                <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                  <td className="px-3 py-2">
+                    <p className="font-medium text-slate-900">{companyLabel ?? row.company_name}</p>
+                    {!isOwnDomain && companyLabel && row.company_name && row.company_name !== '—' && companyLabel.toLowerCase() !== row.company_name.toLowerCase() && (
+                      <p className="mt-0.5 text-[11px] text-slate-400">via {row.company_name}</p>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-slate-700">
+                    {row.email ? (
+                      <a
+                        href={`mailto:${row.email}`}
+                        className="hover:text-indigo-600 hover:underline"
+                      >
+                        {row.email}
+                      </a>
+                    ) : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-slate-700">{row.phone ?? '—'}</td>
+                  <td className="px-3 py-2 capitalize text-slate-700">{row.contact_type}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-1.5 w-12 overflow-hidden rounded-full bg-slate-200">
+                        <div
+                          className={`h-full rounded-full ${
+                            row.confidence_score >= 80
+                              ? 'bg-emerald-500'
+                              : row.confidence_score >= 60
+                              ? 'bg-amber-400'
+                              : 'bg-slate-400'
+                          }`}
+                          style={{ width: `${row.confidence_score}%` }}
+                        />
+                      </div>
+                      <span className="text-slate-600">{row.confidence_score}%</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
+                        VERIFICATION_STYLES[row.verification_status] ?? VERIFICATION_STYLES.unknown
+                      }`}
+                    >
+                      {row.verification_status}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    {row.contact_page ? (
+                      <a
+                        href={row.contact_page}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-slate-500 hover:text-indigo-600 hover:underline"
+                        title={row.contact_page}
+                      >
+                        {sourceDomain ?? 'link'}
+                      </a>
+                    ) : (
+                      <span className="text-xs text-slate-400">{row.source}</span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

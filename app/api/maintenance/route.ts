@@ -4,6 +4,7 @@ import { maintenanceFormDraftSchema, maintenanceFormSubmitSchema } from '@/lib/v
 import type { MaintenanceChecklistStatus } from '@/lib/types/maintenance.types'
 import { createClient } from '@supabase/supabase-js'
 import { runMaintenanceSubmit } from '@/lib/maintenance/runMaintenanceSubmit'
+import { createServerClient } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
 
@@ -206,10 +207,14 @@ export async function POST(request: NextRequest) {
   let rawBody: unknown = null
 
   try {
+    const supabaseSession = await createServerClient()
+    const { data: { user } } = await supabaseSession.auth.getUser()
+    if (!user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     rawBody = await request.json()
     const normalized = normalisePayload(rawBody)
-
-    console.log('Maintenance API payload:', normalized.formCandidate)
 
     const formSchema =
       normalized.status === 'draft' ? maintenanceFormDraftSchema : maintenanceFormSubmitSchema

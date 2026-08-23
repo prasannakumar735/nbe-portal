@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { SalesEngineAdminNav } from '@/components/sales-engine/admin/SalesEngineAdminNav'
 
 type SalesEngineAdminShellProps = {
@@ -13,13 +12,7 @@ export function SalesEngineAdminShell({ title, description, children }: SalesEng
   return (
     <div className="w-full min-w-0 max-w-4xl space-y-6">
       <header>
-        <Link
-          href="/dashboard/sales-engine"
-          className="text-sm font-medium text-indigo-700 hover:text-indigo-900"
-        >
-          ← Sales Engine
-        </Link>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900">Administration</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Administration</h1>
         <p className="mt-1 text-sm text-slate-600">
           Runtime configuration for the Sales Engine (feature flags, pilot safe delivery, deliverability).
         </p>

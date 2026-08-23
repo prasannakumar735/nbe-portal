@@ -191,23 +191,110 @@ export function LoginClient({
     )
   }
 
-  return (
-    <div className="flex items-center justify-center min-h-screen bg-slate-50 px-4">
-      <div className="w-full max-w-md">
-        <div className="bg-white p-8 rounded-lg shadow-md border border-slate-200">
-          <div className="mb-6 flex justify-center overflow-hidden">
-            <AuthScreenLogo variant={clientPortalBranding ? 'legacy' : 'default'} />
+  if (clientPortalBranding) {
+    return (
+      <div className="flex min-h-screen">
+        {/* Left panel */}
+        <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col items-center justify-center bg-white relative overflow-hidden border-r border-slate-100">
+          <div className="flex flex-col items-center text-center px-12">
+            <AuthScreenLogo variant="legacy" className="!h-auto !max-h-48 w-full max-w-xs object-contain mb-10" />
+            <h2 className="text-3xl font-bold text-slate-900 mb-4">Welcome back</h2>
+            <p className="text-slate-500 text-lg max-w-sm leading-relaxed">
+              Secure access to your organisation&rsquo;s maintenance records, inspection reports, and shared documents.
+            </p>
+          </div>
+        </div>
+
+        {/* Right panel — form */}
+        <div className="flex flex-1 flex-col items-center justify-center bg-slate-50 px-6 py-12">
+          {/* Logo on mobile */}
+          <div className="mb-8 flex justify-center lg:hidden">
+            <AuthScreenLogo variant="legacy" className="!h-52 !max-h-52 !max-w-[min(380px,90vw)]" />
           </div>
 
-          <div className="mb-6 text-center">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              {clientPortalBranding ? 'Client portal' : 'Portal login'}
-            </h1>
-            {clientPortalBranding ? (
-              <p className="mt-2 text-sm font-medium text-slate-600">
-                Secure access to your organisation&rsquo;s maintenance records
-              </p>
-            ) : null}
+          <div className="w-full max-w-sm">
+            <div className="mb-8">
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Client portal</h1>
+              <p className="mt-1 text-sm text-slate-500">Sign in to your account to continue</p>
+            </div>
+
+            {(inactiveNotice || noProfileNotice) && !error && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+                {inactiveNotice && 'Your session ended because this account is inactive.'}
+                {noProfileNotice && 'No portal profile is linked to this account. Contact an administrator.'}
+              </div>
+            )}
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+                <span className="material-symbols-outlined text-red-600 text-lg mt-0.5">warning</span>
+                <span className="text-red-700 text-sm flex-1">{error}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={loading}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white disabled:bg-slate-50 disabled:cursor-not-allowed"
+                  placeholder="your@email.com" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={loading}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white disabled:bg-slate-50 disabled:cursor-not-allowed"
+                  placeholder="••••••••" required />
+              </div>
+              <TurnstileWidget ref={turnstileRef} onToken={onTurnstileToken} onExpire={onTurnstileExpire} scriptNonce={cspNonce} />
+              <button type="submit" disabled={loading}
+                className="w-full px-4 py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 mt-2">
+                {loading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                <span>{loading ? 'Signing in...' : 'Sign In'}</span>
+              </button>
+            </form>
+
+            <p className="text-center text-sm mt-5">
+              <Link href="/forgot-password" className="font-medium text-indigo-600 hover:text-indigo-500">Forgot password?</Link>
+            </p>
+
+            <p className="text-center text-xs text-slate-400 mt-6">
+              NBE staff should use the{' '}
+              <Link href="/login" className="font-medium text-indigo-600 hover:text-indigo-500">internal portal sign-in</Link>.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex min-h-screen">
+      {/* Left panel */}
+      <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col items-center justify-center bg-white relative overflow-hidden border-r border-slate-100">
+        <div className="flex flex-col items-center text-center px-12">
+          <img
+            src="/Portal_logo.png"
+            alt="NBE Portal"
+            className="w-full max-w-lg object-contain mb-10"
+            style={{ maxHeight: '55vh' }}
+          />
+          <h2 className="text-3xl font-bold text-slate-900 mb-4">Welcome back</h2>
+          <p className="text-slate-500 text-lg max-w-sm leading-relaxed">
+            Your central hub for maintenance records, job cards, timecards, and more.
+          </p>
+        </div>
+      </div>
+
+      {/* Right panel — form */}
+      <div className="flex flex-1 flex-col items-center justify-center bg-slate-50 px-6 py-12">
+        {/* Logo shown on mobile (left panel hidden) */}
+        <div className="mb-8 flex justify-center lg:hidden">
+          <AuthScreenLogo variant="default" className="!h-52 !max-h-52 !max-w-[min(380px,90vw)]" />
+        </div>
+
+        <div className="w-full max-w-sm">
+          <div className="mb-8">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Portal login</h1>
+            <p className="mt-1 text-sm text-slate-500">Sign in to your account to continue</p>
           </div>
 
           {(inactiveNotice || noProfileNotice) && !error && (
@@ -226,30 +313,26 @@ export function LoginClient({
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Email
-              </label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50 disabled:cursor-not-allowed"
+                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white disabled:bg-slate-50 disabled:cursor-not-allowed"
                 placeholder="your@email.com"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Password
-              </label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50 disabled:cursor-not-allowed"
+                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white disabled:bg-slate-50 disabled:cursor-not-allowed"
                 placeholder="••••••••"
                 required
               />
@@ -265,7 +348,7 @@ export function LoginClient({
             <button
               type="submit"
               disabled={loading}
-              className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+              className="w-full px-4 py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 mt-2"
             >
               {loading && (
                 <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -274,47 +357,17 @@ export function LoginClient({
             </button>
           </form>
 
-          <p className="text-center text-sm mt-4">
+          <p className="text-center text-sm mt-5">
             <Link href="/forgot-password" className="font-medium text-indigo-600 hover:text-indigo-500">
               Forgot password?
             </Link>
           </p>
 
-          <div
-            className={`mt-6 space-y-3 text-center ${clientPortalBranding ? 'rounded-lg border border-slate-100 bg-slate-50/80 px-4 py-4' : ''}`}
-          >
-            <p className="text-sm leading-relaxed text-slate-600">
-              {clientPortalBranding
-                ? 'Use the email address provided by your organisation to securely access maintenance reports, inspection records, and shared documents.'
-                : 'Use your portal credentials to access the dashboard.'}
-            </p>
-            {clientPortalBranding ? (
-              <p className="text-xs leading-relaxed text-slate-500">
-                Links shared via email or QR code may open directly without requiring sign-in.
-              </p>
-            ) : null}
-          </div>
-
-          <p className="text-center text-xs text-slate-500 mt-5">
-            {clientPortalBranding ? (
-              <>
-                NBE staff should use the{' '}
-                <Link href="/login" className="font-medium text-indigo-600 hover:text-indigo-500">
-                  internal portal sign-in
-                </Link>
-                .
-              </>
-            ) : (
-              <>
-                Maintenance client?{' '}
-                <Link
-                  href="/login?next=/client"
-                  className="font-medium text-indigo-600 hover:text-indigo-500"
-                >
-                  Client portal sign-in
-                </Link>
-              </>
-            )}
+          <p className="text-center text-xs text-slate-400 mt-6">
+            Maintenance client?{' '}
+            <Link href="/login?next=/client" className="font-medium text-indigo-600 hover:text-indigo-500">
+              Client portal sign-in
+            </Link>
           </p>
         </div>
       </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import Link from 'next/link'
+import { SalesEngineToolsNav } from '@/components/sales-engine/SalesEngineToolsNav'
 import { useCallback, useEffect, useState } from 'react'
 import { salesEngineFetch } from '@/components/sales-engine/salesEngineApi'
 import type { SalesOfferTypeRecord } from '@/lib/sales/types/campaignLookup.types'
@@ -98,17 +98,12 @@ export function OfferAssetsPage() {
   return (
     <div className="w-full min-w-0 max-w-3xl space-y-6">
       <header>
-        <Link
-          href="/dashboard/sales-engine"
-          className="text-sm font-medium text-slate-600 hover:text-slate-900"
-        >
-          ← Sales Engine
-        </Link>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900">Offer brochures</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Offer brochures</h1>
         <p className="mt-1 text-sm text-slate-600">
           PDFs and images shared by offer type. New generated emails copy these files automatically.
         </p>
       </header>
+      <SalesEngineToolsNav />
 
       {error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">

@@ -1,6 +1,6 @@
 'use client'
 
-import Link from 'next/link'
+import { SalesEngineToolsNav } from '@/components/sales-engine/SalesEngineToolsNav'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { salesEngineFetch } from '@/components/sales-engine/salesEngineApi'
@@ -55,13 +55,7 @@ export function SalesAnalyticsPage() {
     <div className="w-full min-w-0 max-w-6xl space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <Link
-            href="/dashboard/sales-engine"
-            className="text-sm font-medium text-indigo-700 hover:text-indigo-900"
-          >
-            ← Sales Engine
-          </Link>
-          <h1 className="mt-2 text-2xl font-bold text-slate-900">Sales analytics</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Sales analytics</h1>
           <p className="mt-1 text-sm text-slate-600">
             Discovery, outreach, engagement, costs, and ROI (read-only aggregates).
           </p>
@@ -75,6 +69,7 @@ export function SalesAnalyticsPage() {
           Refresh
         </button>
       </header>
+      <SalesEngineToolsNav />
 
       {loading && !d ? <p className="text-sm text-slate-600">Loading…</p> : null}
 

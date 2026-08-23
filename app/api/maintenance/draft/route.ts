@@ -88,7 +88,6 @@ async function persistDoorData(
 
       if (existingDoor?.id) {
         doorId = existingDoor.id
-        console.log('Resolved door ID (existing):', doorId)
       } else {
         const { data: newDoor, error } = await supabase
           .from('doors')
@@ -105,7 +104,6 @@ async function persistDoorData(
           throw new Error('Failed to create door record')
         }
         doorId = newDoor.id
-        console.log('Resolved door ID (created):', doorId)
       }
     }
 
@@ -124,7 +122,7 @@ async function persistDoorData(
     const t = String(door.door_type ?? '').trim() || 'Unspecified'
     const { error: syncErr } = await supabase.from('doors').update({ door_type: t }).eq('id', doorId)
     if (syncErr) {
-      console.error('Failed to sync doors.door_type from inspection:', doorId, syncErr)
+      console.error('[maintenance/draft] Failed to sync door_type:', syncErr.message)
     }
   }
 
@@ -174,8 +172,6 @@ async function persistDoorData(
     })
   })
 
-  console.log('maintenanceDoorsInsert payload:', maintenanceDoorsInsert)
-
   const { data: insertedDoors, error: doorsError } = await supabase
     .from('maintenance_doors')
     .insert(maintenanceDoorsInsert)
@@ -212,7 +208,6 @@ async function persistDoorData(
   })
 
   if (checklistRows.length > 0) {
-    console.log('Door inspection insert (maintenance_checklist):', checklistRows.length, 'rows')
     const { error } = await supabase.from('maintenance_checklist').insert(checklistRows)
     if (error) {
       throw error
@@ -220,7 +215,6 @@ async function persistDoorData(
   }
 
   if (photoRows.length > 0) {
-    console.log('Door inspection insert (maintenance_photos):', photoRows.length, 'rows')
     const { error } = await supabase.from('maintenance_photos').insert(photoRows)
     if (error) {
       throw error
@@ -260,7 +254,6 @@ async function persistDoorData(
     }>
 
     if (doorInspectionRows.length > 0) {
-      console.log('Door inspection insert (door_inspections):', doorInspectionRows)
       const { error: doorInspectionError } = await supabase
         .from('door_inspections')
         .insert(doorInspectionRows)
@@ -275,16 +268,16 @@ async function persistDoorData(
 export async function POST(request: NextRequest) {
   let body: unknown = null
   try {
+    // All draft saves require an authenticated portal staff session.
+    const serverSupabase = await createServerClient()
+    const { data: { user: sessionUser } } = await serverSupabase.auth.getUser()
+    if (!sessionUser?.id) {
+      return NextResponse.json({ error: 'Unauthorized. Sign in to save a report.' }, { status: 401 })
+    }
+
     body = await request.json()
 
-    console.log('[Maintenance Draft API] Incoming payload:', {
-      hasForm: typeof body === 'object' && body !== null ? Boolean((body as Record<string, unknown>).form) : false,
-      keys: typeof body === 'object' && body !== null ? Object.keys(body as Record<string, unknown>) : [],
-      status: typeof body === 'object' && body !== null ? (body as Record<string, unknown>).status : undefined,
-    })
-
     const payload = parseMaintenanceDraftPayload(body)
-    console.log('Draft Payload:', payload)
 
     // Final submitted rows must still satisfy full checklist rules; WIP draft/reviewing saves skip this.
     if (payload.status === 'submitted') {
@@ -303,20 +296,15 @@ export async function POST(request: NextRequest) {
 
     let adminUserId: string | null = null
     if (payload.report_id && (payload.admin_edit === true)) {
-      const serverSupabase = await createServerClient()
-      const { data: { user } } = await serverSupabase.auth.getUser()
-      if (!user?.id) {
-        return NextResponse.json({ error: 'Unauthorized. Sign in to save admin edits.' }, { status: 401 })
-      }
       const { data: profile } = await serverSupabase
         .from('profiles')
         .select('role')
-        .eq('id', user.id)
+        .eq('id', sessionUser.id)
         .single()
       if (!canApproveMaintenanceReport(profile as { role?: string } | null)) {
         return NextResponse.json({ error: 'Only managers and admins can edit submitted reports.' }, { status: 403 })
       }
-      adminUserId = user.id
+      adminUserId = sessionUser.id
     }
 
     let existingStatus: string | undefined
@@ -416,15 +404,6 @@ export async function POST(request: NextRequest) {
       throw new Error('Missing required identifiers for draft save: client_location_id is required when a door has not been linked to a location.')
     }
 
-    console.log('Draft payload:', {
-      report_id: reportId,
-      status: payload.status,
-      hasForm: Boolean(payload.form),
-      doorCount: payload.form.doors?.length ?? 0,
-      reportInsertKeys: Object.keys(reportInsert),
-    })
-    console.log('Maintenance reports insert/update:', reportInsert)
-
     if (reportId) {
       const { error } = await supabase
         .from('maintenance_reports')
@@ -508,6 +487,12 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    const sessionClient = await createServerClient()
+    const { data: { user: sessionUser } } = await sessionClient.auth.getUser()
+    if (!sessionUser?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const reportId = request.nextUrl.searchParams.get('reportId')
     if (!reportId) {
       return NextResponse.json({ report: null, client_view_url: null })

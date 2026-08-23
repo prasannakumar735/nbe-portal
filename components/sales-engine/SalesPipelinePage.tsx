@@ -1,6 +1,6 @@
 'use client'
 
-import Link from 'next/link'
+import { SalesEngineToolsNav } from '@/components/sales-engine/SalesEngineToolsNav'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { salesEngineFetch } from '@/components/sales-engine/salesEngineApi'
@@ -111,17 +111,12 @@ export function SalesPipelinePage() {
   return (
     <div className="w-full min-w-0 max-w-6xl space-y-6">
       <header>
-        <Link
-          href="/dashboard/sales-engine"
-          className="text-sm font-medium text-indigo-700 hover:text-indigo-900"
-        >
-          ← Sales Engine
-        </Link>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900">CRM pipeline</h1>
+        <h1 className="text-2xl font-bold text-slate-900">CRM pipeline</h1>
         <p className="mt-1 text-sm text-slate-600">
           Track deals from lead through won/lost — revenue, probability, owner, follow-ups, and notes.
         </p>
       </header>
+      <SalesEngineToolsNav />
 
       {loading && !dash ? (
         <p className="text-sm text-slate-600">Loading pipeline…</p>

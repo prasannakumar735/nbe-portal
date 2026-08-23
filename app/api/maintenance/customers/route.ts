@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/server'
+import { requireMaintenanceStaffApi } from '@/lib/maintenance/requireMaintenanceStaffApi'
 
 function mapCustomerRow(row: Record<string, unknown>) {
   return {
@@ -11,8 +11,14 @@ function mapCustomerRow(row: Record<string, unknown>) {
 
 export async function GET() {
   try {
-    const supabase = await createServerClient()
-    const { data, error } = await supabase.from('customers').select('*').order('created_at', { ascending: false }).limit(200)
+    const auth = await requireMaintenanceStaffApi()
+    if (!auth.ok) return auth.response
+
+    const { data, error } = await auth.supabase
+      .from('customers')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(200)
 
     if (error) {
       throw error

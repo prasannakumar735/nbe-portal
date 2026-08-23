@@ -47,14 +47,16 @@ export interface InventoryMovementRow {
   component?: Pick<ComponentRow, 'id' | 'sku' | 'name' | 'unit'>
 }
 
+export interface ProcessOrderResultItem {
+  component_id: string
+  component_name: string
+  required_qty: number
+  available_qty: number
+  remaining_qty: number
+  status: InventoryStatus
+}
+
 export interface ProcessOrderResult {
   order_reference: string
-  items: Array<{
-    component_id: string
-    component_name: string
-    required_qty: number
-    available_qty: number
-    remaining_qty: number
-    status: InventoryStatus
-  }>
+  items: ProcessOrderResultItem[]
 }

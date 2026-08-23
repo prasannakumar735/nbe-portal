@@ -6,7 +6,9 @@ import {
   getSalesEmailSendQueueById,
   listQueuedSalesEmailSendItems,
   requeueStuckSalesEmailSendQueueItems,
+  countSalesEmailSendQueueByStatus,
 } from '@/lib/sales/repositories/salesEmailSendQueueRepository'
+import { advanceSalesCampaignStatus } from '@/lib/sales/repositories/salesCampaignRepository'
 import { MAX_EMAIL_SEND_ATTEMPTS } from '@/lib/sales/sending/emailSendQueue.constants'
 
 const DEFAULT_DISPATCH_LIMIT = 10
@@ -37,24 +39,41 @@ export async function dispatchEmailSendQueue(
     recoveredStuck = await requeueStuckSalesEmailSendQueueItems(supabase)
   }
 
-  let queueIds: string[]
+  // Capture queue items with their campaign IDs before processing so we can
+  // check campaign completion afterward (results carry only queueId, not campaignId).
+  let queueItems: { id: string; campaign_id: string }[]
   if (options?.queueIds?.length) {
     const rows = await Promise.all(
       options.queueIds.map((id) => getSalesEmailSendQueueById(supabase, id)),
     )
-    queueIds = rows.filter((r) => r?.status === 'queued').map((r) => r!.id)
+    queueItems = rows
+      .filter((r) => r?.status === 'queued')
+      .map((r) => ({ id: r!.id, campaign_id: r!.campaign_id }))
   } else {
     const rows = await listQueuedSalesEmailSendItems(supabase, limit)
-    queueIds = rows.map((r) => r.id)
+    queueItems = rows.map((r) => ({ id: r.id, campaign_id: r.campaign_id }))
   }
 
-  for (const queueId of queueIds.slice(0, limit)) {
+  for (const item of queueItems.slice(0, limit)) {
     await acquireEmailSendRateLimit()
     results.push(
-      await processEmailSendQueueItem(supabase, queueId, {
+      await processEmailSendQueueItem(supabase, item.id, {
         maxAttempts,
       }),
     )
+  }
+
+  // After processing, mark sending → completed for any campaign where all
+  // queue items are now in terminal states (sent/failed/bounced/cancelled).
+  const campaignIds = [...new Set(queueItems.map((i) => i.campaign_id))]
+  for (const campaignId of campaignIds) {
+    const counts = await countSalesEmailSendQueueByStatus(supabase, { campaignId })
+    const activeCount = counts.queued + counts.sending
+    if (activeCount === 0) {
+      await advanceSalesCampaignStatus(supabase, campaignId, 'sending', 'completed').catch(() => {
+        // Non-fatal: campaign may not yet be in sending state.
+      })
+    }
   }
 
   return { recoveredStuck, results }

@@ -2,7 +2,7 @@ import { readFile } from 'fs/promises'
 import { join } from 'path'
 
 export async function loadNbeLogoBytes(): Promise<Uint8Array | null> {
-  for (const logoPath of ['NBE_LOGO_BK_PL.png', 'nbe-logo.png', 'logo/nbe-logo.png', 'logo.png']) {
+  for (const logoPath of ['NBE_LOGO_BK_PL.png']) {
     try {
       return new Uint8Array(await readFile(join(process.cwd(), 'public', logoPath)))
     } catch {

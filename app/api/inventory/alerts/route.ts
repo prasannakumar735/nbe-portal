@@ -1,56 +1,20 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireInventoryAccess } from '@/lib/auth/inventoryAccess'
+import { InventoryService } from '@/lib/services/inventory.service'
 
 export const runtime = 'nodejs'
 
 export async function GET() {
   try {
-    const supabase = await createClient()
-
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
-
-    if (userError) {
-      console.error('Supabase auth error:', userError)
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const access = await requireInventoryAccess()
+    if (!access.authorized) {
+      return NextResponse.json({ error: access.error }, { status: access.status })
     }
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const { data, error } = await supabase
-      .from('components')
-      .select('id, sku, name, unit, stock_quantity, min_stock')
-
-    if (error) {
-      console.error('Supabase fetch error:', error)
-      throw error
-    }
-
-    console.log('Fetched components:', data)
-
-    if (!data) {
-      return NextResponse.json([])
-    }
-
-    const alerts = data.filter((item) => {
-      const stock = Number(item.stock_quantity || 0)
-      const min = Number(item.min_stock || 0)
-      return stock <= min
-    })
-
-    return NextResponse.json(alerts)
+    const alerts = await InventoryService.getLowStockAlerts()
+    return NextResponse.json({ alerts })
   } catch (error) {
-    console.error('Alerts API ERROR:', error)
-    return NextResponse.json(
-      {
-        error: 'Failed to load alerts',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      },
-      { status: 500 }
-    )
+    const message = error instanceof Error ? error.message : 'Failed to load alerts'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

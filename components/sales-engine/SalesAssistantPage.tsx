@@ -1,6 +1,6 @@
 'use client'
 
-import Link from 'next/link'
+import { SalesEngineToolsNav } from '@/components/sales-engine/SalesEngineToolsNav'
 import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
 import { salesEngineFetch } from '@/components/sales-engine/salesEngineApi'
@@ -79,17 +79,12 @@ export function SalesAssistantPage() {
   return (
     <div className="w-full min-w-0 max-w-6xl space-y-6">
       <header>
-        <Link
-          href="/dashboard/sales-engine"
-          className="text-sm font-medium text-indigo-700 hover:text-indigo-900"
-        >
-          ← Sales Engine
-        </Link>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900">AI sales assistant</h1>
+        <h1 className="text-2xl font-bold text-slate-900">AI sales assistant</h1>
         <p className="mt-1 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
           {SALES_ASSISTANT_DISCLAIMER} Never sends email automatically.
         </p>
       </header>
+      <SalesEngineToolsNav />
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6 space-y-4">
         <h2 className="text-lg font-semibold text-slate-900">Context</h2>

@@ -3,6 +3,7 @@
 import { ReactNode, useState, useEffect } from 'react'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
+import type { FeatureFlags } from '@/lib/featureFlags'
 
 interface LayoutWrapperProps {
   children: ReactNode
@@ -10,6 +11,7 @@ interface LayoutWrapperProps {
   /** Server-resolved profiles.role for navigation (avoids client flash). */
   portalRole: string | null
   portalManagerOrAdmin: boolean
+  featureFlags: FeatureFlags
 }
 
 /**
@@ -26,7 +28,7 @@ interface LayoutWrapperProps {
  * - Works with existing auth flow
  * - Dynamic content area adjustment based on sidebar state
  */
-export function LayoutWrapper({ children, user, portalRole, portalManagerOrAdmin }: LayoutWrapperProps) {
+export function LayoutWrapper({ children, user, portalRole, portalManagerOrAdmin, featureFlags }: LayoutWrapperProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
@@ -66,13 +68,14 @@ export function LayoutWrapper({ children, user, portalRole, portalManagerOrAdmin
       )}
 
       {/* Sidebar */}
-      <Sidebar 
+      <Sidebar
         isCollapsed={isCollapsed}
         onToggleCollapse={handleToggleCollapse}
         isMobileOpen={isMobileOpen}
         onCloseMobile={handleCloseMobile}
         portalRole={portalRole}
         portalManagerOrAdmin={portalManagerOrAdmin}
+        featureFlags={featureFlags}
       />
       
       {/* Main Content Area - Dynamically adjusts based on sidebar state */}
