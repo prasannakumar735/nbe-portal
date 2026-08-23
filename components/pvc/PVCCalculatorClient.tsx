@@ -144,7 +144,7 @@ export function PVCCalculatorClient({
   function openSendEmailModal() {
     setEmailBody(buildEmailBody())
     setEmailRecipients('')
-    setAttachPdf(true)
+    setAttachPdf(quoteLines.length > 0)
     setEmailError(null)
     setShowSendEmail(true)
   }
@@ -614,14 +614,18 @@ export function PVCCalculatorClient({
                 />
               </div>
 
-              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+              <label className={`flex items-center gap-2 text-sm select-none ${quoteLines.length === 0 ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-700'}`}>
                 <input
                   type="checkbox"
                   checked={attachPdf}
+                  disabled={quoteLines.length === 0}
                   onChange={e => setAttachPdf(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
                 />
                 Attach quote PDF
+                {quoteLines.length === 0 && (
+                  <span className="text-xs text-slate-400">(add door to quote to attach PDF)</span>
+                )}
               </label>
 
               {emailError && (
