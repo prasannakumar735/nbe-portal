@@ -1,4 +1,4 @@
-import { Resend } from 'resend'
+import { sendMailViaGraph } from '@/lib/graph/sendMail'
 
 export async function sendPvcQuoteToManager(params: {
   senderName: string
@@ -8,35 +8,25 @@ export async function sendPvcQuoteToManager(params: {
   pdfBytes: Buffer | null
   pdfFileName: string
 }): Promise<void> {
-  const key = (process.env.RESEND_API_KEY ?? '').trim()
-  if (!key) {
-    throw new Error('Email is not configured. Set RESEND_API_KEY in environment variables.')
-  }
-
-  const resend = new Resend(key)
   const subject = buildSubject(params.emailBody)
 
-  const attachments = params.pdfBytes
-    ? [
-        {
-          filename: params.pdfFileName,
-          content: params.pdfBytes,
-        },
-      ]
-    : []
+  // Graph sendMail takes a single `to` string; for multiple recipients join with semicolons
+  const to = params.recipientEmails.join('; ')
 
-  const { error } = await resend.emails.send({
-    from: process.env.RESEND_FROM ?? 'NBE Portal <noreply@nbeaustralia.com.au>',
-    to: params.recipientEmails,
-    reply_to: params.senderEmail,
+  await sendMailViaGraph({
+    to,
     subject,
-    text: params.emailBody,
-    attachments,
+    bodyText: params.emailBody,
+    attachments: params.pdfBytes
+      ? [
+          {
+            name: params.pdfFileName,
+            contentType: 'application/pdf',
+            contentBytes: params.pdfBytes.toString('base64'),
+          },
+        ]
+      : [],
   })
-
-  if (error) {
-    throw new Error(`Failed to send email: ${error.message}`)
-  }
 }
 
 /** Extract a subject line from the first non-empty line of the body, fallback to generic. */
