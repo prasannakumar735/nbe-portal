@@ -536,7 +536,7 @@ export function PVCCalculatorClient({
               onSaveQuote={handleSaveQuote}
               onGenerateQuote={handleGenerateQuote}
               onSendEmail={mode === 'edit' ? openSendEmailModal : undefined}
-              canSendEmail={!!draftId && quoteLines.length > 0}
+              canSendEmail={!!draftId && (quoteLines.length > 0 || result !== null)}
             />
           </div>
         </div>
