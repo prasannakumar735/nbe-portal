@@ -144,7 +144,7 @@ export function PVCCalculatorClient({
   function openSendEmailModal() {
     setEmailBody(buildEmailBody())
     setEmailRecipients('')
-    setAttachPdf(quoteLines.length > 0)
+    setAttachPdf(true)
     setEmailError(null)
     setShowSendEmail(true)
   }
@@ -156,6 +156,14 @@ export function PVCCalculatorClient({
     setIsSendingEmail(true)
     setEmailError(null)
     try {
+      // Always sync the latest snapshot before sending so the server has the
+      // current calculation (including single-door pending results).
+      await fetch(`/api/pvc/quotes/${draftId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ form_snapshot: buildCurrentSnapshot() }),
+      })
+
       const res = await fetch(`/api/pvc/quotes/${draftId}/send-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -298,9 +306,16 @@ export function PVCCalculatorClient({
   }, [quoteLines])
 
   const buildCurrentSnapshot = useCallback(() => {
+    // If no doors have been added to the list but there's a current calculation,
+    // treat it as the single door so the snapshot always has at least one line
+    // (required for PDF generation in the send-email route).
+    const effectiveLines =
+      quoteLines.length > 0 || !result
+        ? quoteLines
+        : [makePendingQuoteLine(formValues, result)]
     return buildSnapshotV1({
       formValues,
-      quoteLines,
+      quoteLines: effectiveLines,
       quoteExtras: {
         installationPrice: result?.totals.installationPrice ?? quoteExtras.installationPrice,
         freightPrice: result?.totals.freightPrice ?? quoteExtras.freightPrice,
@@ -614,18 +629,14 @@ export function PVCCalculatorClient({
                 />
               </div>
 
-              <label className={`flex items-center gap-2 text-sm select-none ${quoteLines.length === 0 ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-700'}`}>
+              <label className="flex items-center gap-2 text-sm select-none cursor-pointer text-slate-700">
                 <input
                   type="checkbox"
                   checked={attachPdf}
-                  disabled={quoteLines.length === 0}
                   onChange={e => setAttachPdf(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                 />
                 Attach quote PDF
-                {quoteLines.length === 0 && (
-                  <span className="text-xs text-slate-400">(add door to quote to attach PDF)</span>
-                )}
               </label>
 
               {emailError && (
