@@ -5,7 +5,7 @@ import { unauthorizedOrForbiddenResponse } from '@/lib/security/httpAuthErrors'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { parsePVCCalculatorSnapshot } from '@/lib/pvc/pvcCalculatorSnapshot'
 import { snapshotToQuoteData } from '@/lib/pvc/snapshotToQuoteData'
-import { generateQuotePdf } from '@/lib/pdf/generateQuotePdf'
+import { generateProposalPdf } from '@/lib/pdf/generateProposalPdf'
 import { sendPvcQuoteToManager } from '@/lib/email/sendPvcQuoteToManager'
 
 export const runtime = 'nodejs'
@@ -79,7 +79,7 @@ export async function POST(
       }
       const snapshot = parsePVCCalculatorSnapshot(quote.form_snapshot)
       const quoteData = snapshotToQuoteData(snapshot)
-      const bytes = await generateQuotePdf(quoteData)
+      const bytes = await generateProposalPdf(quoteData)
       pdfBytes = Buffer.from(bytes)
 
       const customer = snapshot.formValues.customer.trim() || 'Quote'
