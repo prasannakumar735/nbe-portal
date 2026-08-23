@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer'
+import { Resend } from 'resend'
 
 export async function sendPvcQuoteToManager(params: {
   senderName: string
@@ -8,42 +8,35 @@ export async function sendPvcQuoteToManager(params: {
   pdfBytes: Buffer | null
   pdfFileName: string
 }): Promise<void> {
-  const host = process.env.SMTP_HOST
-  const port = Number(process.env.SMTP_PORT || '587')
-  const user = process.env.SMTP_USER
-  const pass = process.env.SMTP_PASS
-  const from = process.env.SMTP_FROM || user
-
-  if (!host || !user || !pass || !from) {
-    throw new Error('SMTP is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM.')
+  const key = (process.env.RESEND_API_KEY ?? '').trim()
+  if (!key) {
+    throw new Error('Email is not configured. Set RESEND_API_KEY in environment variables.')
   }
 
-  const to = params.recipientEmails.join(', ')
+  const resend = new Resend(key)
   const subject = buildSubject(params.emailBody)
 
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-  })
+  const attachments = params.pdfBytes
+    ? [
+        {
+          filename: params.pdfFileName,
+          content: params.pdfBytes,
+        },
+      ]
+    : []
 
-  await transporter.sendMail({
-    from: `"${params.senderName}" <${from}>`,
-    to,
-    replyTo: params.senderEmail,
+  const { error } = await resend.emails.send({
+    from: process.env.RESEND_FROM ?? 'NBE Portal <noreply@nbeaustralia.com.au>',
+    to: params.recipientEmails,
+    reply_to: params.senderEmail,
     subject,
     text: params.emailBody,
-    attachments: params.pdfBytes
-      ? [
-          {
-            filename: params.pdfFileName,
-            content: params.pdfBytes,
-            contentType: 'application/pdf',
-          },
-        ]
-      : [],
+    attachments,
   })
+
+  if (error) {
+    throw new Error(`Failed to send email: ${error.message}`)
+  }
 }
 
 /** Extract a subject line from the first non-empty line of the body, fallback to generic. */
