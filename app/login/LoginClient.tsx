@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { TurnstileWidget, type TurnstileWidgetHandle } from '@/components/security/TurnstileWidget'
 import { AuthScreenLogo } from '@/components/common/AuthScreenLogo'
 import { createSupabaseClient } from '@/lib/supabase/client'
+import pkg from '@/package.json'
 
 type LoginClientProps = {
   inactiveNotice: boolean
@@ -260,6 +261,10 @@ export function LoginClient({
               NBE staff should use the{' '}
               <Link href="/login" className="font-medium text-indigo-600 hover:text-indigo-500">internal portal sign-in</Link>.
             </p>
+
+            <p className="text-center text-[11px] font-mono text-slate-300 mt-8 select-none">
+              v{pkg.version}
+            </p>
           </div>
         </div>
       </div>
@@ -368,6 +373,10 @@ export function LoginClient({
             <Link href="/login?next=/client" className="font-medium text-indigo-600 hover:text-indigo-500">
               Client portal sign-in
             </Link>
+          </p>
+
+          <p className="text-center text-[11px] font-mono text-slate-300 mt-8 select-none">
+            v{pkg.version}
           </p>
         </div>
       </div>
