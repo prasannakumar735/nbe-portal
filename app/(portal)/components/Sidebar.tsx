@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react'
 import { useBrowserPathname } from '@/lib/app/useBrowserPathname'
 import { buildPortalSidebarNavItems } from '@/lib/portal/technicianPortal'
 import type { FeatureFlags } from '@/lib/featureFlags'
+import pkg from '@/package.json'
 
 interface SidebarProps {
   isCollapsed: boolean
@@ -253,6 +254,15 @@ export function Sidebar({
             )
           })}
         </nav>
+
+        {/* Version badge */}
+        <div className={`mt-auto px-4 py-3 border-t border-slate-100 ${isCollapsed && !isMobile ? 'flex justify-center' : ''}`}>
+          {isCollapsed && !isMobile ? (
+            <span className="text-[10px] font-mono text-slate-400" title={`v${pkg.version}`}>v</span>
+          ) : (
+            <span className="text-[11px] font-mono text-slate-400 select-none">v{pkg.version}</span>
+          )}
+        </div>
       </aside>
     </>
   )
