@@ -4,6 +4,24 @@ import type { ContactReviewGroup } from '@/hooks/useSelectedContacts'
 import { LoadingSkeleton } from '@/components/ui/LoadingSkeleton'
 import { outreachPriorityForContact } from '@/lib/sales/providers/contactOutreachRanking'
 
+function emailDomain(email: string | null): string | null {
+  if (!email) return null
+  const at = email.indexOf('@')
+  if (at < 0) return null
+  return email.slice(at + 1).toLowerCase()
+}
+
+function domainToCompanyLabel(domain: string): string {
+  const clean = domain.replace(/^www\./i, '')
+  const name = clean
+    .replace(/\.(com\.au|net\.au|org\.au|gov\.au|edu\.au|asn\.au|id\.au|com|net|org|io|co\.uk|co\.nz)$/i, '')
+    .replace(/\.(co|ac|gov|edu|sch)$/, '')
+  return name
+    .split(/[-.]/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
+
 function pageUrlDomain(url: string | null): string | null {
   if (!url) return null
   try {
@@ -15,7 +33,6 @@ function pageUrlDomain(url: string | null): string | null {
 
 function shortPageTitle(title: string | null): string | null {
   if (!title) return null
-  // Strip trailing " | Site Name" or " - Site Name" (keep just the section label)
   const stripped = title.replace(/\s*[|\-–—]\s*.+$/, '').trim()
   return stripped || title
 }
@@ -79,7 +96,10 @@ export function ContactReviewTable({
               className="overflow-hidden rounded-xl border border-slate-200"
             >
               <div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <h3 className="font-semibold text-slate-900">{group.company_name}</h3>
+                <div>
+                  <h3 className="font-semibold text-slate-900">{group.company_name}</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Source: contacts found on this business's website</p>
+                </div>
                 <div className="flex flex-wrap gap-2 text-xs">
                   <button
                     type="button"
@@ -100,13 +120,14 @@ export function ContactReviewTable({
                 </div>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-left text-sm">
+                <table className="w-full min-w-[820px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 bg-white">
                       <th className="w-10 px-3 py-2" scope="col">
                         <span className="sr-only">Include in campaign</span>
                       </th>
                       <th className="px-3 py-2 font-medium text-slate-700">Email Address</th>
+                      <th className="px-3 py-2 font-medium text-slate-700">Company</th>
                       <th className="px-3 py-2 font-medium text-slate-700">Contact Type</th>
                       <th className="px-3 py-2 font-medium text-slate-700">Confidence</th>
                       <th className="px-3 py-2 font-medium text-slate-700">Outreach Priority</th>
@@ -117,6 +138,14 @@ export function ContactReviewTable({
                   </thead>
                   <tbody>
                     {group.contacts.map((contact) => {
+                      const domain = emailDomain(contact.email)
+                      const derivedCompany = domain ? domainToCompanyLabel(domain) : null
+                      const sameAsSource =
+                        derivedCompany &&
+                        group.company_name &&
+                        derivedCompany.toLowerCase() === group.company_name.toLowerCase()
+                      const displayCompany = derivedCompany && !sameAsSource ? derivedCompany : null
+
                       const outreachPriority = outreachPriorityForContact({
                         id: contact.id,
                         business_id: contact.business_id,
@@ -127,72 +156,80 @@ export function ContactReviewTable({
                         page_kind: contact.page_kind,
                         discovery_method: contact.discovery_method,
                       })
+
                       return (
-                      <tr key={contact.id} className="border-b border-slate-50 last:border-0">
-                        <td className="px-3 py-2 align-top">
-                          <input
-                            type="checkbox"
-                            checked={isSelected(contact.id)}
-                            onChange={() => onToggleContact(contact.id)}
-                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                            aria-label={`Include ${contact.email} in campaign`}
-                          />
-                        </td>
-                        <td className="px-3 py-2 font-medium text-slate-900">
-                          <span>{contact.email}</span>
-                          {recommendedIds.has(contact.id) ? (
-                            <span className="ml-2 inline-flex rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">
-                              Recommended
-                            </span>
-                          ) : null}
-                          {contact.is_primary ? (
-                            <span className="ml-2 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
-                              Primary
-                            </span>
-                          ) : null}
-                          {contact.recommended_reason ? (
-                            <p className="mt-1 text-xs font-normal text-slate-500">
-                              {contact.recommended_reason}
-                            </p>
-                          ) : null}
-                        </td>
-                        <td className="px-3 py-2 capitalize text-slate-700">{contact.contact_type}</td>
-                        <td className="px-3 py-2 text-slate-700">{contact.confidence_score}%</td>
-                        <td className="px-3 py-2 text-slate-700">{outreachPriority}</td>
-                        <td className="px-3 py-2">
-                          <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
-                              VERIFICATION_STYLES[contact.verification_status] ??
-                              VERIFICATION_STYLES.unknown
-                            }`}
-                          >
-                            {contact.verification_status}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-slate-700">
-                          {contact.contact_page ? (
-                            <a
-                              href={contact.contact_page}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-indigo-600 hover:underline"
-                              title={contact.contact_page}
+                        <tr key={contact.id} className="border-b border-slate-50 last:border-0">
+                          <td className="px-3 py-2 align-top">
+                            <input
+                              type="checkbox"
+                              checked={isSelected(contact.id)}
+                              onChange={() => onToggleContact(contact.id)}
+                              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                              aria-label={`Include ${contact.email} in campaign`}
+                            />
+                          </td>
+                          <td className="px-3 py-2 font-medium text-slate-900">
+                            <span>{contact.email}</span>
+                            {recommendedIds.has(contact.id) ? (
+                              <span className="ml-2 inline-flex rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">
+                                Recommended
+                              </span>
+                            ) : null}
+                            {contact.is_primary ? (
+                              <span className="ml-2 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                                Primary
+                              </span>
+                            ) : null}
+                            {contact.recommended_reason ? (
+                              <p className="mt-1 text-xs font-normal text-slate-500">
+                                {contact.recommended_reason}
+                              </p>
+                            ) : null}
+                          </td>
+                          <td className="px-3 py-2 text-slate-800">
+                            {displayCompany ? (
+                              <span className="font-medium">{displayCompany}</span>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 capitalize text-slate-700">{contact.contact_type}</td>
+                          <td className="px-3 py-2 text-slate-700">{contact.confidence_score}%</td>
+                          <td className="px-3 py-2 text-slate-700">{outreachPriority}</td>
+                          <td className="px-3 py-2">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
+                                VERIFICATION_STYLES[contact.verification_status] ??
+                                VERIFICATION_STYLES.unknown
+                              }`}
                             >
-                              {pageUrlDomain(contact.contact_page) ?? contact.contact_page}
-                            </a>
-                          ) : (
-                            '—'
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-slate-700">
-                          <div
-                            className="max-w-[10rem] truncate text-xs sm:max-w-xs"
-                            title={contact.discovery_page_title ?? undefined}
-                          >
-                            {shortPageTitle(contact.discovery_page_title) ?? '—'}
-                          </div>
-                        </td>
-                      </tr>
+                              {contact.verification_status}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-slate-700">
+                            {contact.contact_page ? (
+                              <a
+                                href={contact.contact_page}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-indigo-600 hover:underline"
+                                title={contact.contact_page}
+                              >
+                                {pageUrlDomain(contact.contact_page) ?? contact.contact_page}
+                              </a>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-slate-700">
+                            <div
+                              className="max-w-[10rem] truncate text-xs sm:max-w-xs"
+                              title={contact.discovery_page_title ?? undefined}
+                            >
+                              {shortPageTitle(contact.discovery_page_title) ?? '—'}
+                            </div>
+                          </td>
+                        </tr>
                       )
                     })}
                   </tbody>

@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { generateProposalPdf } from '@/lib/pdf/generateProposalPdf'
 import { generatePvcJobCardPdf } from '@/lib/pdf/generatePvcJobCardPdf'
 import { sendPvcInvoiceRequestEmail } from '@/lib/email/sendPvcInvoiceRequestEmail'
+import { sendPvcJobCardAssignmentEmail } from '@/lib/email/sendPvcJobCardAssignmentEmail'
 import { parsePVCCalculatorSnapshot } from '@/lib/pvc/pvcCalculatorSnapshot'
 import { snapshotToQuoteData } from '@/lib/pvc/snapshotToQuoteData'
 import {
@@ -120,6 +121,33 @@ export async function approvePvcQuote(
     .eq('id', quoteId)
 
   if (error) throw error
+
+  // Send job card PDF to assignee — fire-and-forget so a mail failure doesn't block approval
+  try {
+    const snapshot = row.form_snapshot ? parsePVCCalculatorSnapshot(row.form_snapshot) : null
+    const quoteData = snapshot ? snapshotToQuoteData(snapshot) : null
+    const assigneeName = await profileDisplayName(supabase, input.assigned_user_id)
+    if (quoteData) {
+      await sendPvcJobCardAssignmentEmail(supabase, {
+        assigneeUserId: input.assigned_user_id,
+        assigneeName,
+        customerName: String(row.customer_name ?? quoteData.customerDetails?.customer ?? ''),
+        quoteId,
+        poReference: po || null,
+        approvalMessage: msg || null,
+        jobCardPdfInput: {
+          quoteData,
+          headrailLengthMm: headrailMm,
+          supplyScope: input.job_card_supply_scope,
+          assignedToName: assigneeName,
+          poReference: po || null,
+          approvalMessage: msg || null,
+        },
+      })
+    }
+  } catch {
+    // Email failure must not roll back the approval
+  }
 }
 
 export async function closePvcQuoteFromDraft(
