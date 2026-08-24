@@ -38,7 +38,7 @@ export type RunReplyAnalysisResult = {
 
 function resolveModelName(provider: LLMProviderId): string {
   if (provider === 'groq') {
-    return process.env.GROQ_MODEL?.trim() || 'llama3-8b-8192'
+    return process.env.GROQ_MODEL?.trim() || 'llama-3.3-70b-versatile'
   }
   return process.env.XAI_MODEL?.trim() || 'grok-4.3'
 }
