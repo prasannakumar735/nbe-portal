@@ -16,16 +16,23 @@ function stripMarkdownFence(raw: string): string {
 
 function parseJsonEmail(raw: string): ParsedLlmEmail | null {
   const text = stripMarkdownFence(raw)
-  if (!text.startsWith('{')) return null
-  try {
-    const parsed = JSON.parse(text) as Record<string, unknown>
-    const subject = typeof parsed.subject === 'string' ? parsed.subject.trim() : ''
-    const body = typeof parsed.body === 'string' ? parsed.body.trim() : ''
-    if (!subject && !body) return null
-    return { subject, body }
-  } catch {
-    return null
+  // Try the whole text first, then scan for the first '{' (handles preamble/commentary)
+  const candidates: string[] = [text]
+  const firstBrace = text.indexOf('{')
+  if (firstBrace > 0) candidates.push(text.slice(firstBrace))
+  for (const candidate of candidates) {
+    if (!candidate.startsWith('{')) continue
+    try {
+      const parsed = JSON.parse(candidate) as Record<string, unknown>
+      const subject = typeof parsed.subject === 'string' ? parsed.subject.trim() : ''
+      const body = typeof parsed.body === 'string' ? parsed.body.trim() : ''
+      if (!subject && !body) continue
+      return { subject, body }
+    } catch {
+      // try next candidate
+    }
   }
+  return null
 }
 
 function parseLabeledEmail(raw: string): ParsedLlmEmail | null {
