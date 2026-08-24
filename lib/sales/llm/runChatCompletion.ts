@@ -34,7 +34,7 @@ async function runGroqChat(
 ): Promise<string> {
   const apiKey = process.env.GROQ_API_KEY?.trim()
   if (!apiKey) throw new Error('GROQ_API_KEY is not configured.')
-  const model = process.env.GROQ_MODEL?.trim() || 'llama-3.1-8b-instant'
+  const model = process.env.GROQ_MODEL?.trim() || 'llama3-8b-8192'
   const groq = new Groq({ apiKey })
   const completion = await groq.chat.completions.create({
     model,
