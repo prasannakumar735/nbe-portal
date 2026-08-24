@@ -13,6 +13,7 @@ const VERIFICATION_STYLES: Record<string, string> = {
 }
 
 const CONTACT_TYPE_OPTIONS = ['all', 'sales', 'general', 'unknown'] as const
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
 
 function emailDomain(email: string | null): string | null {
   if (!email) return null
@@ -51,6 +52,14 @@ export function ContactsTable({ rows, loading, error }: ContactsTableProps) {
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [minConfidence, setMinConfidence] = useState(0)
   const [showFilters, setShowFilters] = useState(false)
+  const [pageSize, setPageSize] = useState<number>(10)
+  const [customPageSize, setCustomPageSize] = useState('')
+  const [page, setPage] = useState(0)
+
+  const effectivePageSize = useMemo(() => {
+    const custom = parseInt(customPageSize, 10)
+    return !isNaN(custom) && custom > 0 ? custom : pageSize
+  }, [pageSize, customPageSize])
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
@@ -59,6 +68,21 @@ export function ContactsTable({ rows, loading, error }: ContactsTableProps) {
       return true
     })
   }, [rows, typeFilter, minConfidence])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / effectivePageSize))
+  const safePage = Math.min(page, totalPages - 1)
+  const paginated = filtered.slice(safePage * effectivePageSize, (safePage + 1) * effectivePageSize)
+
+  function handlePageSizeChange(val: number) {
+    setPageSize(val)
+    setCustomPageSize('')
+    setPage(0)
+  }
+
+  function handleCustomPageSize(val: string) {
+    setCustomPageSize(val)
+    setPage(0)
+  }
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
@@ -97,7 +121,7 @@ export function ContactsTable({ rows, loading, error }: ContactsTableProps) {
             <label className="text-xs font-medium text-slate-600">Contact type</label>
             <select
               value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
+              onChange={(e) => { setTypeFilter(e.target.value); setPage(0) }}
               className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm text-slate-800"
             >
               {CONTACT_TYPE_OPTIONS.map((t) => (
@@ -117,14 +141,14 @@ export function ContactsTable({ rows, loading, error }: ContactsTableProps) {
               max={95}
               step={5}
               value={minConfidence}
-              onChange={(e) => setMinConfidence(Number(e.target.value))}
+              onChange={(e) => { setMinConfidence(Number(e.target.value)); setPage(0) }}
               className="w-28 accent-indigo-600"
             />
           </div>
           {(typeFilter !== 'all' || minConfidence > 0) && (
             <button
               type="button"
-              onClick={() => { setTypeFilter('all'); setMinConfidence(0) }}
+              onClick={() => { setTypeFilter('all'); setMinConfidence(0); setPage(0) }}
               className="text-xs text-indigo-600 hover:underline"
             >
               Reset
@@ -171,7 +195,7 @@ export function ContactsTable({ rows, loading, error }: ContactsTableProps) {
                 </td>
               </tr>
             ) : null}
-            {filtered.map((row) => {
+            {paginated.map((row) => {
               const domain = emailDomain(row.email)
               const companyLabel = domain ? domainToCompanyLabel(domain) : null
               const sourceDomain = pageUrlDomain(row.contact_page)
@@ -243,6 +267,86 @@ export function ContactsTable({ rows, loading, error }: ContactsTableProps) {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination footer */}
+      {filtered.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+          <div className="flex items-center gap-2 text-sm text-slate-600">
+            <span>Rows per page:</span>
+            <div className="flex items-center gap-1">
+              {PAGE_SIZE_OPTIONS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => handlePageSizeChange(s)}
+                  className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
+                    effectivePageSize === s && !customPageSize
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+              <input
+                type="number"
+                min={1}
+                placeholder="Custom"
+                value={customPageSize}
+                onChange={(e) => handleCustomPageSize(e.target.value)}
+                className="w-16 rounded border border-slate-200 px-2 py-0.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 text-sm text-slate-600">
+            <span>
+              {safePage * effectivePageSize + 1}–{Math.min((safePage + 1) * effectivePageSize, filtered.length)} of {filtered.length}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={safePage === 0}
+                onClick={() => setPage(0)}
+                className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+                title="First page"
+              >
+                <span className="material-symbols-outlined text-[16px]">first_page</span>
+              </button>
+              <button
+                type="button"
+                disabled={safePage === 0}
+                onClick={() => setPage((p) => p - 1)}
+                className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+                title="Previous page"
+              >
+                <span className="material-symbols-outlined text-[16px]">chevron_left</span>
+              </button>
+              <span className="px-1 text-xs">
+                Page {safePage + 1} of {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={safePage >= totalPages - 1}
+                onClick={() => setPage((p) => p + 1)}
+                className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+                title="Next page"
+              >
+                <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+              </button>
+              <button
+                type="button"
+                disabled={safePage >= totalPages - 1}
+                onClick={() => setPage(totalPages - 1)}
+                className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+                title="Last page"
+              >
+                <span className="material-symbols-outlined text-[16px]">last_page</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }
