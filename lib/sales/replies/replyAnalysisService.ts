@@ -38,7 +38,7 @@ export type RunReplyAnalysisResult = {
 
 function resolveModelName(provider: LLMProviderId): string {
   if (provider === 'groq') {
-    return process.env.GROQ_MODEL?.trim() || 'gemma2-9b-it'
+    return process.env.GROQ_MODEL?.trim() || 'openai/gpt-oss-20b'
   }
   return process.env.XAI_MODEL?.trim() || 'grok-4.3'
 }
