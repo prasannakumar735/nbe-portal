@@ -27,6 +27,15 @@ function resolveProviderId(raw?: string | null): LLMProviderId {
   return resolveDefaultSalesLlmProvider()
 }
 
+function parseRetryAfterMs(message: string): number {
+  const match = /try again in ([\d.]+)s/i.exec(message)
+  return match ? Math.ceil(parseFloat(match[1]) * 1000) + 500 : 30_000
+}
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 async function runGroqChat(
   systemPrompt: string,
   userPrompt: string,
@@ -36,18 +45,33 @@ async function runGroqChat(
   if (!apiKey) throw new Error('GROQ_API_KEY is not configured.')
   const model = process.env.GROQ_MODEL?.trim() || 'openai/gpt-oss-20b'
   const groq = new Groq({ apiKey })
-  const completion = await groq.chat.completions.create({
-    model,
-    temperature: 0.35,
-    max_tokens: maxTokens,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ],
-  })
-  const content = completion.choices?.[0]?.message?.content?.trim()
-  if (!content) throw new GenerationMalformedResponseError('Groq returned an empty completion.')
-  return content
+  const maxAttempts = 4
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const completion = await groq.chat.completions.create({
+        model,
+        temperature: 0.35,
+        max_tokens: maxTokens,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      })
+      const content = completion.choices?.[0]?.message?.content?.trim()
+      if (!content) throw new GenerationMalformedResponseError('Groq returned an empty completion.')
+      return content
+    } catch (error) {
+      if (error instanceof GenerationMalformedResponseError) throw error
+      const message = error instanceof Error ? error.message : String(error)
+      const isRateLimit = message.includes('429') || message.toLowerCase().includes('rate limit')
+      if (isRateLimit && attempt < maxAttempts - 1) {
+        await sleep(parseRetryAfterMs(message))
+        continue
+      }
+      throw new Error(`Groq provider error: ${message}`)
+    }
+  }
+  throw new Error('Groq provider error: max retries exceeded.')
 }
 
 async function runXaiChat(

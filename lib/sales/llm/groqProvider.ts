@@ -11,6 +11,15 @@ function resolveGroqModel(): string {
   return fromEnv || DEFAULT_GROQ_MODEL
 }
 
+function parseRetryAfterMs(message: string): number {
+  const match = /try again in ([\d.]+)s/i.exec(message)
+  return match ? Math.ceil(parseFloat(match[1]) * 1000) + 500 : 30_000
+}
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 function requireGroqApiKey(): string {
   const apiKey = process.env.GROQ_API_KEY?.trim()
   if (!apiKey) {
@@ -27,19 +36,34 @@ export const groqProvider: LLMProvider = {
     const groq = new Groq({ apiKey: requireGroqApiKey() })
 
     let completion
-    try {
-      completion = await groq.chat.completions.create({
-        model: resolveGroqModel(),
-        temperature: 0.4,
-        top_p: 0.9,
-        max_tokens: 1024,
-        messages: [
-          { role: 'system', content: systemContent },
-          { role: 'user', content: prompt },
-        ],
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+    const maxAttempts = 4
+    let lastError: unknown
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        completion = await groq.chat.completions.create({
+          model: resolveGroqModel(),
+          temperature: 0.4,
+          top_p: 0.9,
+          max_tokens: 1024,
+          messages: [
+            { role: 'system', content: systemContent },
+            { role: 'user', content: prompt },
+          ],
+        })
+        break
+      } catch (error) {
+        lastError = error
+        const message = error instanceof Error ? error.message : String(error)
+        const isRateLimit = message.includes('429') || message.toLowerCase().includes('rate limit')
+        if (isRateLimit && attempt < maxAttempts - 1) {
+          await sleep(parseRetryAfterMs(message))
+          continue
+        }
+        throw new Error(`Groq provider error: ${message}`)
+      }
+    }
+    if (!completion) {
+      const message = lastError instanceof Error ? lastError.message : String(lastError)
       throw new Error(`Groq provider error: ${message}`)
     }
 
