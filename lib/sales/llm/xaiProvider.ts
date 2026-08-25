@@ -4,7 +4,7 @@ import type { GeneratedEmailResult, LLMProvider } from '@/lib/sales/llm/llmProvi
 import { parseLlmEmailResponse } from '@/lib/sales/llm/parseLlmEmailResponse'
 
 const XAI_CHAT_COMPLETIONS_URL = 'https://api.x.ai/v1/chat/completions'
-const DEFAULT_XAI_MODEL = 'grok-4.3'
+const DEFAULT_XAI_MODEL = 'grok-2'
 
 type XaiChatCompletionResponse = {
   choices?: Array<{

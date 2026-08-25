@@ -40,7 +40,7 @@ function resolveModelName(provider: LLMProviderId): string {
   if (provider === 'groq') {
     return process.env.GROQ_MODEL?.trim() || 'openai/gpt-oss-20b'
   }
-  return process.env.XAI_MODEL?.trim() || 'grok-4.3'
+  return process.env.XAI_MODEL?.trim() || 'grok-2'
 }
 
 function logReplyAnalysisFailure(messageId: string, error: unknown): void {

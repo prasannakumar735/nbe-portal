@@ -81,7 +81,7 @@ async function runXaiChat(
 ): Promise<string> {
   const apiKey = process.env.XAI_API_KEY?.trim()
   if (!apiKey) throw new Error('XAI_API_KEY is not configured.')
-  const model = process.env.XAI_MODEL?.trim() || 'grok-4.3'
+  const model = process.env.XAI_MODEL?.trim() || 'grok-2'
   const response = await fetch(XAI_CHAT_COMPLETIONS_URL, {
     method: 'POST',
     headers: {
