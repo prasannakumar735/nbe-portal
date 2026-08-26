@@ -8,9 +8,9 @@ import { Button } from '@/components/ui/Button'
 
 /** Policy: 8–20 chars, upper, lower, digit, special @$!%*?& only */
 export const PASSWORD_POLICY_REGEX =
-  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}$/
+  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()\-_=+[\]{};:',.<>?/\\|`~])[A-Za-z\d@$!%*?&#^()\-_=+[\]{};:',.<>?/\\|`~]{8,}$/
 
-const POLICY_HINT = 'Use a strong password that meets the required security criteria.'
+const POLICY_HINT = 'Minimum 8 characters with uppercase, lowercase, a number, and a special character.'
 
 const MAX_ATTEMPTS = 5
 
