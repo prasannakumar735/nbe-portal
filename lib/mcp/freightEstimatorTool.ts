@@ -131,7 +131,9 @@ export function registerFreightEstimatorTool(server: McpServer) {
 
       // Surcharges
       const mhpApplies = boxCount > 1 || heaviestBoxKg > MAX_KG_PER_BOX
-      const osiApplies = headrailLengthMm > 2000
+      // OSI triggered by strip packaging tube length (strips can't be cut).
+      // Headrail is always cut to ≤2000mm pieces by NBE — does not trigger OSI.
+      const osiApplies = stripLengthMm > 2000
       const mhpCost = mhpApplies ? MHP_CHARGE : 0
       const osiCost = osiApplies ? OSI_CHARGE : 0
       const totalEstimate = Math.round((baseFreight + mhpCost + osiCost) * 100) / 100
@@ -155,7 +157,7 @@ export function registerFreightEstimatorTool(server: McpServer) {
           mhpSurcharge: mhpApplies ? MHP_CHARGE : 0,
           mhpReason: mhpApplies ? (boxCount > 1 ? `${boxCount} boxes` : `box weight ${Math.round(heaviestBoxKg * 10) / 10}kg > 20kg`) : null,
           osiSurcharge: osiApplies ? OSI_CHARGE : 0,
-          osiReason: osiApplies ? `headrail ${Math.round(headrailLengthMm)}mm > 2000mm` : null,
+          osiReason: osiApplies ? `strip packaging tube ${Math.round(stripLengthMm)}mm > 2000mm` : null,
           totalEstimate,
         },
         note: 'Estimate only — actual TNT invoice may include additional surcharges. Fuel levy included in base rate.',
