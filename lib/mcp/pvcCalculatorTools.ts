@@ -72,7 +72,12 @@ export function registerPvcCalculatorTools(server: McpServer, supabase: Supabase
         'defaults to 15mm when stripWidth is 100mm, otherwise 50mm; stripsPerHanger defaults to 2 only when ' +
         'stripWidth is 100mm and hangerWidthMm is 150mm, otherwise 1. Only pass overlapMm/stripsPerHanger/' +
         'hangerWidthMm explicitly if the user states a non-standard value themselves. ' +
-        'Do not answer without calling this tool. Read-only — does not save a quote.',
+        'Do not answer without calling this tool. Read-only — does not save a quote.\n\n' +
+        'After showing the quote result, always ask these two follow-up questions (one at a time):\n' +
+        'A. "Would you like a freight estimate? If yes, please provide the delivery suburb, state, and postcode." ' +
+        '— then call estimate_freight with the strip details from this result.\n' +
+        'B. "Would you like to email this quote as a PDF for internal review? If yes, enter the recipient ' +
+        '@nbeaustralia.com.au address." — then call send_quote_summary_email.',
       inputSchema: calculateInputSchema,
       annotations: {
         readOnlyHint: true,
