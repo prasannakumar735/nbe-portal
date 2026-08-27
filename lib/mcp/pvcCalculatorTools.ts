@@ -57,9 +57,11 @@ export function registerPvcCalculatorTools(server: McpServer, supabase: Supabase
         '4. "Ribbed or standard (smooth) surface?" — combine with the answer from question 1 to set stripType: ' +
         'freezer+smooth="polar", freezer+ribbed="ribbed_polar", coolroom+smooth="standard", coolroom+ribbed=' +
         '"ribbed".\n' +
-        '5. "What headrail material — stainless steel, galvanised, or aluminium?" → headrailType (map ' +
-        '"galvanised" to "galvanized"). Only offer "plastic" if the user asks for it specifically.\n' +
-        '6. "Whole door (strips + headrail) or strips only?" → doorType (whole_door / strips_only).\n' +
+        '5. "Whole door (strips + headrail) or strips only?" → doorType (whole_door / strips_only).\n' +
+        '6. Only ask this if the answer to question 5 was whole_door: "What headrail material — stainless ' +
+        'steel, galvanised, or aluminium?" → headrailType (map "galvanised" to "galvanized"). Only offer ' +
+        '"plastic" if the user asks for it specifically. If strips_only, default headrailType to "aluminium" ' +
+        'internally (it still must be passed to the tool) but do NOT ask the user.\n' +
         '7. "Supply only, or supply and install?" → installationType. If they choose supply and install, also ' +
         'ask "What installation price should I include?" and pass the answer as manualInstallationPrice — do ' +
         'not silently default it to $0.\n\n' +
