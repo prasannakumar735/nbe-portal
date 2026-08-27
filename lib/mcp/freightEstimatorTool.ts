@@ -1,12 +1,12 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 
+const NBE_ORIGIN = [144.955, -37.670] // Campbellfield 3061 [lng, lat]
 const PVC_DENSITY_G_CM3 = 1.4
 const MAX_STRIPS_PER_BOX = 16
 const MAX_KG_PER_BOX = 20
 const MHP_CHARGE = 18.15   // Manual handling — charged when >1 box or any box >20kg
 const OSI_CHARGE = 40.70   // Oversize item — charged when headrail >2000mm
-const NBE_ORIGIN = [144.955, -37.670] // Campbellfield 3061 [lng, lat]
 
 // Road Express rates per box (inc. fuel levy), derived from myTNT quotes Aug 2026
 const ZONE_RATE: Record<string, number> = {
@@ -95,6 +95,7 @@ export function registerFreightEstimatorTool(server: McpServer) {
         deliverySuburb: z.string(),
         deliveryState: z.enum(['VIC', 'NSW', 'ACT', 'QLD', 'SA', 'WA', 'TAS', 'NT']),
         deliveryPostcode: z.string().regex(/^\d{4}$/),
+        installationType: z.enum(['supply_only', 'supply_install']),
         stripCount: z.number().int().positive(),
         stripWidthMm: z.number().positive(),
         stripThicknessMm: z.number().positive(),
@@ -110,10 +111,11 @@ export function registerFreightEstimatorTool(server: McpServer) {
     },
     async (input) => {
       const {
-        deliverySuburb, deliveryState, deliveryPostcode,
+        deliverySuburb, deliveryState, deliveryPostcode, installationType,
         stripCount, stripWidthMm, stripThicknessMm, stripLengthMm, headrailLengthMm,
       } = input as {
         deliverySuburb: string; deliveryState: string; deliveryPostcode: string
+        installationType: string
         stripCount: number; stripWidthMm: number; stripThicknessMm: number
         stripLengthMm: number; headrailLengthMm: number
       }
@@ -138,13 +140,18 @@ export function registerFreightEstimatorTool(server: McpServer) {
       const osiCost = osiApplies ? OSI_CHARGE : 0
       const totalEstimate = Math.round((baseFreight + mhpCost + osiCost) * 100) / 100
 
-      // Driving distance (best-effort, non-blocking)
-      const address = `${deliverySuburb} ${deliveryPostcode} ${deliveryState}`
-      const distanceKm = await getDistanceKm(address)
+      // Show driving distance only for supply+install so installer can plan the journey
+      let drivingDistanceKm: number | null = null
+      if (installationType === 'supply_install') {
+        const address = `${deliverySuburb} ${deliveryPostcode} ${deliveryState}`
+        drivingDistanceKm = await getDistanceKm(address)
+      }
 
-      const result = {
+      const result: Record<string, unknown> = {
         destination: `${deliverySuburb}, ${deliveryState} ${deliveryPostcode}`,
-        drivingDistanceKm: distanceKm ?? 'unavailable',
+        ...(installationType === 'supply_install' && {
+          drivingDistanceFromWarehouse: drivingDistanceKm ? `${drivingDistanceKm} km` : 'unavailable',
+        }),
         boxes: {
           count: boxCount,
           stripsPerBox,
