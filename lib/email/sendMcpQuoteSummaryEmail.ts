@@ -104,8 +104,6 @@ export async function sendMcpQuoteSummaryEmail(input: McpQuoteSummaryEmailInput)
     `Opening: ${input.openingWidth}mm W × ${input.openingHeight}mm H`,
     `Strip: ${input.stripWidth}mm × ${input.stripThicknessMm}mm ${input.stripType}`,
     `Supply price (ex GST): ${new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(input.retailBeforeInstallation)}`,
-    '',
-    '* Generated via ChatGPT MCP connector',
   ].join('\n')
 
   await sendMailViaGraphWithResult({
