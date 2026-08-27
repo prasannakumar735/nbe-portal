@@ -18,6 +18,7 @@ import { createClient } from '@supabase/supabase-js'
 import { config } from 'dotenv'
 import { resolve } from 'path'
 import { registerPvcCalculatorTools } from '../../lib/mcp/pvcCalculatorTools'
+import { registerFreightEstimatorTool } from '../../lib/mcp/freightEstimatorTool'
 
 config({ path: resolve(process.cwd(), '.env.local') })
 config({ path: resolve(process.cwd(), '.env') })
@@ -47,6 +48,7 @@ const server = new McpServer({
 })
 
 registerPvcCalculatorTools(server, supabase)
+registerFreightEstimatorTool(server)
 
 async function main() {
   const transport = new StdioServerTransport()

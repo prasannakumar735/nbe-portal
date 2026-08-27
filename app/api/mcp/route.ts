@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { registerPvcCalculatorTools } from '@/lib/mcp/pvcCalculatorTools'
+import { registerFreightEstimatorTool } from '@/lib/mcp/freightEstimatorTool'
 import { verifyMcpToken } from '@/lib/services/mcpAuth.service'
 import { verifyOAuthAccessToken } from '@/lib/oauth/verifyAccessToken'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
@@ -43,6 +44,7 @@ async function handleRequest(request: NextRequest): Promise<Response> {
   })
 
   registerPvcCalculatorTools(server, supabase)
+  registerFreightEstimatorTool(server)
 
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
