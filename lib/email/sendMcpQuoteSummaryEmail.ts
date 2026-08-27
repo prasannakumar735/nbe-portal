@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer'
+import { sendMailViaGraphWithResult } from '@/lib/graph/sendMail'
 import { generateProposalPdf } from '@/lib/pdf/generateProposalPdf'
 import type { QuoteData } from '@/lib/types/quote.types'
 import type { PVCCalculationResponse } from '@/lib/types/pvc.types'
@@ -34,16 +34,6 @@ export interface McpQuoteSummaryEmailInput {
 }
 
 export async function sendMcpQuoteSummaryEmail(input: McpQuoteSummaryEmailInput): Promise<void> {
-  const host = process.env.SMTP_HOST
-  const port = Number(process.env.SMTP_PORT || '587')
-  const user = process.env.SMTP_USER
-  const pass = process.env.SMTP_PASS
-  const from = process.env.SMTP_FROM || user
-
-  if (!host || !user || !pass || !from) {
-    throw new Error('SMTP not configured — set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM.')
-  }
-
   if (!input.recipientEmail.toLowerCase().endsWith('@nbeaustralia.com.au')) {
     throw new Error('Recipient must be an @nbeaustralia.com.au address.')
   }
@@ -107,27 +97,26 @@ export async function sendMcpQuoteSummaryEmail(input: McpQuoteSummaryEmailInput)
   const pdfBytes = await generateProposalPdf(quoteData)
   const fileName = `PVC_Quote_${input.openingWidth}Wx${input.openingHeight}H_${Date.now()}.pdf`
 
-  const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } })
+  const bodyText = [
+    'Please find the PVC strip curtain quote attached for internal review.',
+    'Review and forward to the customer once approved.',
+    '',
+    `Opening: ${input.openingWidth}mm W × ${input.openingHeight}mm H`,
+    `Strip: ${input.stripWidth}mm × ${input.stripThicknessMm}mm ${input.stripType}`,
+    `Supply price (ex GST): ${new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(input.retailBeforeInstallation)}`,
+    '',
+    '* Generated via ChatGPT MCP connector',
+  ].join('\n')
 
-  await transporter.sendMail({
-    from,
+  await sendMailViaGraphWithResult({
     to: input.recipientEmail,
     subject: `[Review] PVC Quote — ${input.openingWidth}W × ${input.openingHeight}H, ${input.stripWidth}mm ${input.stripType}`,
-    text: [
-      'Please find the PVC strip curtain quote attached for internal review.',
-      'Review and forward to the customer once approved.',
-      '',
-      `Opening: ${input.openingWidth}mm W × ${input.openingHeight}mm H`,
-      `Strip: ${input.stripWidth}mm × ${input.stripThicknessMm}mm ${input.stripType}`,
-      `Supply price (ex GST): ${new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(input.retailBeforeInstallation)}`,
-      '',
-      '* Generated via ChatGPT MCP connector',
-    ].join('\n'),
+    bodyText,
     attachments: [
       {
-        filename: fileName,
-        content: Buffer.from(pdfBytes),
+        name: fileName,
         contentType: 'application/pdf',
+        contentBytes: Buffer.from(pdfBytes).toString('base64'),
       },
     ],
   })
