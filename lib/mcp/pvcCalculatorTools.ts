@@ -43,9 +43,9 @@ export function registerPvcCalculatorTools(server: McpServer, supabase: Supabase
         'and any number you invent will be wrong. This tool queries the real NBE Supabase pricing tables (the ' +
         'same engine the NBE portal calculator uses) and is the ONLY source of truth for strip counts, ' +
         'quantities, and dollar pricing.\n\n' +
-        'Once you have the opening width and height, gather every other field through this exact NBE ' +
-        'conversational script — ask ONE question at a time and wait for the answer before asking the next; ' +
-        'never dump multiple questions in one message:\n' +
+        'CRITICAL: Do NOT call this tool until you have explicit answers to ALL 7 questions below. ' +
+        'Answering any question does NOT mean the others can be assumed or skipped — every field is required ' +
+        'and has no safe default you can guess. Ask ONE question at a time, wait for the answer, then ask the next:\n' +
         '1. "What type of strip do you need — coolroom or freezer?" (freezer = polar-grade PVC, for the more ' +
         'extreme cold of a freezer; coolroom = standard-grade PVC — NBE staff may call this "Duraflex," which ' +
         'is the same thing as the standard grade, not a separate product). Remember this as the material ' +
