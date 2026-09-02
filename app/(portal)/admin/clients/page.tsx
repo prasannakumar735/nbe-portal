@@ -544,6 +544,18 @@ export default function AdminClientsPage() {
                 return;
             }
             setCsvPreview(preview.data);
+
+            // Merge server-side errors (client/location not found) into csvFailedRows
+            const previewErrors = preview.data.errors ?? [];
+            if (previewErrors.length) {
+                const serverFailed = previewErrors.flatMap(e => {
+                    const raw = validRaw[e.rowIndex - 1];
+                    return raw ? [{ ...raw, error_reason: e.message }] : [];
+                });
+                if (serverFailed.length) {
+                    setCsvFailedRows(prev => [...prev, ...serverFailed]);
+                }
+            }
         }
         catch (error) {
             toast.error(error instanceof Error ? error.message : 'Invalid CSV file');
@@ -944,7 +956,7 @@ export default function AdminClientsPage() {
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-white p-3 text-center sm:col-span-1 col-span-2">
                       <p className={`text-2xl font-bold ${csvFailedRows.length ? 'text-red-600' : 'text-slate-400'}`}>{csvFailedRows.length}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">Validation errors</p>
+                      <p className="mt-0.5 text-xs text-slate-500">Total errors (in error CSV)</p>
                     </div>
                   </div>
 
