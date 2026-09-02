@@ -88,6 +88,7 @@ export default function AdminClientsPage() {
     const [csvLoading, setCsvLoading] = useState(false);
     const [csvImportProgress, setCsvImportProgress] = useState<number | null>(null);
     const [csvFailedRows, setCsvFailedRows] = useState<Array<Record<string, string>>>([]);
+    const [csvImportRan, setCsvImportRan] = useState(false);
 
     const [doorModalClientId, setDoorModalClientId] = useState('');
     const [doorModalLocations, setDoorModalLocations] = useState<ClientLocationRecord[]>([]);
@@ -479,6 +480,7 @@ export default function AdminClientsPage() {
         setCsvRawRows([]);
         setCsvPreview(null);
         setCsvFailedRows([]);
+        setCsvImportRan(false);
     }
     function downloadCsvTemplate() {
         const sampleRow = 'Acme Corp,Tottenham,Door 1,SN-0001,Strip Door,,Full Coverage,1200,2200,2024-01-15';
@@ -496,6 +498,7 @@ export default function AdminClientsPage() {
         setCsvRows([]);
         setCsvRawRows([]);
         setCsvFailedRows([]);
+        setCsvImportRan(false);
         setCsvLoading(true);
         try {
             const Papa = await import('papaparse');
@@ -596,6 +599,7 @@ export default function AdminClientsPage() {
                 toast.error(result.error ?? 'Import failed');
                 return;
             }
+            setCsvImportRan(true);
             const serverErrors = result.data.errors ?? [];
             if (serverErrors.length) {
                 const serverFailed = serverErrors.flatMap(e => {
@@ -928,8 +932,8 @@ export default function AdminClientsPage() {
                 </div>
               )}
 
-              {/* Failure banner */}
-              {csvFailedRows.length > 0 && (
+              {/* Failure banner — only shown after import ran, not during preview */}
+              {csvImportRan && csvFailedRows.length > 0 && (
                 <div className="flex items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
                   <div>
                     <p className="text-sm font-medium text-red-800">{csvFailedRows.length} row(s) could not be imported</p>
@@ -955,8 +959,8 @@ export default function AdminClientsPage() {
                       <p className="mt-0.5 text-xs text-slate-500">Skipped (client/location not found)</p>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-white p-3 text-center sm:col-span-1 col-span-2">
-                      <p className={`text-2xl font-bold ${csvFailedRows.length ? 'text-red-600' : 'text-slate-400'}`}>{csvFailedRows.length}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">Total errors (in error CSV)</p>
+                      <p className={`text-2xl font-bold ${csvPreview.skipped ? 'text-red-600' : 'text-slate-400'}`}>{csvPreview.skipped}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">Not matched (fix &amp; re-import)</p>
                     </div>
                   </div>
 
