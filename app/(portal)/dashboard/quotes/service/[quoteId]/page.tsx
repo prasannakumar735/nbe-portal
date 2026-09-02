@@ -2,10 +2,11 @@
 
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { downloadServiceQuotePdf } from '@/components/quotes/downloadServiceQuotePdf'
 import { downloadRapidDoorQuotePdf } from '@/components/quotes/downloadRapidDoorQuotePdf'
 import { QuoteReadOnlyIndustrialRapidDoor } from '@/components/quotes/QuoteReadOnlyIndustrialRapidDoor'
+import { ServiceQuoteWorkflowPanel, type ServiceQuoteWorkflowState } from '@/components/quotes/ServiceQuoteWorkflowPanel'
 import type { RapidDoorQuoteFormValues, ServiceQuoteFormValues } from '@/components/quotes/types'
 import { computeServiceQuoteTotals } from '@/lib/quotes/serviceQuoteSnapshot'
 import { formatQuoteTaxonomyLine } from '@/lib/quotes/quoteTaxonomy'
@@ -21,33 +22,35 @@ export default function ViewQuotePage() {
   const router = useRouter()
   const quoteId = String(params.quoteId ?? '')
   const [loaded, setLoaded] = useState<Loaded | null>(null)
+  const [workflow, setWorkflow] = useState<ServiceQuoteWorkflowState | null>(null)
+  const [isManager, setIsManager] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [pdfBusy, setPdfBusy] = useState(false)
 
-  useEffect(() => {
-    let cancel = false
-    ;(async () => {
-      try {
-        const r = await fetch(`/api/quotes/service/${quoteId}`)
-        const data = await r.json()
-        if (!r.ok) {
-          setErr(data.error || 'Failed to load quote.')
-          return
-        }
-        if (cancel) return
-        if (data.quote?.quote_kind === 'rapid_door') {
-          setLoaded({ kind: 'rapid_door', values: data.formValues as RapidDoorQuoteFormValues })
-        } else {
-          setLoaded({ kind: 'service', values: data.formValues as ServiceQuoteFormValues })
-        }
-      } catch {
-        if (!cancel) setErr('Failed to load quote.')
+  const loadQuote = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/quotes/service/${quoteId}`)
+      const data = await r.json()
+      if (!r.ok) { setErr(data.error || 'Failed to load quote.'); return }
+      if (data.quote?.quote_kind === 'rapid_door') {
+        setLoaded({ kind: 'rapid_door', values: data.formValues as RapidDoorQuoteFormValues })
+      } else {
+        setLoaded({ kind: 'service', values: data.formValues as ServiceQuoteFormValues })
       }
-    })()
-    return () => {
-      cancel = true
+      if (data.workflow) setWorkflow(data.workflow as ServiceQuoteWorkflowState)
+    } catch {
+      setErr('Failed to load quote.')
     }
   }, [quoteId])
+
+  useEffect(() => {
+    void loadQuote()
+    // Check user role for workflow panel
+    fetch('/api/pvc/quotes/meta')
+      .then(r => r.json())
+      .then(data => { if (data.isManager) setIsManager(true) })
+      .catch(() => {})
+  }, [loadQuote])
 
   const handleDelete = async () => {
     if (!window.confirm('Delete this quote? This cannot be undone.')) return
@@ -96,11 +99,14 @@ export default function ViewQuotePage() {
     )
   }
 
+  // Only service/repair quotes (not rapid_door) get the workflow panel
+  const showWorkflow = loaded.kind === 'service'
+
   return (
     <div className="w-full min-w-0 max-w-full space-y-5 py-4 sm:space-y-6 sm:py-6 lg:py-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link href="/dashboard/quotes/service" className="text-sm font-medium text-slate-700 underline">
-          ← Quote
+          ← Quotes
         </Link>
         <div className="flex flex-wrap gap-2">
           <Link
@@ -131,6 +137,15 @@ export default function ViewQuotePage() {
         <QuoteReadOnlyIndustrialRapidDoor values={loaded.values} />
       ) : (
         <ServiceQuoteReadOnlyBody values={loaded.values} />
+      )}
+
+      {showWorkflow && (
+        <ServiceQuoteWorkflowPanel
+          quoteId={quoteId}
+          workflow={workflow}
+          isManager={isManager}
+          onUpdated={loadQuote}
+        />
       )}
     </div>
   )

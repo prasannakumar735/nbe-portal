@@ -4,6 +4,7 @@ import { requirePortalStaff } from '@/lib/security/requirePortalStaff'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { lineItemHasContent, quoteRowsToFormValues } from '@/lib/quotes/serviceQuoteSnapshot'
 import { resolveQuoteTaxonomyForPersist } from '@/lib/quotes/quoteTaxonomy'
+import { exportServiceWorkflowFields, profileDisplayName } from '@/lib/quotes/serviceQuoteWorkflowService'
 
 type ServiceQuoteItemPayload = {
   itemTitle?: string
@@ -125,6 +126,13 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ qu
 
     const formValues = quoteRowsToFormValues(quote, items ?? [])
 
+    // Resolve assignee display name for workflow panel
+    const assignedUserId = (quote.assigned_user_id as string | null) ?? null
+    const assigneeName = assignedUserId ? await profileDisplayName(supabase, assignedUserId) : null
+    const workflowFields = 'workflow_status' in quote
+      ? exportServiceWorkflowFields(quote as Record<string, unknown>, assigneeName)
+      : null
+
     return NextResponse.json({
       quote: {
         id: quote.id,
@@ -142,6 +150,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ qu
         quote_type: quote.quote_type ?? null,
         quote_sub_category: quote.quote_sub_category ?? null,
       },
+      workflow: workflowFields,
       items: items ?? [],
       formValues,
     })
