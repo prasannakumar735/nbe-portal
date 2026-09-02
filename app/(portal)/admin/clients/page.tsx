@@ -833,211 +833,319 @@ export default function AdminClientsPage() {
     if (loading) {
         return <div className="text-sm text-slate-600">Loading client registry...</div>;
     }
+
+    const btnPrimary = 'inline-flex h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-4 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50';
+    const btnSecondary = 'inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50';
+    const inputCls = 'h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/20';
+    const labelCls = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500';
+
     return (<div className="space-y-4">
-      <header className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h1 className="text-xl font-bold text-slate-900">Clients & Doors</h1>
-        <p className="mt-1 text-sm text-slate-600">Create clients, locations, and doors from UI. Managers and admins only.</p>
+      {/* Page header */}
+      <header className="rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+        <h1 className="text-xl font-bold text-slate-900">Clients &amp; Doors</h1>
+        <p className="mt-0.5 text-sm text-slate-500">Manage clients, locations, and doors. Managers and admins only.</p>
       </header>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap gap-2">
-          {TABS.map(tab => (<button key={tab.key} type="button" className={`rounded-lg px-3 py-1.5 text-sm ${activeTab === tab.key ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700'}`} onClick={() => setActiveTab(tab.key)}>
+      {/* Tabs */}
+      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <nav className="flex gap-1">
+          {TABS.map(tab => (
+            <button key={tab.key} type="button"
+              onClick={() => setActiveTab(tab.key)}
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition ${activeTab === tab.key ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>
               {tab.label}
-            </button>))}
-        </div>
-      </section>
-
-      {activeTab === 'clients' && (<section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-900">Clients</h2>
-            <input value={clientSearch} onChange={event => setClientSearch(event.target.value)} placeholder="Search clients..." className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
-          </div>
-
-          <form className="mb-4 flex flex-wrap gap-2" onSubmit={clientForm.handleSubmit(onSubmitClient)}>
-            <input {...clientForm.register('client_name')} placeholder="Client name" className="h-10 min-w-[240px] rounded-lg border border-slate-300 px-3 text-sm"/>
-            <button disabled={!canEdit} type="submit" className="h-10 rounded-lg bg-indigo-600 px-4 text-sm font-medium text-white disabled:opacity-50">
-              {editingClientId ? 'Update client' : 'Create client'}
+              {tab.key === 'clients' && clients.length > 0 && (
+                <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${activeTab === 'clients' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{clients.length}</span>
+              )}
             </button>
-            {editingClientId && (<button type="button" className="h-10 rounded-lg border border-slate-300 px-4 text-sm" onClick={() => {
-                    setEditingClientId(null);
-                    clientForm.reset({ client_name: '' });
-                }}>
-                Cancel
-              </button>)}
-          </form>
+          ))}
+        </nav>
+      </div>
 
+      {/* ── CLIENTS TAB ── */}
+      {activeTab === 'clients' && (
+        <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">Clients</h2>
+              <p className="text-xs text-slate-500">{clients.length} client{clients.length !== 1 ? 's' : ''} total</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-4.35-4.35"/></svg>
+                <input value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Search clients…" className="h-9 w-56 rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm shadow-sm outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/20"/>
+              </div>
+              {canEdit && (
+                <button type="button" className={btnPrimary} onClick={() => { setEditingClientId(null); clientForm.reset({ client_name: '' }); document.getElementById('client-modal')?.removeAttribute('hidden'); }}>
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
+                  Add Client
+                </button>
+              )}
+            </div>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="px-3 py-2">Name</th>
-                  <th className="px-3 py-2 text-right">Actions</th>
+                <tr className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <th className="px-5 py-3">Client Name</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody>
-                {visibleClients.map(client => (<tr key={client.id} className="border-b border-slate-100">
-                    <td className="px-3 py-2 text-slate-800">{client.client_name}</td>
-                    <td className="px-3 py-2 text-right">
-                      <button disabled={!canEdit} type="button" className="mr-2 text-indigo-700 underline disabled:opacity-40" onClick={() => startEditClient(client)}>Edit</button>
-                      <button disabled={!canEdit} type="button" className="text-red-700 underline disabled:opacity-40" onClick={() => handleDeleteClient(client.id)}>Delete</button>
+              <tbody className="divide-y divide-slate-100">
+                {visibleClients.length === 0 && (
+                  <tr><td colSpan={2} className="px-5 py-8 text-center text-sm text-slate-400">{clientSearch ? 'No clients match your search.' : 'No clients yet — add one to get started.'}</td></tr>
+                )}
+                {visibleClients.map(client => (
+                  <tr key={client.id} className="hover:bg-slate-50/60">
+                    <td className="px-5 py-3 font-medium text-slate-800">{client.client_name}</td>
+                    <td className="px-5 py-3 text-right">
+                      <button type="button" disabled={!canEdit} className="mr-3 text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-40" onClick={() => startEditClient(client)}>Edit</button>
+                      <button type="button" disabled={!canEdit} className="text-xs font-medium text-red-600 hover:text-red-800 disabled:opacity-40" onClick={() => handleDeleteClient(client.id)}>Delete</button>
                     </td>
-                  </tr>))}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
-        </section>)}
+        </section>
+      )}
 
-      {activeTab === 'locations' && (<section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-base font-semibold text-slate-900">Locations</h2>
-            <div className="flex gap-2">
-              <button disabled={!canEdit} type="button" onClick={() => setShowLocationCsvModal(true)} className="h-9 rounded-lg border border-slate-300 px-3 text-sm disabled:opacity-50">
-                Import CSV
-              </button>
-              <button type="button" onClick={downloadLocationCsvTemplate} className="h-9 rounded-lg border border-slate-300 px-3 text-sm">
-                Download Template
-              </button>
+      {/* ── LOCATIONS TAB ── */}
+      {activeTab === 'locations' && (
+        <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">Locations</h2>
+              <p className="text-xs text-slate-500">{visibleLocations.length} location{visibleLocations.length !== 1 ? 's' : ''}{selectedClientId ? ' for selected client' : ''}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" className={btnSecondary} onClick={downloadLocationCsvTemplate}>Download Template</button>
+              <button type="button" disabled={!canEdit} className={btnSecondary} onClick={() => setShowLocationCsvModal(true)}>Import CSV</button>
+              {canEdit && (
+                <button type="button" className={btnPrimary} onClick={() => { setEditingLocationId(null); locationForm.reset({ client_id: selectedClientId || '', location_name: '', Company_address: '', suburb: '' }); document.getElementById('location-modal')?.removeAttribute('hidden'); }}>
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
+                  Add Location
+                </button>
+              )}
             </div>
           </div>
-          <div className="mb-3 grid gap-2 md:grid-cols-2">
-            <SearchableSelect
-              id="admin-locations-filter-client"
-              label="Filter by client"
-              value={selectedClientId}
-              onChange={value => {
-                setSelectedClientId(value);
-                locationForm.setValue('client_id', value);
-              }}
-              options={clientOptions.map(c => ({ value: c.id, label: c.name }))}
-              allowEmpty
-              emptyLabel="Select client"
-              placeholder="Search clients…"
-              className="[&_button]:h-10"
-            />
-            <input value={locationSearch} onChange={event => setLocationSearch(event.target.value)} placeholder="Search locations..." className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
-          </div>
-
-          <form className="mb-4 grid gap-2 md:grid-cols-5" onSubmit={locationForm.handleSubmit(onSubmitLocation)}>
-            <SearchableSelect
-              id="admin-location-form-client"
-              label="Client"
-              value={locationForm.watch('client_id')}
-              onChange={v => locationForm.setValue('client_id', v, { shouldValidate: true, shouldDirty: true })}
-              options={clientOptions.map(c => ({ value: c.id, label: c.name }))}
-              allowEmpty
-              emptyLabel="Select client"
-              placeholder="Search clients…"
-              className="[&_button]:h-10"
-            />
-            <input {...locationForm.register('location_name')} placeholder="Location name" className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
-            <input {...locationForm.register('Company_address')} placeholder="Address" className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
-            <input {...locationForm.register('suburb')} placeholder="Suburb (optional)" className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
-            <div className="flex gap-2">
-              <button disabled={!canEdit} type="submit" className="h-10 rounded-lg bg-indigo-600 px-4 text-sm font-medium text-white disabled:opacity-50">
-                {editingLocationId ? 'Update location' : 'Create location'}
-              </button>
-              {editingLocationId && (<button type="button" className="h-10 rounded-lg border border-slate-300 px-4 text-sm" onClick={() => {
-                    setEditingLocationId(null);
-                    locationForm.reset({
-                        client_id: selectedClientId || '',
-                        location_name: '',
-                        Company_address: '',
-                        suburb: '',
-                    });
-                }}>
-                  Cancel
-                </button>)}
+          {/* Filters */}
+          <div className="flex flex-wrap gap-3 border-b border-slate-100 px-5 py-3 bg-slate-50/60">
+            <div className="min-w-[220px] flex-1">
+              <SearchableSelect
+                id="admin-locations-filter-client"
+                label="Filter by client"
+                labelClassName="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400"
+                value={selectedClientId}
+                onChange={value => { setSelectedClientId(value); locationForm.setValue('client_id', value); }}
+                options={clientOptions.map(c => ({ value: c.id, label: c.name }))}
+                allowEmpty
+                emptyLabel="All clients"
+                placeholder="Search clients…"
+                className="[&_button]:h-9"
+              />
             </div>
-          </form>
-
+            <div className="min-w-[200px] flex-1">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Search</p>
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-4.35-4.35"/></svg>
+                <input value={locationSearch} onChange={e => setLocationSearch(e.target.value)} placeholder="Search locations…" className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm shadow-sm outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/20"/>
+              </div>
+            </div>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="px-3 py-2">Location</th>
-                  <th className="px-3 py-2">Address</th>
-                  <th className="px-3 py-2">Suburb</th>
-                  <th className="px-3 py-2 text-right">Actions</th>
+                <tr className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <th className="px-5 py-3">Location</th>
+                  <th className="px-5 py-3">Address</th>
+                  <th className="px-5 py-3">Suburb</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody>
-                {visibleLocations.map(location => (<tr key={location.id} className="border-b border-slate-100">
-                    <td className="px-3 py-2 text-slate-800">{location.location_name}</td>
-                    <td className="px-3 py-2 text-slate-700">{location.Company_address ?? '-'}</td>
-                    <td className="px-3 py-2 text-slate-700">{location.suburb ?? '-'}</td>
-                    <td className="px-3 py-2 text-right">
-                      <button disabled={!canEdit} type="button" className="mr-2 text-indigo-700 underline disabled:opacity-40" onClick={() => startEditLocation(location)}>Edit</button>
-                      <button disabled={!canEdit} type="button" className="text-red-700 underline disabled:opacity-40" onClick={() => handleDeleteLocation(location.id)}>Delete</button>
+              <tbody className="divide-y divide-slate-100">
+                {visibleLocations.length === 0 && (
+                  <tr><td colSpan={4} className="px-5 py-8 text-center text-sm text-slate-400">{locationSearch || selectedClientId ? 'No locations match your filters.' : 'No locations yet — add one or import via CSV.'}</td></tr>
+                )}
+                {visibleLocations.map(location => (
+                  <tr key={location.id} className="hover:bg-slate-50/60">
+                    <td className="px-5 py-3 font-medium text-slate-800">{location.location_name}</td>
+                    <td className="px-5 py-3 text-slate-600">{location.Company_address ?? '—'}</td>
+                    <td className="px-5 py-3 text-slate-600">{location.suburb ?? '—'}</td>
+                    <td className="px-5 py-3 text-right">
+                      <button type="button" disabled={!canEdit} className="mr-3 text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-40" onClick={() => { startEditLocation(location); document.getElementById('location-modal')?.removeAttribute('hidden'); }}>Edit</button>
+                      <button type="button" disabled={!canEdit} className="text-xs font-medium text-red-600 hover:text-red-800 disabled:opacity-40" onClick={() => handleDeleteLocation(location.id)}>Delete</button>
                     </td>
-                  </tr>))}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
-        </section>)}
+        </section>
+      )}
 
-      {activeTab === 'doors' && (<section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-3 grid gap-2 md:grid-cols-4">
-            <SearchableSelect
-              id="admin-doors-filter-client"
-              label="Client"
-              value={selectedClientId}
-              onChange={setSelectedClientId}
-              options={clientOptions.map(c => ({ value: c.id, label: c.name }))}
-              allowEmpty
-              emptyLabel="Select client"
-              placeholder="Search clients…"
-              className="[&_button]:h-10"
-            />
-            <select value={selectedLocationId} onChange={event => setSelectedLocationId(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm">
-              <option value="">Select location</option>
-              {filteredLocationsForClient.map(location => (<option key={location.id} value={location.id}>{location.name}</option>))}
-            </select>
-            <input value={doorSearch} onChange={event => setDoorSearch(event.target.value)} placeholder="Search doors..." className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
-            <div className="flex gap-2">
-              <button disabled={!canEdit} type="button" onClick={openCreateDoorModal} className="h-10 rounded-lg bg-indigo-600 px-3 text-sm font-medium text-white disabled:opacity-50">
-                Add Door
-              </button>
-              <button disabled={!canEdit} type="button" onClick={() => setShowCsvModal(true)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm disabled:opacity-50">
-                Import CSV
-              </button>
-              <button type="button" onClick={downloadCsvTemplate} className="h-10 rounded-lg border border-slate-300 px-3 text-sm">
-                Download Template
-              </button>
+      {/* ── DOORS TAB ── */}
+      {activeTab === 'doors' && (
+        <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">Doors</h2>
+              <p className="text-xs text-slate-500">{visibleDoors.length} door{visibleDoors.length !== 1 ? 's' : ''}{selectedLocationId ? ' at selected location' : ''}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" className={btnSecondary} onClick={downloadCsvTemplate}>Download Template</button>
+              <button type="button" disabled={!canEdit} className={btnSecondary} onClick={() => setShowCsvModal(true)}>Import CSV</button>
+              {canEdit && (
+                <button type="button" className={btnPrimary} onClick={openCreateDoorModal}>
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
+                  Add Door
+                </button>
+              )}
             </div>
           </div>
-
+          {/* Filters */}
+          <div className="flex flex-wrap gap-3 border-b border-slate-100 px-5 py-3 bg-slate-50/60">
+            <div className="min-w-[200px] flex-1">
+              <SearchableSelect
+                id="admin-doors-filter-client"
+                label="Client"
+                labelClassName="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400"
+                value={selectedClientId}
+                onChange={setSelectedClientId}
+                options={clientOptions.map(c => ({ value: c.id, label: c.name }))}
+                allowEmpty
+                emptyLabel="All clients"
+                placeholder="Search clients…"
+                className="[&_button]:h-9"
+              />
+            </div>
+            <div className="min-w-[180px] flex-1">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Location</p>
+              <select value={selectedLocationId} onChange={e => setSelectedLocationId(e.target.value)} className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/20">
+                <option value="">All locations</option>
+                {filteredLocationsForClient.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+              </select>
+            </div>
+            <div className="min-w-[180px] flex-1">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Search</p>
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-4.35-4.35"/></svg>
+                <input value={doorSearch} onChange={e => setDoorSearch(e.target.value)} placeholder="Search doors…" className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm shadow-sm outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/20"/>
+              </div>
+            </div>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="px-3 py-2">Door Label</th>
-                  <th className="px-3 py-2">Serial</th>
-                  <th className="px-3 py-2">Location</th>
-                  <th className="px-3 py-2">Door Type</th>
-                  <th className="px-3 py-2">CW</th>
-                  <th className="px-3 py-2">CH</th>
-                  <th className="px-3 py-2">Description</th>
-                  <th className="px-3 py-2 text-right">Actions</th>
+                <tr className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <th className="px-5 py-3">Door Label</th>
+                  <th className="px-5 py-3">Serial</th>
+                  <th className="px-5 py-3">Location</th>
+                  <th className="px-5 py-3">Door Type</th>
+                  <th className="px-5 py-3">CW</th>
+                  <th className="px-5 py-3">CH</th>
+                  <th className="px-5 py-3">Description</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody>
-                {visibleDoors.map(door => (<tr key={door.id} className="border-b border-slate-100">
-                    <td className="px-3 py-2 text-slate-800">{door.door_label}</td>
-                    <td className="px-3 py-2 text-slate-700">{door.door_serial ?? '—'}</td>
-                    <td className="px-3 py-2 text-slate-700">{locations.find(item => item.id === door.client_location_id)?.location_name ?? '—'}</td>
-                    <td className="px-3 py-2 text-slate-700">{door.door_type}</td>
-                    <td className="px-3 py-2 text-slate-700">{door.cw ?? '—'}</td>
-                    <td className="px-3 py-2 text-slate-700">{door.ch ?? '—'}</td>
-                    <td className="px-3 py-2 text-slate-700">{door.door_description ?? '—'}</td>
-                    <td className="px-3 py-2 text-right">
-                      <button disabled={!canEdit} type="button" className="mr-2 text-indigo-700 underline disabled:opacity-40" onClick={() => openEditDoorModal(door)}>Edit</button>
-                      <button disabled={!canEdit} type="button" className="text-red-700 underline disabled:opacity-40" onClick={() => handleDeleteDoor(door.id)}>Delete</button>
+              <tbody className="divide-y divide-slate-100">
+                {visibleDoors.length === 0 && (
+                  <tr><td colSpan={8} className="px-5 py-8 text-center text-sm text-slate-400">{doorSearch || selectedLocationId ? 'No doors match your filters.' : 'No doors yet — add one or import via CSV.'}</td></tr>
+                )}
+                {visibleDoors.map(door => (
+                  <tr key={door.id} className="hover:bg-slate-50/60">
+                    <td className="px-5 py-3 font-medium text-slate-800">{door.door_label}</td>
+                    <td className="px-5 py-3 text-slate-600">{door.door_serial ?? '—'}</td>
+                    <td className="px-5 py-3 text-slate-600">{locations.find(item => item.id === door.client_location_id)?.location_name ?? '—'}</td>
+                    <td className="px-5 py-3 text-slate-600">{door.door_type}</td>
+                    <td className="px-5 py-3 text-slate-600">{door.cw ?? '—'}</td>
+                    <td className="px-5 py-3 text-slate-600">{door.ch ?? '—'}</td>
+                    <td className="px-5 py-3 text-slate-600 max-w-[200px] truncate">{door.door_description ?? '—'}</td>
+                    <td className="px-5 py-3 text-right">
+                      <button type="button" disabled={!canEdit} className="mr-3 text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-40" onClick={() => openEditDoorModal(door)}>Edit</button>
+                      <button type="button" disabled={!canEdit} className="text-xs font-medium text-red-600 hover:text-red-800 disabled:opacity-40" onClick={() => handleDeleteDoor(door.id)}>Delete</button>
                     </td>
-                  </tr>))}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
-        </section>)}
+        </section>
+      )}
+
+      {/* ── CLIENT MODAL (create / edit) ── */}
+      <div id="client-modal" hidden>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <h3 className="text-base font-semibold text-slate-900">{editingClientId ? 'Edit Client' : 'Add Client'}</h3>
+              <button type="button" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100" onClick={() => { setEditingClientId(null); clientForm.reset({ client_name: '' }); document.getElementById('client-modal')?.setAttribute('hidden', ''); }}>
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <form className="px-6 py-5" onSubmit={async e => { await clientForm.handleSubmit(async v => { await onSubmitClient(v); document.getElementById('client-modal')?.setAttribute('hidden', ''); })(e); }}>
+              <label className="block">
+                <span className={labelCls}>Client Name</span>
+                <input {...clientForm.register('client_name')} placeholder="e.g. Acme Corporation" className={inputCls}/>
+                {clientForm.formState.errors.client_name && <p className="mt-1 text-xs text-red-600">{clientForm.formState.errors.client_name.message}</p>}
+              </label>
+              <div className="mt-5 flex justify-end gap-2">
+                <button type="button" className={btnSecondary} onClick={() => { setEditingClientId(null); clientForm.reset({ client_name: '' }); document.getElementById('client-modal')?.setAttribute('hidden', ''); }}>Cancel</button>
+                <button type="submit" disabled={!canEdit} className={btnPrimary}>{editingClientId ? 'Save changes' : 'Create client'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      {/* ── LOCATION MODAL (create / edit) ── */}
+      <div id="location-modal" hidden>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <h3 className="text-base font-semibold text-slate-900">{editingLocationId ? 'Edit Location' : 'Add Location'}</h3>
+              <button type="button" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100" onClick={() => { setEditingLocationId(null); locationForm.reset({ client_id: selectedClientId || '', location_name: '', Company_address: '', suburb: '' }); document.getElementById('location-modal')?.setAttribute('hidden', ''); }}>
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <form className="grid gap-4 px-6 py-5" onSubmit={async e => { await locationForm.handleSubmit(async v => { await onSubmitLocation(v); document.getElementById('location-modal')?.setAttribute('hidden', ''); })(e); }}>
+              <div>
+                <span className={labelCls}>Client</span>
+                <SearchableSelect
+                  id="admin-location-modal-client"
+                  label="Client"
+                  value={locationForm.watch('client_id')}
+                  onChange={v => locationForm.setValue('client_id', v, { shouldValidate: true, shouldDirty: true })}
+                  options={clientOptions.map(c => ({ value: c.id, label: c.name }))}
+                  allowEmpty
+                  emptyLabel="Select client"
+                  placeholder="Search clients…"
+                  className="[&_button]:h-10 [&_label]:hidden"
+                />
+                {locationForm.formState.errors.client_id && <p className="mt-1 text-xs text-red-600">{locationForm.formState.errors.client_id.message}</p>}
+              </div>
+              <label className="block">
+                <span className={labelCls}>Location Name</span>
+                <input {...locationForm.register('location_name')} placeholder="e.g. Braeside" className={inputCls}/>
+                {locationForm.formState.errors.location_name && <p className="mt-1 text-xs text-red-600">{locationForm.formState.errors.location_name.message}</p>}
+              </label>
+              <label className="block">
+                <span className={labelCls}>Address</span>
+                <input {...locationForm.register('Company_address')} placeholder="e.g. 123 Industrial Ave, Braeside VIC 3195" className={inputCls}/>
+                {locationForm.formState.errors.Company_address && <p className="mt-1 text-xs text-red-600">{locationForm.formState.errors.Company_address.message}</p>}
+              </label>
+              <label className="block">
+                <span className={labelCls}>Suburb <span className="normal-case font-normal text-slate-400">(optional)</span></span>
+                <input {...locationForm.register('suburb')} placeholder="e.g. Braeside" className={inputCls}/>
+              </label>
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" className={btnSecondary} onClick={() => { setEditingLocationId(null); locationForm.reset({ client_id: selectedClientId || '', location_name: '', Company_address: '', suburb: '' }); document.getElementById('location-modal')?.setAttribute('hidden', ''); }}>Cancel</button>
+                <button type="submit" disabled={!canEdit} className={btnPrimary}>{editingLocationId ? 'Save changes' : 'Create location'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
 
       {showDoorModal && (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
           <div className="w-full max-w-3xl rounded-xl bg-white p-4 shadow-xl">
