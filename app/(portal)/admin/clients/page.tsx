@@ -293,9 +293,8 @@ export default function AdminClientsPage() {
         }
         void loadDoors(selectedLocationId);
     }, [selectedLocationId]);
-    async function onSubmitClient(values: z.infer<typeof createClientSchema>) {
-        if (!canEdit)
-            return;
+    async function onSubmitClient(values: z.infer<typeof createClientSchema>): Promise<{ success: boolean; message: string; newClientId?: string }> {
+        if (!canEdit) return { success: false, message: '' };
         const wasEditing = Boolean(editingClientId);
         const url = editingClientId ? `/api/admin/clients/${editingClientId}` : '/api/admin/clients';
         const method = editingClientId ? 'PATCH' : 'POST';
@@ -305,8 +304,7 @@ export default function AdminClientsPage() {
             body: JSON.stringify(values),
         });
         if (!result.ok) {
-            toast.error(result.error ?? 'Failed to save client');
-            return;
+            return { success: false, message: result.error ?? 'Failed to save client' };
         }
         const saved = result.data;
         setEditingClientId(null);
@@ -315,21 +313,13 @@ export default function AdminClientsPage() {
         if (!wasEditing && saved?.id) {
             setSelectedClientId(saved.id);
             setActiveTab('locations');
-            locationForm.reset({
-                client_id: saved.id,
-                location_name: '',
-                Company_address: '',
-                suburb: '',
-            });
-            toast.success('Client created — add a location below.');
+            locationForm.reset({ client_id: saved.id, location_name: '', Company_address: '', suburb: '' });
+            return { success: true, message: 'Client created — add a location below.', newClientId: saved.id };
         }
-        else {
-            toast.success(wasEditing ? 'Client updated' : 'Client saved');
-        }
+        return { success: true, message: wasEditing ? 'Client updated' : 'Client saved' };
     }
-    async function onSubmitLocation(values: z.infer<typeof locationFormSchema>) {
-        if (!canEdit)
-            return;
+    async function onSubmitLocation(values: z.infer<typeof locationFormSchema>): Promise<{ success: boolean; message: string }> {
+        if (!canEdit) return { success: false, message: '' };
         const url = editingLocationId ? `/api/admin/client-locations/${editingLocationId}` : '/api/admin/client-locations';
         const method = editingLocationId ? 'PATCH' : 'POST';
         const body = editingLocationId
@@ -341,19 +331,12 @@ export default function AdminClientsPage() {
             body: JSON.stringify(body),
         });
         if (!result.ok) {
-            toast.error(result.error ?? 'Failed to save location');
-            return;
+            return { success: false, message: result.error ?? 'Failed to save location' };
         }
-        toast.success(editingLocationId ? 'Location updated' : 'Location created');
         setEditingLocationId(null);
-        locationForm.reset({
-            client_id: selectedClientId || '',
-            location_name: '',
-            Company_address: '',
-            suburb: '',
-        });
-        if (selectedClientId)
-            await loadLocations(selectedClientId);
+        locationForm.reset({ client_id: selectedClientId || '', location_name: '', Company_address: '', suburb: '' });
+        if (selectedClientId) await loadLocations(selectedClientId);
+        return { success: true, message: editingLocationId ? 'Location updated' : 'Location created' };
     }
     async function onSubmitDoor(values: z.infer<typeof doorFormSchema>) {
         if (!canEdit)
@@ -1089,7 +1072,7 @@ export default function AdminClientsPage() {
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
             </div>
-            <form className="px-6 py-5" onSubmit={clientForm.handleSubmit(async v => { setClientSaving(true); try { await onSubmitClient(v); setShowClientModal(false); } finally { setClientSaving(false); } })}>
+            <form className="px-6 py-5" onSubmit={clientForm.handleSubmit(async v => { setClientSaving(true); try { const r = await onSubmitClient(v); if (r.success) { setShowClientModal(false); toast.success(r.message); } else if (r.message) { toast.error(r.message); } } finally { setClientSaving(false); } })}>
               <label className="block">
                 <span className={labelCls}>Client Name</span>
                 <input {...clientForm.register('client_name')} placeholder="e.g. Acme Corporation" className={inputCls}/>
@@ -1117,7 +1100,7 @@ export default function AdminClientsPage() {
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
             </div>
-            <form className="grid gap-4 px-6 py-5" onSubmit={locationForm.handleSubmit(async v => { setLocationSaving(true); try { await onSubmitLocation(v); setShowLocationModal(false); } finally { setLocationSaving(false); } })}>
+            <form className="grid gap-4 px-6 py-5" onSubmit={locationForm.handleSubmit(async v => { setLocationSaving(true); try { const r = await onSubmitLocation(v); if (r.success) { setShowLocationModal(false); toast.success(r.message); } else if (r.message) { toast.error(r.message); } } finally { setLocationSaving(false); } })}>
               <div>
                 <span className={labelCls}>Client</span>
                 <SearchableSelect
