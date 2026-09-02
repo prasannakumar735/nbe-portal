@@ -97,6 +97,8 @@ export default function AdminClientsPage() {
     const [editingClientId, setEditingClientId] = useState<string | null>(null);
     const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
     const [editingDoor, setEditingDoor] = useState<DoorRecord | null>(null);
+    const [showClientModal, setShowClientModal] = useState(false);
+    const [showLocationModal, setShowLocationModal] = useState(false);
     const [showDoorModal, setShowDoorModal] = useState(false);
     const [showCsvModal, setShowCsvModal] = useState(false);
     const [csvRows, setCsvRows] = useState<Array<z.infer<typeof csvDoorRowSchema>>>([]);
@@ -876,7 +878,7 @@ export default function AdminClientsPage() {
                 <input value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Search clients…" className="h-9 w-56 rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm shadow-sm outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/20"/>
               </div>
               {canEdit && (
-                <button type="button" className={btnPrimary} onClick={() => { setEditingClientId(null); clientForm.reset({ client_name: '' }); document.getElementById('client-modal')?.removeAttribute('hidden'); }}>
+                <button type="button" className={btnPrimary} onClick={() => { setEditingClientId(null); clientForm.reset({ client_name: '' }); setShowClientModal(true); }}>
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
                   Add Client
                 </button>
@@ -899,7 +901,7 @@ export default function AdminClientsPage() {
                   <tr key={client.id} className="hover:bg-slate-50/60">
                     <td className="px-5 py-3 font-medium text-slate-800">{client.client_name}</td>
                     <td className="px-5 py-3 text-right">
-                      <button type="button" disabled={!canEdit} className="mr-3 text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-40" onClick={() => startEditClient(client)}>Edit</button>
+                      <button type="button" disabled={!canEdit} className="mr-3 text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-40" onClick={() => { startEditClient(client); setShowClientModal(true); }}>Edit</button>
                       <button type="button" disabled={!canEdit} className="text-xs font-medium text-red-600 hover:text-red-800 disabled:opacity-40" onClick={() => handleDeleteClient(client.id)}>Delete</button>
                     </td>
                   </tr>
@@ -922,7 +924,7 @@ export default function AdminClientsPage() {
               <button type="button" className={btnSecondary} onClick={downloadLocationCsvTemplate}>Download Template</button>
               <button type="button" disabled={!canEdit} className={btnSecondary} onClick={() => setShowLocationCsvModal(true)}>Import CSV</button>
               {canEdit && (
-                <button type="button" className={btnPrimary} onClick={() => { setEditingLocationId(null); locationForm.reset({ client_id: selectedClientId || '', location_name: '', Company_address: '', suburb: '' }); document.getElementById('location-modal')?.removeAttribute('hidden'); }}>
+                <button type="button" className={btnPrimary} onClick={() => { setEditingLocationId(null); locationForm.reset({ client_id: selectedClientId || '', location_name: '', Company_address: '', suburb: '' }); setShowLocationModal(true); }}>
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
                   Add Location
                 </button>
@@ -973,7 +975,7 @@ export default function AdminClientsPage() {
                     <td className="px-5 py-3 text-slate-600">{location.Company_address ?? '—'}</td>
                     <td className="px-5 py-3 text-slate-600">{location.suburb ?? '—'}</td>
                     <td className="px-5 py-3 text-right">
-                      <button type="button" disabled={!canEdit} className="mr-3 text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-40" onClick={() => { startEditLocation(location); document.getElementById('location-modal')?.removeAttribute('hidden'); }}>Edit</button>
+                      <button type="button" disabled={!canEdit} className="mr-3 text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-40" onClick={() => { startEditLocation(location); setShowLocationModal(true); }}>Edit</button>
                       <button type="button" disabled={!canEdit} className="text-xs font-medium text-red-600 hover:text-red-800 disabled:opacity-40" onClick={() => handleDeleteLocation(location.id)}>Delete</button>
                     </td>
                   </tr>
@@ -1074,41 +1076,41 @@ export default function AdminClientsPage() {
       )}
 
       {/* ── CLIENT MODAL (create / edit) ── */}
-      <div id="client-modal" hidden>
+      {showClientModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
               <h3 className="text-base font-semibold text-slate-900">{editingClientId ? 'Edit Client' : 'Add Client'}</h3>
-              <button type="button" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100" onClick={() => { setEditingClientId(null); clientForm.reset({ client_name: '' }); document.getElementById('client-modal')?.setAttribute('hidden', ''); }}>
+              <button type="button" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100" onClick={() => { setEditingClientId(null); clientForm.reset({ client_name: '' }); setShowClientModal(false); }}>
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
             </div>
-            <form className="px-6 py-5" onSubmit={async e => { await clientForm.handleSubmit(async v => { await onSubmitClient(v); document.getElementById('client-modal')?.setAttribute('hidden', ''); })(e); }}>
+            <form className="px-6 py-5" onSubmit={clientForm.handleSubmit(async v => { await onSubmitClient(v); setShowClientModal(false); })}>
               <label className="block">
                 <span className={labelCls}>Client Name</span>
                 <input {...clientForm.register('client_name')} placeholder="e.g. Acme Corporation" className={inputCls}/>
                 {clientForm.formState.errors.client_name && <p className="mt-1 text-xs text-red-600">{clientForm.formState.errors.client_name.message}</p>}
               </label>
               <div className="mt-5 flex justify-end gap-2">
-                <button type="button" className={btnSecondary} onClick={() => { setEditingClientId(null); clientForm.reset({ client_name: '' }); document.getElementById('client-modal')?.setAttribute('hidden', ''); }}>Cancel</button>
+                <button type="button" className={btnSecondary} onClick={() => { setEditingClientId(null); clientForm.reset({ client_name: '' }); setShowClientModal(false); }}>Cancel</button>
                 <button type="submit" disabled={!canEdit} className={btnPrimary}>{editingClientId ? 'Save changes' : 'Create client'}</button>
               </div>
             </form>
           </div>
         </div>
-      </div>
+      )}
 
       {/* ── LOCATION MODAL (create / edit) ── */}
-      <div id="location-modal" hidden>
+      {showLocationModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
               <h3 className="text-base font-semibold text-slate-900">{editingLocationId ? 'Edit Location' : 'Add Location'}</h3>
-              <button type="button" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100" onClick={() => { setEditingLocationId(null); locationForm.reset({ client_id: selectedClientId || '', location_name: '', Company_address: '', suburb: '' }); document.getElementById('location-modal')?.setAttribute('hidden', ''); }}>
+              <button type="button" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100" onClick={() => { setEditingLocationId(null); locationForm.reset({ client_id: selectedClientId || '', location_name: '', Company_address: '', suburb: '' }); setShowLocationModal(false); }}>
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
             </div>
-            <form className="grid gap-4 px-6 py-5" onSubmit={async e => { await locationForm.handleSubmit(async v => { await onSubmitLocation(v); document.getElementById('location-modal')?.setAttribute('hidden', ''); })(e); }}>
+            <form className="grid gap-4 px-6 py-5" onSubmit={locationForm.handleSubmit(async v => { await onSubmitLocation(v); setShowLocationModal(false); })}>
               <div>
                 <span className={labelCls}>Client</span>
                 <SearchableSelect
@@ -1139,13 +1141,13 @@ export default function AdminClientsPage() {
                 <input {...locationForm.register('suburb')} placeholder="e.g. Braeside" className={inputCls}/>
               </label>
               <div className="flex justify-end gap-2 pt-1">
-                <button type="button" className={btnSecondary} onClick={() => { setEditingLocationId(null); locationForm.reset({ client_id: selectedClientId || '', location_name: '', Company_address: '', suburb: '' }); document.getElementById('location-modal')?.setAttribute('hidden', ''); }}>Cancel</button>
+                <button type="button" className={btnSecondary} onClick={() => { setEditingLocationId(null); locationForm.reset({ client_id: selectedClientId || '', location_name: '', Company_address: '', suburb: '' }); setShowLocationModal(false); }}>Cancel</button>
                 <button type="submit" disabled={!canEdit} className={btnPrimary}>{editingLocationId ? 'Save changes' : 'Create location'}</button>
               </div>
             </form>
           </div>
         </div>
-      </div>
+      )}
 
       {showDoorModal && (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
           <div className="w-full max-w-3xl rounded-xl bg-white p-4 shadow-xl">
