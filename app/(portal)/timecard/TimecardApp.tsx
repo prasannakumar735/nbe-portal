@@ -445,8 +445,6 @@ export default function TimecardApp() {
           dateTo={dateTo}
           onDateFromChange={setDateFrom}
           onDateToChange={setDateTo}
-          weekMin={weekStartIso}
-          weekMax={weekEndIso}
         />
 
         {!tc.isReadOnly ? (

@@ -17,8 +17,6 @@ type Props = {
   dateTo: string
   onDateFromChange: (v: string) => void
   onDateToChange: (v: string) => void
-  weekMin: string
-  weekMax: string
 }
 
 const field =
@@ -36,8 +34,6 @@ export function TimecardFilters({
   dateTo,
   onDateFromChange,
   onDateToChange,
-  weekMin,
-  weekMax,
 }: Props) {
   return (
     <div className="rounded-2xl border border-slate-200/90 bg-white p-3 shadow-sm ring-1 ring-slate-900/[0.04]">
@@ -76,8 +72,6 @@ export function TimecardFilters({
           <span className={label}>From</span>
           <input
             type="date"
-            min={weekMin}
-            max={weekMax}
             value={dateFrom}
             onChange={e => onDateFromChange(e.target.value)}
             className={field}
@@ -87,8 +81,6 @@ export function TimecardFilters({
           <span className={label}>To</span>
           <input
             type="date"
-            min={weekMin}
-            max={weekMax}
             value={dateTo}
             onChange={e => onDateToChange(e.target.value)}
             className={field}
