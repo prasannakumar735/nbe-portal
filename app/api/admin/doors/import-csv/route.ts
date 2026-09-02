@@ -44,7 +44,7 @@ export async function POST(request: Request) {
 
     const { data: clients, error: clientsError } = await auth.supabase
       .from('clients')
-      .select('id, name, company_name')
+      .select('id, name')
       .limit(5000)
     if (clientsError) return fail(clientsError.message, 400)
 
