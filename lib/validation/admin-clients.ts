@@ -79,6 +79,17 @@ export const csvDoorImportRequestSchema = z.object({
   rows: z.array(csvDoorRowSchema).max(5000, 'CSV import is limited to 5000 rows'),
 })
 
+export const csvLocationRowSchema = z.object({
+  client_name: requiredText('Client name'),
+  location_name: requiredText('Location name'),
+  Company_address: requiredText('Address', 500),
+  suburb: nullableText(),
+})
+
+export const csvLocationImportRequestSchema = z.object({
+  rows: z.array(csvLocationRowSchema).max(5000, 'CSV import is limited to 5000 rows'),
+})
+
 export type CreateClientInput = z.infer<typeof createClientSchema>
 export type UpdateClientInput = z.infer<typeof updateClientSchema>
 export type CreateLocationInput = z.infer<typeof createLocationSchema>
@@ -86,3 +97,5 @@ export type UpdateLocationInput = z.infer<typeof updateLocationSchema>
 export type UpsertDoorInput = z.infer<typeof upsertDoorSchema>
 export type CsvDoorRowInput = z.infer<typeof csvDoorRowSchema>
 export type CsvDoorImportRequestInput = z.infer<typeof csvDoorImportRequestSchema>
+export type CsvLocationRowInput = z.infer<typeof csvLocationRowSchema>
+export type CsvLocationImportRequestInput = z.infer<typeof csvLocationImportRequestSchema>

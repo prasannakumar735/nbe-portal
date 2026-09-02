@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { useAuth } from '@/app/providers/AuthProvider';
 import type { ClientLocationRecord, ClientOption, ClientRecord, ClientLocationOption, DoorRecord } from '@/lib/types/maintenance.types';
-import { createClientSchema, csvDoorRowSchema, } from '@/lib/validation/admin-clients';
+import { createClientSchema, csvDoorRowSchema, csvLocationRowSchema } from '@/lib/validation/admin-clients';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { compareDoorRecordsByLabel } from '@/lib/door/doorLabelSort';
 type TabKey = 'clients' | 'locations' | 'doors';
@@ -27,6 +27,17 @@ type CsvImportPreview = {
     }>;
     preview: Array<Record<string, unknown>>;
 };
+type LocationCsvImportPreview = {
+    inserted: number;
+    skipped: number;
+    duplicates: number;
+    to_create: number;
+    errors: Array<{
+        rowIndex: number;
+        message: string;
+    }>;
+    preview: Array<Record<string, unknown>>;
+};
 const TABS: Array<{
     key: TabKey;
     label: string;
@@ -34,6 +45,12 @@ const TABS: Array<{
     { key: 'clients', label: 'Clients' },
     { key: 'locations', label: 'Locations' },
     { key: 'doors', label: 'Doors' },
+];
+const locationCsvTemplateHeaders = [
+    'client_name',
+    'location_name',
+    'Company_address',
+    'suburb',
 ];
 const csvTemplateHeaders = [
     'client_name',
@@ -89,6 +106,15 @@ export default function AdminClientsPage() {
     const [csvImportProgress, setCsvImportProgress] = useState<number | null>(null);
     const [csvFailedRows, setCsvFailedRows] = useState<Array<Record<string, string>>>([]);
     const [csvImportRan, setCsvImportRan] = useState(false);
+
+    const [showLocationCsvModal, setShowLocationCsvModal] = useState(false);
+    const [locationCsvRows, setLocationCsvRows] = useState<Array<z.infer<typeof csvLocationRowSchema>>>([]);
+    const [locationCsvRawRows, setLocationCsvRawRows] = useState<Array<Record<string, string>>>([]);
+    const [locationCsvPreview, setLocationCsvPreview] = useState<LocationCsvImportPreview | null>(null);
+    const [locationCsvLoading, setLocationCsvLoading] = useState(false);
+    const [locationCsvImportProgress, setLocationCsvImportProgress] = useState<number | null>(null);
+    const [locationCsvFailedRows, setLocationCsvFailedRows] = useState<Array<Record<string, string>>>([]);
+    const [locationCsvImportRan, setLocationCsvImportRan] = useState(false);
 
     const [doorModalClientId, setDoorModalClientId] = useState('');
     const [doorModalLocations, setDoorModalLocations] = useState<ClientLocationRecord[]>([]);
@@ -648,6 +674,162 @@ export default function AdminClientsPage() {
         anchor.click();
         URL.revokeObjectURL(url);
     }
+    function closeLocationCsvModal() {
+        setShowLocationCsvModal(false);
+        setLocationCsvRows([]);
+        setLocationCsvRawRows([]);
+        setLocationCsvPreview(null);
+        setLocationCsvFailedRows([]);
+        setLocationCsvImportRan(false);
+    }
+    function downloadLocationCsvTemplate() {
+        const sampleRow = 'Acme Corp,Tottenham,123 Industrial Ave,Tottenham';
+        const csv = `${locationCsvTemplateHeaders.join(',')}\n${sampleRow}\n`;
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = 'location-import-template.csv';
+        anchor.click();
+        URL.revokeObjectURL(url);
+    }
+    async function handleLocationCsvFile(file: File) {
+        setLocationCsvPreview(null);
+        setLocationCsvRows([]);
+        setLocationCsvRawRows([]);
+        setLocationCsvFailedRows([]);
+        setLocationCsvImportRan(false);
+        setLocationCsvLoading(true);
+        try {
+            const Papa = await import('papaparse');
+            const text = await file.text();
+            const parsed = Papa.parse<Record<string, string>>(text, {
+                header: true,
+                skipEmptyLines: true,
+            });
+            const validRaw: Array<Record<string, string>> = [];
+            const validParsed: Array<z.infer<typeof csvLocationRowSchema>> = [];
+            const invalidRaw: Array<Record<string, string>> = [];
+            for (const row of parsed.data) {
+                const result = csvLocationRowSchema.safeParse({
+                    client_name: row.client_name,
+                    location_name: row.location_name,
+                    Company_address: row.Company_address,
+                    suburb: row.suburb,
+                });
+                if (!result.success) {
+                    invalidRaw.push({ ...row, error_reason: result.error.issues.map(e => e.message).join('; ') });
+                } else {
+                    validParsed.push(result.data);
+                    validRaw.push(row);
+                }
+            }
+            if (invalidRaw.length) {
+                toast.error(`${invalidRaw.length} row(s) have validation errors — download the failed rows CSV to fix them.`);
+                setLocationCsvFailedRows(invalidRaw);
+                if (!validParsed.length) { setLocationCsvLoading(false); return; }
+            }
+            setLocationCsvRows(validParsed);
+            setLocationCsvRawRows(validRaw);
+            const preview = await fetchJson<LocationCsvImportPreview>('/api/admin/locations/import-csv', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rows: validParsed, preview: true }),
+            });
+            if (!preview.ok) {
+                toast.error(preview.error ?? 'Preview failed');
+                return;
+            }
+            setLocationCsvPreview(preview.data);
+            const previewErrors = preview.data.errors ?? [];
+            if (previewErrors.length) {
+                const serverFailed = previewErrors.flatMap(e => {
+                    const raw = validRaw[e.rowIndex - 1];
+                    return raw ? [{ ...raw, error_reason: e.message }] : [];
+                });
+                if (serverFailed.length) setLocationCsvFailedRows(prev => [...prev, ...serverFailed]);
+            }
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Invalid CSV file');
+        } finally {
+            setLocationCsvLoading(false);
+        }
+    }
+    async function confirmLocationCsvImport() {
+        if (!locationCsvRows.length) {
+            toast.error('Choose a CSV file first');
+            return;
+        }
+        setLocationCsvLoading(true);
+        setLocationCsvImportProgress(0);
+        let progressValue = 0;
+        const progressInterval = setInterval(() => {
+            progressValue = Math.min(progressValue + Math.random() * 8, 88);
+            setLocationCsvImportProgress(Math.round(progressValue));
+        }, 250);
+        try {
+            const result = await fetchJson<{
+                inserted: number;
+                skipped: number;
+                duplicates: number;
+                errors: Array<{ rowIndex: number; message: string }>;
+            }>('/api/admin/locations/import-csv', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rows: locationCsvRows }),
+            });
+            clearInterval(progressInterval);
+            setLocationCsvImportProgress(100);
+            if (!result.ok) {
+                toast.error(result.error ?? 'Import failed');
+                return;
+            }
+            setLocationCsvImportRan(true);
+            const serverErrors = result.data.errors ?? [];
+            if (serverErrors.length) {
+                const serverFailed = serverErrors.flatMap(e => {
+                    const raw = locationCsvRawRows[e.rowIndex - 1];
+                    return raw ? [{ ...raw, error_reason: e.message }] : [];
+                });
+                setLocationCsvFailedRows(prev => [...prev, ...serverFailed]);
+            }
+            const successCount = result.data.inserted;
+            const totalFailed = serverErrors.length + locationCsvFailedRows.length;
+            await new Promise(r => setTimeout(r, 400));
+            if (totalFailed > 0) {
+                toast.error(`${successCount} imported, ${totalFailed} failed — download error CSV to fix them.`);
+            } else {
+                toast.success(`${successCount} location(s) imported successfully`);
+                closeLocationCsvModal();
+            }
+            if (selectedClientId) await loadLocations(selectedClientId);
+        } catch {
+            clearInterval(progressInterval);
+            toast.error('Import failed — please try again.');
+        } finally {
+            setLocationCsvLoading(false);
+            setLocationCsvImportProgress(null);
+        }
+    }
+    function downloadLocationFailedRowsCsv() {
+        if (!locationCsvFailedRows.length) return;
+        const headers = [...locationCsvTemplateHeaders, 'error_reason'];
+        const lines = locationCsvFailedRows.map(row =>
+            headers.map(h => {
+                const val = String(row[h] ?? '');
+                return val.includes(',') || val.includes('"') || val.includes('\n')
+                    ? `"${val.replace(/"/g, '""')}"` : val;
+            }).join(',')
+        );
+        const csv = [headers.join(','), ...lines].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = 'location-import-errors.csv';
+        anchor.click();
+        URL.revokeObjectURL(url);
+    }
     if (loading) {
         return <div className="text-sm text-slate-600">Loading client registry...</div>;
     }
@@ -706,6 +888,17 @@ export default function AdminClientsPage() {
         </section>)}
 
       {activeTab === 'locations' && (<section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-semibold text-slate-900">Locations</h2>
+            <div className="flex gap-2">
+              <button disabled={!canEdit} type="button" onClick={() => setShowLocationCsvModal(true)} className="h-9 rounded-lg border border-slate-300 px-3 text-sm disabled:opacity-50">
+                Import CSV
+              </button>
+              <button type="button" onClick={downloadLocationCsvTemplate} className="h-9 rounded-lg border border-slate-300 px-3 text-sm">
+                Download Template
+              </button>
+            </div>
+          </div>
           <div className="mb-3 grid gap-2 md:grid-cols-2">
             <SearchableSelect
               id="admin-locations-filter-client"
@@ -1032,6 +1225,134 @@ export default function AdminClientsPage() {
                   </svg>
                 )}
                 {csvLoading ? `Importing… ${csvImportProgress ?? 0}%` : `Import ${csvPreview?.to_create ?? ''} door(s)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLocationCsvModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+          <div className="flex w-full max-w-2xl flex-col gap-0 rounded-2xl bg-white shadow-2xl">
+
+            <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4">
+              <div>
+                <h3 className="text-base font-semibold text-slate-900">Import Locations from CSV</h3>
+                <p className="mt-0.5 text-xs text-slate-500">Upload your file, review the preview, then confirm. Client must exist first. Duplicate locations are skipped.</p>
+              </div>
+              <button type="button" onClick={closeLocationCsvModal} className="ml-4 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-4 overflow-y-auto px-6 py-4" style={{maxHeight: '60vh'}}>
+
+              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 py-8 text-center transition hover:border-indigo-400 hover:bg-indigo-50">
+                <svg className="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+                <span className="text-sm font-medium text-slate-600">
+                  {locationCsvRows.length ? `${locationCsvRows.length} valid row(s) loaded — choose a different file to replace` : 'Choose a CSV file or drag it here'}
+                </span>
+                <span className="text-xs text-slate-400">Columns: client_name, location_name, Company_address, suburb</span>
+                <input type="file" accept=".csv,text/csv" className="sr-only" onChange={event => {
+                  const file = event.target.files?.[0];
+                  if (file) void handleLocationCsvFile(file);
+                }}/>
+              </label>
+
+              {locationCsvLoading && (
+                <div className="flex items-center gap-2 rounded-lg bg-indigo-50 px-4 py-3 text-sm text-indigo-700">
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                  Processing CSV…
+                </div>
+              )}
+
+              {locationCsvImportRan && locationCsvFailedRows.length > 0 && (
+                <div className="flex items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-medium text-red-800">{locationCsvFailedRows.length} row(s) could not be imported</p>
+                    <p className="mt-0.5 text-xs text-red-600">Download the error file, fix the issues in the <strong>error_reason</strong> column, then re-import.</p>
+                  </div>
+                  <button type="button" onClick={downloadLocationFailedRowsCsv} className="shrink-0 inline-flex h-8 items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3 text-xs font-medium text-red-700 hover:bg-red-50">
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    Download errors.csv
+                  </button>
+                </div>
+              )}
+
+              {locationCsvPreview && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="rounded-xl border border-slate-200 bg-white p-3 text-center">
+                      <p className="text-2xl font-bold text-indigo-600">{locationCsvPreview.to_create}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">Ready to import</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-white p-3 text-center">
+                      <p className={`text-2xl font-bold ${locationCsvPreview.skipped ? 'text-amber-600' : 'text-slate-400'}`}>{locationCsvPreview.skipped}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">Client not found</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-white p-3 text-center">
+                      <p className={`text-2xl font-bold ${locationCsvPreview.duplicates ? 'text-amber-600' : 'text-slate-400'}`}>{locationCsvPreview.duplicates}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">Already exists</p>
+                    </div>
+                  </div>
+
+                  {locationCsvRows.length > 0 && (
+                    <div>
+                      <p className="mb-1.5 text-xs font-medium text-slate-500">Preview (first {Math.min(locationCsvRows.length, 10)} of {locationCsvRows.length} valid rows)</p>
+                      <div className="overflow-x-auto rounded-xl border border-slate-200">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-600">
+                              {locationCsvTemplateHeaders.map(h => <th key={h} className="whitespace-nowrap px-3 py-2 font-medium">{h}</th>)}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {locationCsvRows.slice(0, 10).map((row, i) => (
+                              <tr key={`${row.client_name}-${row.location_name}-${i}`} className="border-t border-slate-100 hover:bg-slate-50">
+                                <td className="px-3 py-1.5">{row.client_name}</td>
+                                <td className="px-3 py-1.5">{row.location_name}</td>
+                                <td className="px-3 py-1.5">{row.Company_address}</td>
+                                <td className="px-3 py-1.5">{row.suburb ?? ''}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {locationCsvImportProgress !== null && (
+              <div className="px-6 pb-2">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-slate-500">Importing locations…</span>
+                  <span className="text-xs font-medium text-indigo-600">{locationCsvImportProgress}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-full rounded-full bg-indigo-500 transition-all duration-300" style={{width: `${locationCsvImportProgress}%`}}/>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
+              <button type="button" className="h-10 rounded-lg border border-slate-300 px-4 text-sm text-slate-700 hover:bg-slate-50" onClick={closeLocationCsvModal} disabled={locationCsvLoading}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-10 items-center gap-2 rounded-lg bg-indigo-600 px-5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
+                disabled={!canEdit || locationCsvLoading || !locationCsvRows.length || !locationCsvPreview}
+                onClick={() => void confirmLocationCsvImport()}
+              >
+                {locationCsvLoading && (
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                  </svg>
+                )}
+                {locationCsvLoading ? `Importing… ${locationCsvImportProgress ?? 0}%` : `Import ${locationCsvPreview?.to_create ?? ''} location(s)`}
               </button>
             </div>
           </div>
