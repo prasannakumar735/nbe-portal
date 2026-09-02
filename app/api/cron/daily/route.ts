@@ -4,6 +4,7 @@ import { runCalendarRemindersJob } from '@/lib/cron/jobs/calendarRemindersJob'
 import { runForgottenOfficeCloseJob } from '@/lib/cron/jobs/forgottenOfficeCloseJob'
 import { runServiceDueRemindersJob } from '@/lib/cron/jobs/serviceDueRemindersJob'
 import { runPvcQuoteWorkflowRemindersJob } from '@/lib/cron/jobs/pvcQuoteWorkflowRemindersJob'
+import { runDoorServiceAlertsJob } from '@/lib/cron/jobs/doorServiceAlertsJob'
 import { runWeeklyTimesheetRemindersJob } from '@/lib/cron/jobs/weeklyTimesheetRemindersJob'
 import { jsonError500 } from '@/lib/security/safeApiError'
 import { dispatchEmailSendQueue } from '@/lib/sales/sending/emailSendQueueDispatcher'
@@ -56,6 +57,7 @@ export async function GET(request: NextRequest) {
       'pvcQuoteWorkflowReminders',
       runPvcQuoteWorkflowRemindersJob,
     )
+    const doorServiceAlerts = await runJobSafe('doorServiceAlerts', runDoorServiceAlertsJob)
 
     // ── Sales Engine jobs ────────────────────────────────────────────────────
     // Run sequentially so each job operates on an up-to-date queue state.
@@ -104,6 +106,7 @@ export async function GET(request: NextRequest) {
       serviceDueReminders,
       weeklyTimesheetReminders,
       pvcQuoteWorkflowReminders,
+      doorServiceAlerts,
       salesEmailSend,
       salesFollowupDispatch,
       salesJobs,
