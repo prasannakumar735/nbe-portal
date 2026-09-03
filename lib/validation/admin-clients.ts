@@ -9,14 +9,13 @@ const requiredText = (label: string, max = 255) =>
 
 const nullableText = (max = 255) =>
   z
-    .string()
-    .trim()
-    .max(max, `Must be ${max} characters or fewer`)
+    .union([z.string(), z.null()])
     .optional()
     .transform(value => {
       const next = String(value ?? '').trim()
       return next || null
     })
+    .refine(value => value === null || value.length <= max, `Must be ${max} characters or fewer`)
 
 export const createClientSchema = z.object({
   client_name: requiredText('Client name'),
