@@ -135,6 +135,13 @@ export function QuoteReadOnlyIndustrialRapidDoor({ values }: Props) {
         <p className="mt-2 whitespace-pre-wrap text-sm text-slate-800">{values.introNote}</p>
       </section>
 
+      {values.notes?.trim() && (
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-base font-semibold text-slate-900">Notes</h2>
+          <p className="mt-2 whitespace-pre-wrap text-sm text-slate-800">{values.notes}</p>
+        </section>
+      )}
+
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-base font-semibold text-slate-900">Signature</h2>
         <p className="mt-2 text-sm text-slate-700">Printed name: {values.printedName || '—'}</p>

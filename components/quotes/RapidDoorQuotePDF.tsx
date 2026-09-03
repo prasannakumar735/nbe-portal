@@ -249,6 +249,21 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingBottom: 2,
   },
+  notesSection: {
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  notesLabel: {
+    fontSize: 9,
+    fontWeight: 700,
+    color: BLACK,
+    marginBottom: 3,
+  },
+  notesBody: {
+    fontSize: 9,
+    lineHeight: 1.45,
+    color: '#334155',
+  },
   disclaimer: {
     marginTop: 16,
     fontSize: 7.5,
@@ -543,6 +558,13 @@ export function RapidDoorQuotePDF({ data }: RapidDoorQuotePDFProps) {
             <Text style={styles.summaryTotalBlackText}>{currency.format(grandTotal)}</Text>
           </View>
         </View>
+
+        {values.notes?.trim() ? (
+          <View style={styles.notesSection} wrap={false}>
+            <Text style={styles.notesLabel}>Notes</Text>
+            <Text style={styles.notesBody}>{values.notes.trim()}</Text>
+          </View>
+        ) : null}
 
         <View wrap={false}>
           <View style={styles.sigBlackBar}>
