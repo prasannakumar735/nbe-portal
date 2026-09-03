@@ -97,6 +97,8 @@ export default function AdminClientsPage() {
     const [editingClientId, setEditingClientId] = useState<string | null>(null);
     const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
     const [editingDoor, setEditingDoor] = useState<DoorRecord | null>(null);
+    const [locationsLoading, setLocationsLoading] = useState(false);
+    const [doorsLoading, setDoorsLoading] = useState(false);
     const [showClientModal, setShowClientModal] = useState(false);
     const [clientModalIsEditing, setClientModalIsEditing] = useState(false);
     const [clientSaving, setClientSaving] = useState(false);
@@ -284,14 +286,16 @@ export default function AdminClientsPage() {
             return;
         }
         locationForm.setValue('client_id', selectedClientId, { shouldValidate: false });
-        void loadLocations(selectedClientId);
+        setLocationsLoading(true);
+        void loadLocations(selectedClientId).finally(() => setLocationsLoading(false));
     }, [selectedClientId, locationForm]);
     useEffect(() => {
         if (!selectedLocationId) {
             setDoors([]);
             return;
         }
-        void loadDoors(selectedLocationId);
+        setDoorsLoading(true);
+        void loadDoors(selectedLocationId).finally(() => setDoorsLoading(false));
     }, [selectedLocationId]);
     async function onSubmitClient(values: z.infer<typeof createClientSchema>): Promise<{ success: boolean; message: string; newClientId?: string }> {
         if (!canEdit) return { success: false, message: '' };
@@ -827,6 +831,7 @@ export default function AdminClientsPage() {
     const btnSecondary = 'inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50';
     const inputCls = 'h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/20';
     const labelCls = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500';
+    const Spinner = () => <svg className="h-4 w-4 animate-spin text-indigo-500" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>;
 
     return (<div className="space-y-4">
       {/* Page header */}
@@ -921,10 +926,14 @@ export default function AdminClientsPage() {
           {/* Filters */}
           <div className="flex flex-wrap gap-3 border-b border-slate-100 px-5 py-3 bg-slate-50/60">
             <div className="min-w-[220px] flex-1">
+              <div className="mb-1 flex items-center gap-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Filter by client</span>
+                {locationsLoading && <Spinner />}
+              </div>
               <SearchableSelect
                 id="admin-locations-filter-client"
                 label="Filter by client"
-                labelClassName="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400"
+                labelClassName="hidden"
                 value={selectedClientId}
                 onChange={value => { setSelectedClientId(value); locationForm.setValue('client_id', value); }}
                 options={clientOptions.map(c => ({ value: c.id, label: c.name }))}
@@ -953,7 +962,10 @@ export default function AdminClientsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {visibleLocations.length === 0 && (
+                {locationsLoading && (
+                  <tr><td colSpan={4} className="px-5 py-8 text-center"><span className="inline-flex items-center gap-2 text-sm text-slate-400"><Spinner />Loading locations…</span></td></tr>
+                )}
+                {!locationsLoading && visibleLocations.length === 0 && (
                   <tr><td colSpan={4} className="px-5 py-8 text-center text-sm text-slate-400">{locationSearch || selectedClientId ? 'No locations match your filters.' : 'No locations yet — add one or import via CSV.'}</td></tr>
                 )}
                 {visibleLocations.map(location => (
@@ -995,10 +1007,14 @@ export default function AdminClientsPage() {
           {/* Filters */}
           <div className="flex flex-wrap gap-3 border-b border-slate-100 px-5 py-3 bg-slate-50/60">
             <div className="min-w-[200px] flex-1">
+              <div className="mb-1 flex items-center gap-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Client</span>
+                {locationsLoading && <Spinner />}
+              </div>
               <SearchableSelect
                 id="admin-doors-filter-client"
                 label="Client"
-                labelClassName="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400"
+                labelClassName="hidden"
                 value={selectedClientId}
                 onChange={setSelectedClientId}
                 options={clientOptions.map(c => ({ value: c.id, label: c.name }))}
@@ -1009,7 +1025,10 @@ export default function AdminClientsPage() {
               />
             </div>
             <div className="min-w-[180px] flex-1">
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Location</p>
+              <div className="mb-1 flex items-center gap-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Location</span>
+                {doorsLoading && <Spinner />}
+              </div>
               <select value={selectedLocationId} onChange={e => setSelectedLocationId(e.target.value)} className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/20">
                 <option value="">All locations</option>
                 {filteredLocationsForClient.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
@@ -1038,7 +1057,10 @@ export default function AdminClientsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {visibleDoors.length === 0 && (
+                {doorsLoading && (
+                  <tr><td colSpan={8} className="px-5 py-8 text-center"><span className="inline-flex items-center gap-2 text-sm text-slate-400"><Spinner />Loading doors…</span></td></tr>
+                )}
+                {!doorsLoading && visibleDoors.length === 0 && (
                   <tr><td colSpan={8} className="px-5 py-8 text-center text-sm text-slate-400">{doorSearch || selectedLocationId ? 'No doors match your filters.' : 'No doors yet — add one or import via CSV.'}</td></tr>
                 )}
                 {visibleDoors.map(door => (
