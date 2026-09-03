@@ -823,7 +823,12 @@ export default function AdminClientsPage() {
     const btnSecondary = 'inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50';
     const inputCls = 'h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/20';
     const labelCls = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500';
-    const Spinner = () => <svg className="h-4 w-4 animate-spin text-indigo-500" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>;
+    const LoadingChip = ({ label }: { label: string }) => (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-0.5 text-[11px] font-medium text-indigo-600">
+        <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" />
+        {label}
+      </span>
+    );
 
     return (<div className="space-y-4">
       {/* Page header */}
@@ -920,7 +925,7 @@ export default function AdminClientsPage() {
             <div className="min-w-[220px] flex-1">
               <div className="mb-1 flex items-center gap-1.5">
                 <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Filter by client</span>
-                {locationsLoading && <Spinner />}
+                {locationsLoading && <LoadingChip label="Loading" />}
               </div>
               <SearchableSelect
                 id="admin-locations-filter-client"
@@ -955,7 +960,7 @@ export default function AdminClientsPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {locationsLoading && (
-                  <tr><td colSpan={4} className="px-5 py-8 text-center"><span className="inline-flex items-center gap-2 text-sm text-slate-400"><Spinner />Loading locations…</span></td></tr>
+                  <tr><td colSpan={4} className="px-5 py-8 text-center"><LoadingChip label="Loading locations…" /></td></tr>
                 )}
                 {!locationsLoading && visibleLocations.length === 0 && (
                   <tr><td colSpan={4} className="px-5 py-8 text-center text-sm text-slate-400">{locationSearch || selectedClientId ? 'No locations match your filters.' : 'No locations yet — add one or import via CSV.'}</td></tr>
@@ -1001,7 +1006,7 @@ export default function AdminClientsPage() {
             <div className="min-w-[200px] flex-1">
               <div className="mb-1 flex items-center gap-1.5">
                 <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Client</span>
-                {locationsLoading && <Spinner />}
+                {locationsLoading && <LoadingChip label="Loading" />}
               </div>
               <SearchableSelect
                 id="admin-doors-filter-client"
@@ -1019,7 +1024,7 @@ export default function AdminClientsPage() {
             <div className="min-w-[180px] flex-1">
               <div className="mb-1 flex items-center gap-1.5">
                 <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Location</span>
-                {doorsLoading && <Spinner />}
+                {doorsLoading && <LoadingChip label="Loading" />}
               </div>
               <select value={selectedLocationId} onChange={e => setSelectedLocationId(e.target.value)} className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/20">
                 <option value="">All locations</option>
@@ -1050,7 +1055,7 @@ export default function AdminClientsPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {doorsLoading && (
-                  <tr><td colSpan={8} className="px-5 py-8 text-center"><span className="inline-flex items-center gap-2 text-sm text-slate-400"><Spinner />Loading doors…</span></td></tr>
+                  <tr><td colSpan={8} className="px-5 py-8 text-center"><LoadingChip label="Loading doors…" /></td></tr>
                 )}
                 {!doorsLoading && visibleDoors.length === 0 && (
                   <tr><td colSpan={8} className="px-5 py-8 text-center text-sm text-slate-400">{doorSearch ? 'No doors match your search.' : selectedLocationId ? 'No doors at this location.' : selectedClientId ? 'Select a location above to view its doors.' : 'Select a client and location above to view doors.'}</td></tr>
