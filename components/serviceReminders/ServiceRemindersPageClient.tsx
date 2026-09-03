@@ -242,7 +242,7 @@ function DashboardTab() {
                             <tbody>
                               {loc.doors.map(door => (
                                 <tr key={door.id} className="border-t border-slate-100 hover:bg-slate-50">
-                                  <td className="px-3 py-2 font-medium text-slate-900">{door.door_label}</td>
+                                  <td className="px-3 py-2 font-medium text-slate-900">{door.door_label || '—'}</td>
                                   <td className="px-3 py-2 text-slate-600">{door.door_type ?? '—'}</td>
                                   <td className="px-3 py-2 text-slate-600">
                                     {door.last_inspection_date

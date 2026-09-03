@@ -187,7 +187,7 @@ export default function QrCodesPage() {
             Door
             <select value={doorId} onChange={event => setDoorId(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-slate-300 px-3" disabled={!locationId}>
               <option value="">Select door</option>
-              {doors.map(door => (<option key={door.id} value={door.id}>{door.door_label} ({door.door_type})</option>))}
+              {doors.map(door => (<option key={door.id} value={door.id}>{door.door_label || door.door_serial || door.id} ({door.door_type})</option>))}
             </select>
           </label>
         </div>

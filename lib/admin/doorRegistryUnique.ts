@@ -1,7 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 export const DUPLICATE_SERIAL_MESSAGE = 'A door with this serial number already exists at that location.'
-export const DUPLICATE_LABEL_MESSAGE = 'A door with this label already exists at that location.'
 
 export async function doorSerialExistsAtLocation(
   supabase: SupabaseClient,

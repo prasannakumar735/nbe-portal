@@ -72,7 +72,7 @@ const locationFormSchema = z.object({
 });
 const doorFormSchema = z.object({
     client_location_id: z.string().uuid('Location is required'),
-    door_label: z.string().trim().min(1, 'Door label is required'),
+    door_label: z.string().trim().optional().transform(v => v || undefined),
     door_serial: z.string().optional(),
     door_type: z.string().trim().min(1, 'Door type is required'),
     door_description: z.string().optional(),
@@ -475,7 +475,7 @@ export default function AdminClientsPage() {
         const clientId = locations.find(item => item.id === door.client_location_id)?.client_id ?? selectedClientId;
         await prepareDoorModal(clientId, {
             client_location_id: door.client_location_id,
-            door_label: door.door_label,
+            door_label: door.door_label ?? '',
             door_serial: door.door_serial ?? '',
             door_type: door.door_type,
             door_description: door.door_description ?? '',
@@ -1051,7 +1051,7 @@ export default function AdminClientsPage() {
                 )}
                 {visibleDoors.map(door => (
                   <tr key={door.id} className="hover:bg-slate-50/60">
-                    <td className="px-5 py-3 font-medium text-slate-800">{door.door_label}</td>
+                    <td className="px-5 py-3 font-medium text-slate-800">{door.door_label || <span className="text-slate-400 italic">No label</span>}</td>
                     <td className="px-5 py-3 text-slate-600">{door.door_serial ?? '—'}</td>
                     <td className="px-5 py-3 text-slate-600">{locations.find(item => item.id === door.client_location_id)?.location_name ?? '—'}</td>
                     <td className="px-5 py-3 text-slate-600">{door.door_type}</td>

@@ -303,7 +303,7 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
                       ...base,
                       adhoc_manual: false,
                       door_id: selected.id,
-                      door_number: selected.door_label,
+                      door_number: selected.door_label || '',
                       door_type: selected.door_type || '',
                       door_master: masterSnap,
                       technician_door_details: sameDoor ? (base.technician_door_details ?? '') : '',
@@ -332,7 +332,7 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
                   const typeSuffix = !regType || regType.toLowerCase() === 'unspecified' ? 'Door' : regType
                   return (
                     <option key={option.id} value={option.id}>
-                      {compactLabels ? (compact ?? option.door_label) : `${option.door_label} - ${typeSuffix}`}
+                      {compactLabels ? (compact ?? option.door_label || option.id) : `${option.door_label || 'Unnamed'} - ${typeSuffix}`}
                     </option>
                   )
                 })}
