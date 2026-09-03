@@ -107,6 +107,7 @@ export default function AdminClientsPage() {
     const [locationSaving, setLocationSaving] = useState(false);
     const [showDoorModal, setShowDoorModal] = useState(false);
     const [showCsvModal, setShowCsvModal] = useState(false);
+    const [csvFileName, setCsvFileName] = useState<string | null>(null);
     const [csvRows, setCsvRows] = useState<Array<z.infer<typeof csvDoorRowSchema>>>([]);
     const [csvRawRows, setCsvRawRows] = useState<Array<Record<string, string>>>([]);
     const [csvPreview, setCsvPreview] = useState<CsvImportPreview | null>(null);
@@ -487,6 +488,7 @@ export default function AdminClientsPage() {
     }
     function closeCsvModal() {
         setShowCsvModal(false);
+        setCsvFileName(null);
         setCsvRows([]);
         setCsvRawRows([]);
         setCsvPreview(null);
@@ -505,6 +507,7 @@ export default function AdminClientsPage() {
         URL.revokeObjectURL(url);
     }
     async function handleCsvFile(file: File) {
+        setCsvFileName(file.name);
         setCsvPreview(null);
         setCsvRows([]);
         setCsvRawRows([]);
@@ -1217,8 +1220,17 @@ export default function AdminClientsPage() {
               <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 py-8 text-center transition hover:border-indigo-400 hover:bg-indigo-50">
                 <svg className="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
                 <span className="text-sm font-medium text-slate-600">
-                  {csvRows.length ? `${csvRows.length} valid row(s) loaded — choose a different file to replace` : 'Choose a CSV file or drag it here'}
+                  {csvFileName
+                    ? csvRows.length
+                      ? `${csvFileName} — ${csvRows.length} valid row(s) loaded`
+                      : csvLoading
+                        ? csvFileName
+                        : `${csvFileName} — no valid rows (check column names match template)`
+                    : 'Choose a CSV file or drag it here'}
                 </span>
+                {csvFileName && (
+                  <span className="text-xs text-slate-400">Choose a different file to replace</span>
+                )}
                 <span className="text-xs text-slate-400">Columns: client_name, location_name, door_label, door_serial, door_type, door_description, door_type_alt, cw, ch, install_date</span>
                 <input type="file" accept=".csv,text/csv" className="sr-only" onChange={event => {
                   const file = event.target.files?.[0];
