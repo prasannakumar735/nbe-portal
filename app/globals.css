@@ -65,7 +65,7 @@ body {
 
 body {
   color: rgb(15 23 42);
-  overflow-x: hidden;
+  overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
