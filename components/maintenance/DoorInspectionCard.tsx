@@ -332,7 +332,7 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
                   const typeSuffix = !regType || regType.toLowerCase() === 'unspecified' ? 'Door' : regType
                   return (
                     <option key={option.id} value={option.id}>
-                      {compactLabels ? (compact ?? option.door_label || option.id) : `${option.door_label || 'Unnamed'} - ${typeSuffix}`}
+                      {compactLabels ? (compact ?? (option.door_label || option.id)) : `${option.door_label || 'Unnamed'} - ${typeSuffix}`}
                     </option>
                   )
                 })}
