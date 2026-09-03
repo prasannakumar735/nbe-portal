@@ -72,7 +72,7 @@ const locationFormSchema = z.object({
 });
 const doorFormSchema = z.object({
     client_location_id: z.string().uuid('Location is required'),
-    door_label: z.string().trim().optional().transform(v => v || undefined),
+    door_label: z.string().trim().optional(),
     door_serial: z.string().optional(),
     door_type: z.string().trim().min(1, 'Door type is required'),
     door_description: z.string().optional(),
