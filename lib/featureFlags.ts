@@ -16,16 +16,23 @@ export type FeatureFlagDefinition = Omit<FeatureFlag, 'enabled'> & { defaultEnab
  * If a flag is missing from the DB it falls back to `defaultEnabled`.
  */
 export const FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [
+  // ── Portal modules (all users) ──────────────────────────────────────────────
   {
-    key: 'nav_knowledge',
-    label: 'Knowledge Share',
-    description: 'Show Knowledge Share in the sidebar navigation',
+    key: 'nav_quote',
+    label: 'Quote',
+    description: 'Show Quote in the sidebar navigation',
     defaultEnabled: true,
   },
   {
-    key: 'nav_reimbursement',
-    label: 'Reimbursement Claims',
-    description: 'Show Reimbursement Claims in the sidebar navigation',
+    key: 'nav_timecards',
+    label: 'Timecards',
+    description: 'Show Timecards in the sidebar navigation',
+    defaultEnabled: true,
+  },
+  {
+    key: 'nav_maintenance',
+    label: 'Maintenance Service',
+    description: 'Show Maintenance Service in the sidebar navigation',
     defaultEnabled: true,
   },
   {
@@ -35,9 +42,58 @@ export const FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [
     defaultEnabled: true,
   },
   {
+    key: 'nav_reimbursement',
+    label: 'Reimbursement',
+    description: 'Show Reimbursement Claims in the sidebar navigation',
+    defaultEnabled: true,
+  },
+  {
+    key: 'nav_pvc_calculator',
+    label: 'PVC Strip Calculator',
+    description: 'Show PVC Strip Calculator in the sidebar navigation',
+    defaultEnabled: true,
+  },
+  {
     key: 'nav_calendar',
     label: 'Shared Calendar',
     description: 'Show Shared Calendar in the sidebar navigation',
+    defaultEnabled: true,
+  },
+  {
+    key: 'nav_job_card',
+    label: 'Job Card & Client GPS',
+    description: 'Show Job Card & Client GPS in the sidebar navigation',
+    defaultEnabled: true,
+  },
+  {
+    key: 'nav_knowledge',
+    label: 'Knowledge Share',
+    description: 'Show Knowledge Share in the sidebar navigation',
+    defaultEnabled: true,
+  },
+  {
+    key: 'nav_reports',
+    label: 'Reports',
+    description: 'Show Reports in the sidebar navigation',
+    defaultEnabled: true,
+  },
+  // ── Admin/manager-only modules ──────────────────────────────────────────────
+  {
+    key: 'nav_sales_engine',
+    label: 'Sales Engine',
+    description: 'Show Sales Engine in the sidebar navigation (admin/manager only)',
+    defaultEnabled: true,
+  },
+  {
+    key: 'nav_service_reminders',
+    label: 'Service Reminders',
+    description: 'Show Service Reminders in the sidebar navigation (admin/manager only)',
+    defaultEnabled: true,
+  },
+  {
+    key: 'nav_inventory',
+    label: 'Inventory',
+    description: 'Show Inventory in the sidebar navigation (admin/manager only)',
     defaultEnabled: true,
   },
 ]

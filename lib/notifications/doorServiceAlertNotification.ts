@@ -133,31 +133,38 @@ export async function notifyDoorServiceAlertManagers(
     doors: AlertDoor[]
     leadTimeDays: number
     serviceIntervalMonths: number
+    customRecipients?: Array<{ email: string; name: string }>
   },
 ): Promise<PortalNotifyResult> {
   if (isCalendarNotificationsDisabled()) {
     return { status: 'skipped', reason: 'notifications disabled (local testing)' }
   }
 
-  // Only email @nbeaustralia.com.au domain — filter from manager recipients
-  const { data: managers } = await supabase
-    .from('profiles')
-    .select('id, full_name')
-    .in('role', ['manager', 'admin'])
+  let recipients: Array<{ email: string; name: string }>
 
-  const profileRows = (managers ?? []) as Array<{ id: string; full_name: string | null }>
-  const recipients: Array<{ email: string; name: string }> = []
+  if (params.customRecipients && params.customRecipients.length > 0) {
+    // Use admin-configured recipients (already validated as @nbeaustralia.com.au)
+    recipients = params.customRecipients
+  } else {
+    // Fall back to all @nbeaustralia.com.au manager/admin profiles
+    const { data: managers } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .in('role', ['manager', 'admin'])
 
-  await Promise.all(
-    profileRows.map(async m => {
-      const { data } = await supabase.auth.admin.getUserById(String(m.id))
-      const email = String(data?.user?.email ?? '').trim().toLowerCase()
-      if (!isValidEmail(email)) return
-      // Restrict to nbeaustralia.com.au domain only
-      if (!email.endsWith('@nbeaustralia.com.au')) return
-      recipients.push({ email, name: String(m.full_name ?? '').trim() || 'there' })
-    }),
-  )
+    const profileRows = (managers ?? []) as Array<{ id: string; full_name: string | null }>
+    recipients = []
+
+    await Promise.all(
+      profileRows.map(async m => {
+        const { data } = await supabase.auth.admin.getUserById(String(m.id))
+        const email = String(data?.user?.email ?? '').trim().toLowerCase()
+        if (!isValidEmail(email)) return
+        if (!email.endsWith('@nbeaustralia.com.au')) return
+        recipients.push({ email, name: String(m.full_name ?? '').trim() || 'there' })
+      }),
+    )
+  }
 
   if (recipients.length === 0) {
     return { status: 'skipped', reason: 'No nbeaustralia.com.au manager recipients found.' }

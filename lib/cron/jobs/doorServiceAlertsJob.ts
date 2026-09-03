@@ -74,6 +74,27 @@ export async function runDoorServiceAlertsJob(): Promise<Record<string, unknown>
   const leadTimeDays = await getNotificationSetting(supabase, 'door_service_lead_time_days', 15)
   const serviceIntervalMonths = await getNotificationSetting(supabase, 'door_service_interval_months', 6)
 
+  // Check enabled flag (defaults to enabled if not set)
+  const { data: enabledRow } = await supabase
+    .from('portal_notification_settings')
+    .select('value')
+    .eq('key', 'reminder_notifications_enabled')
+    .maybeSingle()
+  if (enabledRow && String(enabledRow.value) === 'false') {
+    return { ok: true, skipped: true, reason: 'reminder notifications disabled in portal settings' }
+  }
+
+  // Load custom recipients if configured
+  const { data: recipientsRow } = await supabase
+    .from('portal_notification_settings')
+    .select('value')
+    .eq('key', 'reminder_notification_recipients')
+    .maybeSingle()
+  const customRecipients: Array<{ email: string; name: string }> | undefined =
+    recipientsRow?.value
+      ? String(recipientsRow.value).split(',').map(e => e.trim()).filter(Boolean).map(email => ({ email, name: 'Team' }))
+      : undefined
+
   // ── 1. Load all doors with their latest inspection date ──────────────────
   // We fetch doors and their latest inspection in a single query via a subquery.
   // Supabase doesn't support aggregated joins directly, so we load both tables
@@ -256,6 +277,7 @@ export async function runDoorServiceAlertsJob(): Promise<Record<string, unknown>
       doors: group.doors,
       leadTimeDays,
       serviceIntervalMonths,
+      customRecipients,
     })
 
     if (result.status === 'failed') {

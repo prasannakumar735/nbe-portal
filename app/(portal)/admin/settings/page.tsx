@@ -69,15 +69,24 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
 
       {/* Feature Flags tab */}
       {activeTab === 'feature_flags' && (
-        <section className="space-y-4">
+        <section className="space-y-6">
           <div>
             <h2 className="text-base font-semibold text-slate-800">Navigation Modules</h2>
             <p className="mt-0.5 text-sm text-slate-500">
-              Toggle which modules appear in the sidebar for all users. Disabled modules are hidden
-              from the nav but their pages still exist.
+              Toggle which modules appear in the sidebar. Disabled modules are hidden from the nav
+              but their pages still exist. Dashboard, Clients, People, and Portal Settings are always shown.
             </p>
           </div>
-          <FeatureFlagsClient initialFlags={flags} />
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">All users</p>
+            <FeatureFlagsClient initialFlags={flags.filter(f => !['nav_sales_engine','nav_service_reminders','nav_inventory'].includes(f.key))} />
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Admin / Manager only</p>
+            <FeatureFlagsClient initialFlags={flags.filter(f => ['nav_sales_engine','nav_service_reminders','nav_inventory'].includes(f.key))} />
+          </div>
         </section>
       )}
 
