@@ -1,8 +1,8 @@
 import { ZodError } from 'zod'
 import { fail, ok, requireManagerOrAdminApi } from '@/app/api/admin/_utils'
 import {
-  doorLabelExistsAtLocation,
-  DUPLICATE_LABEL_MESSAGE,
+  doorSerialExistsAtLocation,
+  DUPLICATE_SERIAL_MESSAGE,
   isDoorsUniqueViolation,
 } from '@/lib/admin/doorRegistryUnique'
 import { upsertDoorSchema } from '@/lib/validation/admin-clients'
@@ -32,14 +32,16 @@ export async function PATCH(request: Request, { params }: Params) {
       install_date: parsed.install_date,
     }
 
-    const duplicate = await doorLabelExistsAtLocation(
-      auth.supabase,
-      parsed.client_location_id,
-      parsed.door_label,
-      doorId,
-    )
-    if (duplicate) {
-      return fail(DUPLICATE_LABEL_MESSAGE, 409)
+    if (parsed.door_serial) {
+      const duplicate = await doorSerialExistsAtLocation(
+        auth.supabase,
+        parsed.client_location_id,
+        parsed.door_serial,
+        doorId,
+      )
+      if (duplicate) {
+        return fail(DUPLICATE_SERIAL_MESSAGE, 409)
+      }
     }
 
     const { data, error } = await auth.supabase
@@ -51,7 +53,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
     if (error) {
       if (isDoorsUniqueViolation(error)) {
-        return fail(DUPLICATE_LABEL_MESSAGE, 409)
+        return fail(DUPLICATE_SERIAL_MESSAGE, 409)
       }
       return fail(error.message, 400)
     }
