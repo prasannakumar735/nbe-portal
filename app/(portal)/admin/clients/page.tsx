@@ -558,18 +558,6 @@ export default function AdminClientsPage() {
                 return;
             }
             setCsvPreview(preview.data);
-
-            // Merge server-side errors (client/location not found) into csvFailedRows
-            const previewErrors = preview.data.errors ?? [];
-            if (previewErrors.length) {
-                const serverFailed = previewErrors.flatMap(e => {
-                    const raw = validRaw[e.rowIndex - 1];
-                    return raw ? [{ ...raw, error_reason: e.message }] : [];
-                });
-                if (serverFailed.length) {
-                    setCsvFailedRows(prev => [...prev, ...serverFailed]);
-                }
-            }
         }
         catch (error) {
             toast.error(error instanceof Error ? error.message : 'Invalid CSV file');
@@ -612,15 +600,13 @@ export default function AdminClientsPage() {
             }
             setCsvImportRan(true);
             const serverErrors = result.data.errors ?? [];
-            if (serverErrors.length) {
-                const serverFailed = serverErrors.flatMap(e => {
-                    const raw = csvRawRows[e.rowIndex - 1];
-                    return raw ? [{ ...raw, error_reason: e.message }] : [];
-                });
-                setCsvFailedRows(prev => [...prev, ...serverFailed]);
-            }
+            const serverFailed = serverErrors.flatMap(e => {
+                const raw = csvRawRows[e.rowIndex - 1];
+                return raw ? [{ ...raw, error_reason: e.message }] : [];
+            });
+            setCsvFailedRows(serverFailed);
             const successCount = result.data.inserted;
-            const totalFailed = serverErrors.length + csvFailedRows.length;
+            const totalFailed = serverErrors.length;
             await new Promise(r => setTimeout(r, 400)); // let bar show 100% briefly
             if (totalFailed > 0) {
                 toast.error(`${successCount} imported, ${totalFailed} failed — download error CSV to fix them.`);
@@ -1274,8 +1260,8 @@ export default function AdminClientsPage() {
                       <p className="mt-0.5 text-xs text-slate-500">Skipped (client/location not found)</p>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-white p-3 text-center sm:col-span-1 col-span-2">
-                      <p className={`text-2xl font-bold ${csvPreview.skipped ? 'text-red-600' : 'text-slate-400'}`}>{csvPreview.skipped}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">Not matched (fix &amp; re-import)</p>
+                      <p className={`text-2xl font-bold ${csvFailedRows.length ? 'text-red-600' : 'text-slate-400'}`}>{csvFailedRows.length}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">Invalid rows (fix &amp; re-import)</p>
                     </div>
                   </div>
 
@@ -1337,7 +1323,7 @@ export default function AdminClientsPage() {
               <button
                 type="button"
                 className="inline-flex h-10 items-center gap-2 rounded-lg bg-indigo-600 px-5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
-                disabled={!canEdit || csvLoading || !csvRows.length || !csvPreview}
+                disabled={!canEdit || csvLoading || !csvRows.length || !csvPreview || csvPreview.to_create === 0}
                 onClick={() => void confirmCsvImport()}
               >
                 {csvLoading && (
