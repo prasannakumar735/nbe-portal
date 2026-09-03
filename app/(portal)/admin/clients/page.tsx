@@ -114,6 +114,7 @@ export default function AdminClientsPage() {
     const [csvLoading, setCsvLoading] = useState(false);
     const [csvImportProgress, setCsvImportProgress] = useState<number | null>(null);
     const [csvFailedRows, setCsvFailedRows] = useState<Array<Record<string, string>>>([]);
+    const [csvPreviewErrorRows, setCsvPreviewErrorRows] = useState<Array<Record<string, string>>>([]);
     const [csvImportRan, setCsvImportRan] = useState(false);
 
     const [showLocationCsvModal, setShowLocationCsvModal] = useState(false);
@@ -493,6 +494,7 @@ export default function AdminClientsPage() {
         setCsvRawRows([]);
         setCsvPreview(null);
         setCsvFailedRows([]);
+        setCsvPreviewErrorRows([]);
         setCsvImportRan(false);
     }
     function downloadCsvTemplate() {
@@ -512,6 +514,7 @@ export default function AdminClientsPage() {
         setCsvRows([]);
         setCsvRawRows([]);
         setCsvFailedRows([]);
+        setCsvPreviewErrorRows([]);
         setCsvImportRan(false);
         setCsvLoading(true);
         try {
@@ -561,6 +564,12 @@ export default function AdminClientsPage() {
                 return;
             }
             setCsvPreview(preview.data);
+            const previewErrors = preview.data.errors ?? [];
+            const previewSkipped = previewErrors.flatMap((e: { rowIndex: number; message: string }) => {
+                const raw = validRaw[e.rowIndex - 1];
+                return raw ? [{ ...raw, error_reason: e.message }] : [];
+            });
+            setCsvPreviewErrorRows([...invalidRaw, ...previewSkipped]);
         }
         catch (error) {
             toast.error(error instanceof Error ? error.message : 'Invalid CSV file');
@@ -630,9 +639,10 @@ export default function AdminClientsPage() {
         }
     }
     function downloadFailedRowsCsv() {
-        if (!csvFailedRows.length) return;
+        const allErrors = [...csvPreviewErrorRows, ...csvFailedRows];
+        if (!allErrors.length) return;
         const headers = [...csvTemplateHeaders, 'error_reason'];
-        const lines = csvFailedRows.map(row =>
+        const lines = allErrors.map(row =>
             headers.map(h => {
                 const val = String(row[h] ?? '');
                 return val.includes(',') || val.includes('"') || val.includes('\n')
@@ -1245,11 +1255,11 @@ export default function AdminClientsPage() {
                 </div>
               )}
 
-              {/* Failure banner — only shown after import ran, not during preview */}
-              {csvImportRan && csvFailedRows.length > 0 && (
+              {/* Failure banner — shown after import ran with failures */}
+              {csvImportRan && (csvFailedRows.length > 0 || csvPreviewErrorRows.length > 0) && (
                 <div className="flex items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
                   <div>
-                    <p className="text-sm font-medium text-red-800">{csvFailedRows.length} row(s) could not be imported</p>
+                    <p className="text-sm font-medium text-red-800">{csvPreviewErrorRows.length + csvFailedRows.length} row(s) could not be imported</p>
                     <p className="mt-0.5 text-xs text-red-600">Download the error file, fix the issues in the <strong>error_reason</strong> column, then re-import.</p>
                   </div>
                   <button type="button" onClick={downloadFailedRowsCsv} className="shrink-0 inline-flex h-8 items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3 text-xs font-medium text-red-700 hover:bg-red-50">
@@ -1272,10 +1282,24 @@ export default function AdminClientsPage() {
                       <p className="mt-0.5 text-xs text-slate-500">Skipped (client/location not found)</p>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-white p-3 text-center sm:col-span-1 col-span-2">
-                      <p className={`text-2xl font-bold ${csvFailedRows.length ? 'text-red-600' : 'text-slate-400'}`}>{csvFailedRows.length}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">Invalid rows (fix &amp; re-import)</p>
+                      <p className={`text-2xl font-bold ${csvPreviewErrorRows.length ? 'text-red-600' : 'text-slate-400'}`}>{csvPreviewErrorRows.length}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">Invalid / skipped (fix &amp; re-import)</p>
                     </div>
                   </div>
+
+                  {/* Preview-phase download banner */}
+                  {!csvImportRan && csvPreviewErrorRows.length > 0 && (
+                    <div className="flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                      <div>
+                        <p className="text-sm font-medium text-amber-800">{csvPreviewErrorRows.length} row(s) will be skipped</p>
+                        <p className="mt-0.5 text-xs text-amber-700">Download the error file, fix the issues in the <strong>error_reason</strong> column, then re-import.</p>
+                      </div>
+                      <button type="button" onClick={downloadFailedRowsCsv} className="shrink-0 inline-flex h-8 items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 text-xs font-medium text-amber-700 hover:bg-amber-50">
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                        Download errors.csv
+                      </button>
+                    </div>
+                  )}
 
                   {csvRows.length > 0 && (
                     <div>
