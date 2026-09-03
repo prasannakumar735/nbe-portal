@@ -313,14 +313,7 @@ export default function AdminClientsPage() {
         const saved = result.data;
         setEditingClientId(null);
         clientForm.reset({ client_name: '' });
-        await loadClients();
-        if (!wasEditing && saved?.id) {
-            setSelectedClientId(saved.id);
-            setActiveTab('locations');
-            locationForm.reset({ client_id: saved.id, location_name: '', Company_address: '', suburb: '' });
-            return { success: true, message: 'Client created — add a location below.', newClientId: saved.id };
-        }
-        return { success: true, message: wasEditing ? 'Client updated' : 'Client saved' };
+        return { success: true, message: wasEditing ? 'Client updated' : 'Client saved', newClientId: saved?.id };
     }
     async function onSubmitLocation(values: z.infer<typeof locationFormSchema>): Promise<{ success: boolean; message: string }> {
         if (!canEdit) return { success: false, message: '' };
@@ -339,7 +332,6 @@ export default function AdminClientsPage() {
         }
         setEditingLocationId(null);
         locationForm.reset({ client_id: selectedClientId || '', location_name: '', Company_address: '', suburb: '' });
-        if (selectedClientId) await loadLocations(selectedClientId);
         return { success: true, message: editingLocationId ? 'Location updated' : 'Location created' };
     }
     async function onSubmitDoor(values: z.infer<typeof doorFormSchema>) {
@@ -1061,7 +1053,7 @@ export default function AdminClientsPage() {
                   <tr><td colSpan={8} className="px-5 py-8 text-center"><span className="inline-flex items-center gap-2 text-sm text-slate-400"><Spinner />Loading doors…</span></td></tr>
                 )}
                 {!doorsLoading && visibleDoors.length === 0 && (
-                  <tr><td colSpan={8} className="px-5 py-8 text-center text-sm text-slate-400">{doorSearch || selectedLocationId ? 'No doors match your filters.' : 'No doors yet — add one or import via CSV.'}</td></tr>
+                  <tr><td colSpan={8} className="px-5 py-8 text-center text-sm text-slate-400">{doorSearch ? 'No doors match your search.' : selectedLocationId ? 'No doors at this location.' : selectedClientId ? 'Select a location above to view its doors.' : 'Select a client and location above to view doors.'}</td></tr>
                 )}
                 {visibleDoors.map(door => (
                   <tr key={door.id} className="hover:bg-slate-50/60">
@@ -1094,7 +1086,7 @@ export default function AdminClientsPage() {
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
             </div>
-            <form className="px-6 py-5" onSubmit={clientForm.handleSubmit(async v => { setClientSaving(true); try { const r = await onSubmitClient(v); if (r.success) { setShowClientModal(false); toast.success(r.message); } else if (r.message) { toast.error(r.message); } } finally { setClientSaving(false); } })}>
+            <form className="px-6 py-5" onSubmit={clientForm.handleSubmit(async v => { setClientSaving(true); try { const r = await onSubmitClient(v); if (r.success) { setShowClientModal(false); toast.success(r.message); void loadClients().then(() => { if (r.newClientId && !clientModalIsEditing) { setSelectedClientId(r.newClientId); setActiveTab('locations'); locationForm.reset({ client_id: r.newClientId, location_name: '', Company_address: '', suburb: '' }); } }); } else if (r.message) { toast.error(r.message); } } finally { setClientSaving(false); } })}>
               <label className="block">
                 <span className={labelCls}>Client Name</span>
                 <input {...clientForm.register('client_name')} placeholder="e.g. Acme Corporation" className={inputCls}/>
@@ -1122,7 +1114,7 @@ export default function AdminClientsPage() {
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
             </div>
-            <form className="grid gap-4 px-6 py-5" onSubmit={locationForm.handleSubmit(async v => { setLocationSaving(true); try { const r = await onSubmitLocation(v); if (r.success) { setShowLocationModal(false); toast.success(r.message); } else if (r.message) { toast.error(r.message); } } finally { setLocationSaving(false); } })}>
+            <form className="grid gap-4 px-6 py-5" onSubmit={locationForm.handleSubmit(async v => { setLocationSaving(true); try { const r = await onSubmitLocation(v); if (r.success) { setShowLocationModal(false); toast.success(r.message); if (selectedClientId) void loadLocations(selectedClientId); } else if (r.message) { toast.error(r.message); } } finally { setLocationSaving(false); } })}>
               <div>
                 <span className={labelCls}>Client</span>
                 <SearchableSelect
