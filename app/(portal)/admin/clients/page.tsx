@@ -1090,7 +1090,7 @@ export default function AdminClientsPage() {
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
             </div>
-            <form className="px-6 py-5" onSubmit={clientForm.handleSubmit(async v => { setClientSaving(true); try { const r = await onSubmitClient(v); if (r.success) { setShowClientModal(false); setTimeout(() => toast.success(r.message), 80); void loadClients().then(() => { if (r.newClientId && !clientModalIsEditing) { setSelectedClientId(r.newClientId); setActiveTab('locations'); locationForm.reset({ client_id: r.newClientId, location_name: '', Company_address: '', suburb: '' }); } }); } else if (r.message) { toast.error(r.message); } } finally { setClientSaving(false); } })}>
+            <form className="px-6 py-5" onSubmit={clientForm.handleSubmit(async v => { setClientSaving(true); try { const r = await onSubmitClient(v); if (r.success) { toast.success(r.message); setShowClientModal(false); void loadClients().then(() => { if (r.newClientId && !clientModalIsEditing) { setSelectedClientId(r.newClientId); setActiveTab('locations'); locationForm.reset({ client_id: r.newClientId, location_name: '', Company_address: '', suburb: '' }); } }); } else if (r.message) { toast.error(r.message); } } finally { setClientSaving(false); } })}>
               <label className="block">
                 <span className={labelCls}>Client Name</span>
                 <input {...clientForm.register('client_name')} placeholder="e.g. Acme Corporation" className={inputCls}/>
@@ -1118,7 +1118,7 @@ export default function AdminClientsPage() {
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
             </div>
-            <form className="grid gap-4 px-6 py-5" onSubmit={locationForm.handleSubmit(async v => { setLocationSaving(true); try { const r = await onSubmitLocation(v); if (r.success) { setShowLocationModal(false); setTimeout(() => toast.success(r.message), 80); if (selectedClientId) void loadLocations(selectedClientId); } else if (r.message) { toast.error(r.message); } } finally { setLocationSaving(false); } })}>
+            <form className="grid gap-4 px-6 py-5" onSubmit={locationForm.handleSubmit(async v => { setLocationSaving(true); try { const r = await onSubmitLocation(v); if (r.success) { toast.success(r.message); setShowLocationModal(false); if (selectedClientId) void loadLocations(selectedClientId); } else if (r.message) { toast.error(r.message); } } finally { setLocationSaving(false); } })}>
               <div>
                 <span className={labelCls}>Client</span>
                 <SearchableSelect

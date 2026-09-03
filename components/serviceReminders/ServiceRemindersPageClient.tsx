@@ -104,11 +104,10 @@ function DashboardTab() {
         const json = await res.json() as { ok?: boolean; data?: DashboardData; error?: string }
         if (!res.ok || !json.ok) { setError(json.error ?? 'Failed to load'); return }
         setData(json.data ?? null)
-        // Auto-expand clients with overdue or imminent doors
+        // Auto-expand only the first client that has overdue or imminent doors
         const auto = new Set<string>()
-        for (const g of json.data?.groups ?? []) {
-          if (g.overdueCount > 0 || g.nextAlertCount > 0) auto.add(g.clientId)
-        }
+        const firstAlert = (json.data?.groups ?? []).find(g => g.overdueCount > 0 || g.nextAlertCount > 0)
+        if (firstAlert) auto.add(firstAlert.clientId)
         setExpanded(auto)
       } catch {
         setError('Failed to load dashboard data')
@@ -125,6 +124,14 @@ function DashboardTab() {
       else next.add(id)
       return next
     })
+  }
+
+  function expandAll(groups: ClientGroup[]) {
+    setExpanded(new Set(groups.map(g => g.clientId)))
+  }
+
+  function collapseAll() {
+    setExpanded(new Set())
   }
 
   if (loading) return (
@@ -155,13 +162,33 @@ function DashboardTab() {
       </div>
 
       {/* Summary row */}
-      <div className="flex flex-wrap gap-4 text-sm text-slate-600">
-        <span>{stats.clientsAffected} client{stats.clientsAffected !== 1 ? 's' : ''} affected</span>
-        <span>{stats.total} door{stats.total !== 1 ? 's' : ''} in alert window</span>
-        {stats.pendingAlerts > 0 && (
-          <span className="font-semibold text-indigo-700">
-            {stats.pendingAlerts} door{stats.pendingAlerts !== 1 ? 's' : ''} pending email alert (next cron run)
-          </span>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-4 text-sm text-slate-600">
+          <span>{stats.clientsAffected} client{stats.clientsAffected !== 1 ? 's' : ''} affected</span>
+          <span>{stats.total} door{stats.total !== 1 ? 's' : ''} in alert window</span>
+          {stats.pendingAlerts > 0 && (
+            <span className="font-semibold text-indigo-700">
+              {stats.pendingAlerts} door{stats.pendingAlerts !== 1 ? 's' : ''} pending email alert (next cron run)
+            </span>
+          )}
+        </div>
+        {groups.length > 0 && (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => expandAll(groups)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+            >
+              Expand all
+            </button>
+            <button
+              type="button"
+              onClick={collapseAll}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+            >
+              Collapse all
+            </button>
+          </div>
         )}
       </div>
 
