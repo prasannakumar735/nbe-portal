@@ -10,7 +10,7 @@ type ImportError = { rowIndex: number; message: string }
 
 type ResolvedDoorRow = {
   client_location_id: string
-  door_label: string
+  door_label: string | null
   door_serial: string | null
   door_type: string
   door_description: string | null
@@ -64,6 +64,7 @@ export async function POST(request: Request) {
     }
 
     const locationIdByClientAndName = new Map<string, string>()
+    const seenSerials = new Set<string>()
     for (const row of locations ?? []) {
       const clientId = String((row as { client_id?: string }).client_id ?? '')
       const locName = keyOf(locationLabelFromDbRow(row as { location_name?: string | null; name?: string | null; site_name?: string | null; suburb?: string | null }))
@@ -117,7 +118,7 @@ export async function POST(request: Request) {
       const rowIndex = index + 1
       const clientName = String(row.client_name ?? '').trim()
       const locationName = String(row.location_name ?? '').trim()
-      const doorLabel = String(row.door_label ?? '').trim()
+      const doorLabel = String(row.door_label ?? '').trim() || null
       const doorType = String(row.door_type ?? '').trim()
 
       const clientId = await ensureClient(clientName)
@@ -134,10 +135,21 @@ export async function POST(request: Request) {
         continue
       }
 
+      const serial = row.door_serial ? String(row.door_serial).trim() : null
+      if (serial) {
+        const serialKey = `${locationId}::${serial.toLowerCase()}`
+        if (seenSerials.has(serialKey)) {
+          errors.push({ rowIndex, message: `Duplicate serial number in CSV: "${serial}"` })
+          skipped += 1
+          continue
+        }
+        seenSerials.add(serialKey)
+      }
+
       resolvedRows.push({
         client_location_id: locationId,
         door_label: doorLabel,
-        door_serial: row.door_serial,
+        door_serial: serial,
         door_type: doorType,
         door_description: row.door_description,
         door_type_alt: row.door_type_alt,
