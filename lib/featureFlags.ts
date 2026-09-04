@@ -77,6 +77,12 @@ export const FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [
     description: 'Show Reports in the sidebar navigation',
     defaultEnabled: true,
   },
+  {
+    key: 'nav_new_quotes',
+    label: 'New Quotes',
+    description: 'Show New Quotes in the sidebar navigation',
+    defaultEnabled: true,
+  },
   // ── Admin/manager-only modules ──────────────────────────────────────────────
   {
     key: 'nav_sales_engine',
