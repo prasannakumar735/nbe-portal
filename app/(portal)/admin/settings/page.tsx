@@ -5,8 +5,9 @@ import { redirect } from 'next/navigation'
 import { FEATURE_FLAG_DEFINITIONS, getFeatureFlags } from '@/lib/featureFlags'
 import { FeatureFlagsClient } from './FeatureFlagsClient'
 import { NotificationSettingsClient } from './NotificationSettingsClient'
+import { QuoteSettingsClient } from './QuoteSettingsClient'
 
-type Tab = 'feature_flags' | 'notifications'
+type Tab = 'feature_flags' | 'notifications' | 'quote_settings'
 
 type SearchParams = Promise<{ tab?: string }>
 
@@ -26,7 +27,10 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
   }
 
   const { tab: tabParam } = await searchParams
-  const activeTab: Tab = tabParam === 'notifications' ? 'notifications' : 'feature_flags'
+  const activeTab: Tab =
+    tabParam === 'notifications' ? 'notifications' :
+    tabParam === 'quote_settings' ? 'quote_settings' :
+    'feature_flags'
 
   const flagValues = await getFeatureFlags()
   const flags = FEATURE_FLAG_DEFINITIONS.map((def) => ({
@@ -37,12 +41,13 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
   }))
 
   const tabs: Array<{ key: Tab; label: string }> = [
-    { key: 'feature_flags', label: 'Feature Flags' },
-    { key: 'notifications', label: 'Notification Settings' },
+    { key: 'feature_flags',  label: 'Feature Flags' },
+    { key: 'notifications',  label: 'Notification Settings' },
+    { key: 'quote_settings', label: 'Quote Settings' },
   ]
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className={`mx-auto space-y-6 ${activeTab === 'quote_settings' ? 'max-w-5xl' : 'max-w-2xl'}`}>
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Portal Settings</h1>
         <p className="mt-1 text-sm text-slate-500">
@@ -56,6 +61,7 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
           <a
             key={t.key}
             href={`/admin/settings${t.key === 'feature_flags' ? '' : `?tab=${t.key}`}`}
+
             className={`flex-1 rounded-lg px-4 py-2 text-center text-sm font-medium transition-colors ${
               activeTab === t.key
                 ? 'bg-white text-slate-900 shadow-sm'
@@ -100,6 +106,13 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
             </p>
           </div>
           <NotificationSettingsClient />
+        </section>
+      )}
+
+      {/* Quote Settings tab */}
+      {activeTab === 'quote_settings' && (
+        <section className="space-y-4">
+          <QuoteSettingsClient />
         </section>
       )}
     </div>
