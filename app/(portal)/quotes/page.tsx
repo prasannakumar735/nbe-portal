@@ -231,7 +231,7 @@ export default function NewQuotesPage() {
   const customerFilled = !!custName && !!custAddress
   const canGenerate = !generating && !!doorType && !!openingW && !!openingH && !!frame &&
     !!curtain && !!colour && !!motorKw && !!motorSide && !!cbSide && !!qty && !!unitPrice &&
-    (!safetyEnabled || safetySelected.length > 0) &&
+    safetyEnabled && safetySelected.length > 0 &&
     (custCanBeBlank || customerFilled)
 
   // ── Save current door to locked list ────────────────────────────────────────
@@ -655,6 +655,7 @@ export default function NewQuotesPage() {
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-[18px]">security</span>
                     Safety / Detection
+                    <span className="text-red-400">*</span>
                   </div>
                   <span className="material-symbols-outlined text-[18px]">
                     {safetyEnabled ? 'check_box' : 'check_box_outline_blank'}
@@ -692,7 +693,7 @@ export default function NewQuotesPage() {
           <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-500">Customer Details</h2>
-              <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-600 uppercase tracking-wide">Required</span>
+              <span className="text-red-400 text-sm font-bold">*</span>
             </div>
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input type="checkbox" checked={custCanBeBlank} onChange={e => setCustCanBeBlank(e.target.checked)}
