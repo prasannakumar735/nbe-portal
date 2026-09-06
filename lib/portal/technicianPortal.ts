@@ -13,6 +13,7 @@ export type PortalNavItem = {
 export const PORTAL_NAV_ITEMS_ALL: PortalNavItem[] = [
   { label: 'Dashboard', icon: 'dashboard', href: '/dashboard' },
   { label: 'Quote', icon: 'request_quote', href: '/dashboard/quotes/service', flagKey: 'nav_quote' },
+  { label: 'New Quotes', icon: 'receipt_long', href: '/quotes', flagKey: 'nav_new_quotes' },
   { label: 'Timecards', icon: 'schedule', href: '/dashboard/timecards', flagKey: 'nav_timecards' },
   { label: 'Maintenance Service', icon: 'build', href: '/maintenance', flagKey: 'nav_maintenance' },
   { label: 'QR Codes', icon: 'qr_code_2', href: '/qr-codes', flagKey: 'nav_qr_codes' },
