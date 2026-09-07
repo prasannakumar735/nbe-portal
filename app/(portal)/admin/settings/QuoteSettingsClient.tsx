@@ -1,6 +1,13 @@
 'use client'
 import { useEffect, useState } from 'react'
 
+// ── Feature flags ─────────────────────────────────────────────────────────────
+export const IMAGE_STYLE_KEY = 'nbe_quote_image_style_v1'
+export type DoorImageStyle = 'withText' | 'withOutText'
+export function loadDoorImageStyle(): DoorImageStyle {
+  try { return (localStorage.getItem(IMAGE_STYLE_KEY) as DoorImageStyle) || 'withOutText' } catch { return 'withOutText' }
+}
+
 // ── Default dropdown values per quote type ────────────────────────────────────
 const DEFAULTS = {
   INDUSTRIAL_RAPID_DOOR: {
@@ -110,10 +117,17 @@ export function QuoteSettingsClient() {
   const [settings, setSettings] = useState<Settings>(DEFAULTS)
   const [activeType, setActiveType] = useState<keyof Settings>('INDUSTRIAL_RAPID_DOOR')
   const [saved, setSaved] = useState(false)
+  const [imageStyle, setImageStyle] = useState<DoorImageStyle>('withOutText')
 
   useEffect(() => {
     setSettings(loadSettings())
+    setImageStyle(loadDoorImageStyle())
   }, [])
+
+  function handleImageStyleChange(style: DoorImageStyle) {
+    setImageStyle(style)
+    try { localStorage.setItem(IMAGE_STYLE_KEY, style) } catch {}
+  }
 
   function updateField(type: keyof Settings, field: string, values: string[]) {
     setSettings(prev => ({
@@ -169,6 +183,29 @@ export function QuoteSettingsClient() {
             <span className="material-symbols-outlined text-[16px]">{saved ? 'check' : 'save'}</span>
             {saved ? 'Saved!' : 'Save Changes'}
           </button>
+        </div>
+      </div>
+
+      {/* Door image style toggle */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-800">Door Image Style</p>
+            <p className="mt-0.5 text-xs text-slate-500">Choose whether door preview images show product descriptions or are clean without text.</p>
+          </div>
+          <div className="flex rounded-xl border border-slate-200 overflow-hidden">
+            {(['withOutText', 'withText'] as DoorImageStyle[]).map(style => (
+              <button key={style} type="button"
+                onClick={() => handleImageStyleChange(style)}
+                className={`px-4 py-2 text-xs font-semibold transition ${
+                  imageStyle === style
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-white text-slate-600 hover:bg-slate-50'
+                }`}>
+                {style === 'withOutText' ? 'Without Description' : 'With Description'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

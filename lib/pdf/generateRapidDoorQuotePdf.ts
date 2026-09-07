@@ -10,25 +10,32 @@ const WHITE = rgb(1,     1,     1)
 const BLACK = rgb(0,     0,     0)
 
 export type DoorLineItem = {
-  doorType:     string
-  doorTypeName: string
-  openingW:     string
-  openingH:     string
-  frame:        string
-  curtain:      string
-  colour:       string
-  motorSide:    string
-  safetyLines:  string[]
-  qty:          number
-  unitPrice:    number
-  installation: number
-  demolition:   number
-  equipHire:    number
-  accTravel:    number
-  lineTotal:    number
-  customDesc:   string | null
-  colourCode:   string | null
-  doorImagePath?: string | null
+  doorType:          string
+  doorTypeName:      string
+  doorModel?:        string   // e.g. "PE 150"
+  openingW:          string   // clear width
+  openingH:          string   // clear height
+  externalW?:        string   // computed external width
+  externalH?:        string   // computed external height
+  frameRaw?:         string   // raw code: GAL, P/C, S/S
+  frame:             string   // mapped name: Galvanized, Powder Coated, Stainless Steel
+  curtain:           string
+  colour:            string
+  motorKw?:          string
+  motorSide:         string
+  cbSide?:           string
+  safetyLines:       string[]
+  safetyByCategory?: Record<string, string>
+  qty:               number
+  unitPrice:         number
+  installation:      number
+  demolition:        number
+  equipHire:         number
+  accTravel:         number
+  lineTotal:         number
+  customDesc:        string | null
+  colourCode:        string | null
+  doorImagePath?:    string | null
 }
 
 export type RapidDoorQuotePdfInput = {
@@ -43,7 +50,8 @@ export type RapidDoorQuotePdfInput = {
   customerPostcode: string
   customerPhone:    string
   customerEmail:    string
-  // Legacy single-door fields (kept for backwards compat)
+  imageStyle?:      string
+  // Legacy single-door fields
   doorType?:         string
   doorTypeName?:     string
   openingW?:         string
@@ -64,6 +72,8 @@ export type RapidDoorQuotePdfInput = {
   lineTotal?:        number
   doorImagePath?:    string | null
 }
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 async function embedDisplayFont(pdfDoc: PDFDocument): Promise<PDFFont | null> {
   try {
@@ -119,69 +129,343 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): 
   return lines
 }
 
-export async function generateRapidDoorQuotePdf(input: RapidDoorQuotePdfInput): Promise<Uint8Array> {
-  // Normalise: support new multi-door `doors[]` and legacy single-door fields
-  const doors: DoorLineItem[] = input.doors?.length
-    ? input.doors
-    : [{
-        doorType:     input.doorType     ?? '',
-        doorTypeName: input.doorTypeName ?? '',
-        openingW:     input.openingW     ?? '',
-        openingH:     input.openingH     ?? '',
-        frame:        input.frame        ?? '',
-        curtain:      input.curtain      ?? '',
-        colour:       input.colour       ?? '',
-        motorSide:    input.motorSide    ?? '',
-        safetyLines:  input.safetyLines  ?? [],
-        qty:          input.qty          ?? 1,
-        unitPrice:    input.unitPrice    ?? 0,
-        installation: input.installation ?? 0,
-        demolition:   input.demolition   ?? 0,
-        equipHire:    input.equipHire    ?? 0,
-        accTravel:    input.accTravel    ?? 0,
-        lineTotal:    input.lineTotal    ?? 0,
-        customDesc:   null,
-        colourCode:   null,
-        doorImagePath: input.doorImagePath,
-      }]
+// ── Page 1: Customer-facing quote (reference style) ───────────────────────────
 
-  const grandTotal = input.grandTotal ?? doors.reduce((s, d) => s + d.lineTotal, 0)
+async function drawPage1(
+  pdfDoc: PDFDocument,
+  input: RapidDoorQuotePdfInput,
+  door: DoorLineItem,
+  doorIndex: number,
+  totalDoors: number,
+  grandTotal: number,
+  fonts: { reg: PDFFont; bold: PDFFont; display: PDFFont },
+  logoImg: Awaited<ReturnType<typeof PDFDocument.prototype.embedPng>> | null,
+) {
+  const { reg, bold, display } = fonts
+  const page = pdfDoc.addPage([595.28, 841.89])
+  const PW = 595.28
+  const ML = 36, MR = 36, CW = PW - ML - MR
+  let y = 800
+
+  // For multi-door, each page shows only that door's detail
+  const doors = [door]
+  const firstDoor = door
+
+  // ── HEADER ────────────────────────────────────────────────────────────────
+  const logoH = 50
+  if (logoImg) {
+    const { width: lw, height: lh } = logoImg
+    page.drawImage(logoImg, { x: ML, y: y - logoH, width: (lw / lh) * logoH, height: logoH })
+  } else {
+    t(page, 'NBE',       ML, y - 22, bold, 26, BLACK)
+    t(page, 'australia', ML, y - 44, bold, 15, BRAND)
+  }
+  t(page, 'ABN: 17 007 048 008', ML, y - logoH - 10, reg, 9, DARK)
+
+  // "QUOTE" large
+  t(page, 'QUOTE', PW - MR - display.widthOfTextAtSize('QUOTE', 34), y - 26, display, 34, BLACK)
+
+  // Subtitle: INDUSTRIAL RAPID DOOR | PE01  (+ Door X of N for multi-door)
+  const doorLabel = totalDoors > 1 ? `  (Door ${doorIndex + 1} of ${totalDoors})` : ''
+  const subtitle = `INDUSTRIAL RAPID DOOR  |  ${firstDoor.doorType}${doorLabel}`
+  t(page, subtitle, PW - MR - bold.widthOfTextAtSize(subtitle, 13), y - 52, bold, 13, BRAND)
+
+  y -= logoH + 22
+  drawHLine(page, ML, y, CW, 1, DARK)
+  y -= 16
+
+  // ── COMPANY INFO + DATE BLOCK ─────────────────────────────────────────────
+  t(page, 'NBE AUSTRALIA',                                      ML, y,      bold, 8.5, DARK)
+  t(page, '22A Humeside Dr, Campbellfield VIC 3061, Australia', ML, y - 12, reg,  8,   DARK)
+  t(page, 'accountsreceivable@nbeaustralia.com.au',             ML, y - 24, reg,  8,   DARK)
+  t(page, 'www.nbeaustralia.com.au',                            ML, y - 36, reg,  8,   DARK)
+
+  const dateLabelX = ML + CW - 130
+  const dateRows: [string, string][] = [
+    ['DATE',        input.date],
+    ['VALID UNTIL', input.validUntil],
+    ['QUOTE NO.',   input.quoteNumber],
+  ]
+  dateRows.forEach(([label, val], i) => {
+    t(page,      label, dateLabelX,  y - i * 14, bold, 8.5, DARK)
+    tRight(page, val,   ML + CW,     y - i * 14, reg,  8.5, DARK)
+  })
+  y -= 56
+
+  // ── CUSTOMER HEADER BAR ───────────────────────────────────────────────────
+  const STRIP_H = 18
+  drawRect(page, ML, y - STRIP_H, CW, STRIP_H, BLACK)
+  t(page, 'CUSTOMER', ML + 8, y - 12, bold, 9, WHITE)
+  y -= STRIP_H
+
+  // ── CUSTOMER DETAILS (left) + DOOR IMAGE (right) ──────────────────────────
+  const custStartY = y
+  const custLabelX = ML + 8
+  const custValueX = ML + 72
+  const custRows: [string, string][] = [
+    ['Customer',  input.customerName     || '—'],
+    ['Attention', input.customerAttn     || '—'],
+    ['Address',   input.customerAddress  || '—'],
+    ['Location',  input.customerPostcode || '—'],
+    ['Phone',     input.customerPhone    || '—'],
+    ['Email',     input.customerEmail    || '—'],
+  ]
+  custRows.forEach(([label, val], i) => {
+    t(page, label, custLabelX, y - 8 - i * 13, bold, 8, DARK)
+    t(page, val,   custValueX, y - 8 - i * 13, reg,  8, DARK)
+  })
+
+  // Door image — right column
+  const imgColX = ML + CW * 0.48
+  const imgColW = CW * 0.52
+  const custSectionH = custRows.length * 13 + 16
+
+  if (firstDoor.doorImagePath) {
+    try {
+      const imgBytes = await readFile(firstDoor.doorImagePath)
+      const doorImg = await pdfDoc.embedPng(imgBytes)
+      const { width: dw, height: dh } = doorImg
+      const maxW = imgColW - 10
+      const maxH = custSectionH + 10
+      let drawW = maxW
+      let drawH = (dh / dw) * drawW
+      if (drawH > maxH) { drawH = maxH; drawW = (dw / dh) * drawH }
+      page.drawImage(doorImg, {
+        x: imgColX + (imgColW - drawW) / 2,
+        y: y - drawH + 10,
+        width: drawW,
+        height: drawH,
+      })
+    } catch { /* no image — skip silently */ }
+  }
+
+  y -= custSectionH
+  y -= 12
+
+  // ── TABLE ─────────────────────────────────────────────────────────────────
+  // Columns
+  const cNo    = ML
+  const cItem  = ML + 18
+  const cDesc  = ML + 130
+  const cQtyX  = ML + CW - 162  // left of QTY col
+  const cQtyW  = 28
+  const cUpR   = ML + CW - 65   // right edge of UNIT PRICE
+  const cTotR  = ML + CW        // right edge of TOTAL
+
+  // Header row
+  const TH = 18
+  drawRect(page, ML, y - TH, CW, TH, BLACK)
+  t(page,      'NO',          cNo + 2,  y - 12, bold, 8, WHITE)
+  t(page,      'ITEM',        cItem,    y - 12, bold, 8, WHITE)
+  t(page,      'DESCRIPTION', cDesc,    y - 12, bold, 8, WHITE)
+  tCenter(page, 'QTY',        cQtyX, cQtyW, y - 12, bold, 8, WHITE)
+  tRight(page, 'UNIT PRICE',  cUpR,     y - 12, bold, 8, WHITE)
+  tRight(page, 'TOTAL',       cTotR,    y - 12, bold, 8, WHITE)
+  y -= TH
+
+  // Sub-header
+  drawRect(page, ML, y - 13, CW, 13, rgb(0.93, 0.93, 0.93))
+  t(page,      '#',      cNo + 2,   y - 9, reg, 7, GREY)
+  t(page,      'WIDTH',  cDesc + 30, y - 9, reg, 7, GREY)
+  t(page,      'HEIGHT', cDesc + 140, y - 9, reg, 7, GREY)
+  tCenter(page, '#',     cQtyX, cQtyW, y - 9, reg, 7, GREY)
+  tRight(page,  '$',     cUpR,   y - 9, reg, 7, GREY)
+  tRight(page,  '$$',    cTotR,  y - 9, reg, 7, GREY)
+  y -= 13
+
+  // ── DOOR ROWS ─────────────────────────────────────────────────────────────
+  for (let di = 0; di < doors.length; di++) {
+    const d = doors[di]
+    if (di > 0) { drawHLine(page, ML, y, CW, 0.5, rgb(0.55, 0.55, 0.55)); y -= 4 }
+
+    // Category row: "Industrial Door   Rapid Roller Door (Performance | PE01)"
+    const shortName = d.doorTypeName.replace(/ Rapid Door$/, '').replace(/ Door$/, '')
+    const catDesc = `Rapid Roller Door (${shortName} | ${d.doorType})`
+    drawRect(page, ML, y - 17, CW, 17, rgb(0.97, 0.97, 0.97))
+    t(page, 'Industrial Door', cItem, y - 11, reg,  9,  DARK)
+    t(page, catDesc,           cDesc, y - 11, bold, 11, DARK)
+    y -= 17
+
+    // Row 1: Width × Height
+    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
+    const exW = d.externalW ?? ''
+    const exH = d.externalH ?? ''
+    t(page, '1.',             cNo + 2,  y - 11, reg, 8.5, DARK)
+    t(page, 'Width × Height', cItem,    y - 11, reg, 8.5, DARK)
+    t(page, 'Clear:',         cDesc,    y - 11, reg, 8.5, DARK)
+    t(page, d.openingW,       cDesc + 38, y - 11, reg, 8.5, DARK)
+    t(page, 'x',              cDesc + 88, y - 11, reg, 8.5, DARK)
+    t(page, d.openingH,       cDesc + 98, y - 11, reg, 8.5, DARK)
+    if (exW) {
+      t(page, 'External:',   cDesc,    y - 22, reg, 8, GREY)
+      t(page, exW,           cDesc + 38, y - 22, reg, 8, GREY)
+      t(page, 'x',           cDesc + 88, y - 22, reg, 8, GREY)
+      t(page, exH,           cDesc + 98, y - 22, reg, 8, GREY)
+    }
+    tCenter(page, String(d.qty),          cQtyX, cQtyW, y - 11, reg, 8.5, DARK)
+    tRight(page,  fmtAUD(d.unitPrice),    cUpR,          y - 11, reg, 8.5, DARK)
+    tRight(page,  fmtAUD(d.qty * d.unitPrice), cTotR,    y - 11, bold, 8.5, DARK)
+    y -= 32
+
+    // Row 2: Door Frame
+    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
+    t(page, '2.',          cNo + 2, y - 11, reg, 8.5, DARK)
+    t(page, 'Door Frame',  cItem,   y - 11, reg, 8.5, DARK)
+    const frameDisplay = d.frameRaw ?? d.frame
+    t(page, frameDisplay,  cDesc,   y - 11, reg, 8.5, DARK)
+    if (d.motorSide) t(page, `- ${d.motorSide}`, cDesc + reg.widthOfTextAtSize(frameDisplay, 8.5) + 6, y - 11, reg, 8.5, DARK)
+    y -= 18
+
+    // Row 3: Curtain
+    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
+    t(page, '3.',      cNo + 2, y - 11, reg, 8.5, DARK)
+    t(page, 'Curtain', cItem,   y - 11, reg, 8.5, DARK)
+    t(page, d.curtain, cDesc,   y - 11, reg, 8.5, DARK)
+    if (d.colour) t(page, `- ${d.colour}`, cDesc + reg.widthOfTextAtSize(d.curtain, 8.5) + 6, y - 11, reg, 8.5, DARK)
+    y -= 18
+
+    // Row 4: Safety Edge
+    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
+    t(page, '4.',           cNo + 2, y - 11, reg,  8.5, DARK)
+    t(page, 'Safety Edge',  cItem,   y - 11, reg,  8.5, DARK)
+    t(page, 'SOFT',         cDesc,   y - 11, bold, 8.5, DARK)
+    if (d.colour) t(page, `- ${d.colour}`, cDesc + bold.widthOfTextAtSize('SOFT', 8.5) + 6, y - 11, reg, 8.5, DARK)
+    y -= 18
+
+    // Row 5: Drive System
+    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
+    t(page, '5.',            cNo + 2, y - 11, reg,  8.5, DARK)
+    t(page, 'Drive System',  cItem,   y - 11, reg,  8.5, DARK)
+    t(page, 'VF Drive:',     cDesc,   y - 11, reg,  8.5, DARK)
+    if (d.motorKw) {
+      const vfW = reg.widthOfTextAtSize('VF Drive:', 8.5) + 6
+      t(page, d.motorKw,  cDesc + vfW,       y - 11, bold, 10, DARK)
+      t(page, ' up to',   cDesc + vfW + bold.widthOfTextAtSize(d.motorKw, 10) + 2, y - 11, reg, 8.5, DARK)
+    }
+    y -= 18
+
+    // Row 6: Safety Features
+    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
+    t(page, '6.',              cNo + 2, y - 11, reg, 8.5, DARK)
+    t(page, 'Safety Features', cItem,   y - 11, reg, 8.5, DARK)
+    const safetyVal = d.safetyByCategory?.safety ?? ''
+    if (safetyVal && safetyVal !== '-') {
+      t(page, safetyVal,     cDesc,    y - 11, bold, 10, DARK)
+      tCenter(page, '2',     cQtyX, cQtyW, y - 11, reg, 8, DARK)
+      tRight(page, '(incl.)', cUpR,   y - 11, reg,  8, GREY)
+    }
+    t(page, 'Hazard Lamp',   cDesc,    y - 22, reg, 8.5, DARK)
+    tCenter(page, '1',       cQtyX, cQtyW, y - 22, reg, 8, DARK)
+    tRight(page, '(incl.)',  cUpR,     y - 22, reg, 8, GREY)
+    y -= 30
+
+    // Row 7: Detection — always show all 5 items
+    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
+    t(page, '7.',        cNo + 2, y - 11, reg, 8.5, DARK)
+    t(page, 'Detection', cItem,   y - 11, reg, 8.5, DARK)
+    const allDetection: [string, string, string][] = [
+      ['a', 'Push Button',            d.safetyByCategory?.pushButton    ?? ''],
+      ['b', 'Radar (1set)',           d.safetyByCategory?.radar         ?? ''],
+      ['c', 'Remote Control',        d.safetyByCategory?.remoteControl  ?? ''],
+      ['d', 'Induction Loop',        d.safetyByCategory?.inductLoop     ?? ''],
+      ['e', 'Contactless Exit Button', d.safetyByCategory?.swipe        ?? ''],
+    ]
+    allDetection.forEach(([letter, label, val], i) => {
+      const selected = val && val !== '-'
+      t(page, `${letter}:`, cDesc,      y - 11 - i * 13, reg, 8.5, DARK)
+      t(page, label,        cDesc + 16, y - 11 - i * 13, reg, 8.5, DARK)
+      tCenter(page, selected ? '1' : '-', cQtyX, cQtyW, y - 11 - i * 13, reg, 8, DARK)
+      tRight(page, selected ? '(incl.)' : '(excl.)', cUpR, y - 11 - i * 13, reg, 8, selected ? GREY : rgb(0.6, 0.6, 0.6))
+    })
+    y -= allDetection.length * 13 + 8
+
+    // Row 8: Installation (only if > 0)
+    if (d.installation > 0) {
+      drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
+      t(page, '8.',           cNo + 2, y - 11, reg, 8.5, DARK)
+      t(page, 'Installation', cItem,   y - 11, reg, 8.5, DARK)
+      tCenter(page, '1',      cQtyX, cQtyW, y - 11, reg, 8.5, DARK)
+      tRight(page, fmtAUD(d.installation), cUpR,  y - 11, reg,  8.5, DARK)
+      tRight(page, fmtAUD(d.installation), cTotR, y - 11, bold, 8.5, DARK)
+      y -= 18
+    }
+  }
+
+  y -= 8
+
+  // ── TOTALS ────────────────────────────────────────────────────────────────
+  drawHLine(page, ML, y, CW, 0.5, DARK)
+  y -= 6
+
+  const totLR = ML + CW - 70
+  const totVR = ML + CW
+
+  tRight(page, 'Subtotal',               totLR, y,      bold, 10, DARK)
+  tRight(page, fmtAUD(grandTotal),       totVR, y,      reg,  10, DARK)
+  tRight(page, 'GST (10%)',              totLR, y - 18, bold, 10, DARK)
+  tRight(page, fmtAUD(grandTotal * 0.1), totVR, y - 18, reg,  10, DARK)
+
+  drawHLine(page, ML + CW - 170, y - 26, 170, 0.5)
+
+  const totBoxW = 170
+  const totBoxY = y - 48
+  drawRect(page, ML + CW - totBoxW, totBoxY, totBoxW, 22, BLACK)
+  t(page,      'TOTAL',                  ML + CW - totBoxW + 8, totBoxY + 6, bold, 11, WHITE)
+  tRight(page, fmtAUD(grandTotal * 1.1), ML + CW,               totBoxY + 6, bold, 11, WHITE)
+
+  y = totBoxY - 22
+
+  // ── CLIENT SIGNATURE BAR ──────────────────────────────────────────────────
+  const sigBarH = 20
+  const sigY = y - sigBarH
+  drawRect(page, ML, sigY, CW, sigBarH, BLACK)
+  const third = CW / 3
+  t(page, 'Client Signature', ML + 8,              sigY + 6, bold, 9, WHITE)
+  tCenter(page, 'Printed Name', ML + third, third, sigY + 6, bold, 9, WHITE)
+  tCenter(page, 'Date',  ML + third * 2, third,    sigY + 6, bold, 9, WHITE)
+  y = sigY - 14
+
+  // ── FOOTER TERMS ─────────────────────────────────────────────────────────
+  const terms = 'This quotation is based on the NBE Standard Door comprising a galvanized frame, PVC curtain (900 g/m²), and a zinc-coated control box (RAL 7035). Optional extras (e.g. powder coating, light curtain, remote control, radar, traffic light, induction loop, contactless exit button) are available at additional cost. All other matters shall be subject to our standard Terms and Conditions (T&C). The electrical scope is limited to the connection between the control panel and the doors only. Power supply and isolator shall be provided by others.'
+  const footerSize = 7.5
+  const footerLines = wrapText(terms, reg, footerSize, CW)
+  footerLines.forEach((ln, i) => {
+    page.drawText(ln, { x: ML, y: y - i * 10, size: footerSize, font: reg, color: GREY })
+  })
+}
+
+// ── Page 2: Summary (existing layout) ────────────────────────────────────────
+
+async function drawPage2(
+  pdfDoc: PDFDocument,
+  input: RapidDoorQuotePdfInput,
+  doors: DoorLineItem[],
+  grandTotal: number,
+  fonts: { reg: PDFFont; bold: PDFFont; display: PDFFont },
+  logoImg: Awaited<ReturnType<typeof PDFDocument.prototype.embedPng>> | null,
+) {
+  const { reg, bold, display } = fonts
+  const page = pdfDoc.addPage([595.28, 841.89])
+  const PW = 595.28
+  const ML = 36, MR = 36, CW = PW - ML - MR
+  let y = 800
+
   const totalQty   = doors.reduce((s, d) => s + d.qty, 0)
   const hasInstall = doors.some(d => (d.installation ?? 0) > 0)
 
-  const pdfDoc = await PDFDocument.create()
-  const page   = pdfDoc.addPage([595.28, 841.89])
-  const { width: PW } = page.getSize()
-
-  const roboto    = await embedRobotoForPdfLib(pdfDoc)
-  const jostLight = await embedDisplayFont(pdfDoc)
-  const reg:     PDFFont = roboto?.regular ?? (await pdfDoc.embedFont(StandardFonts.Helvetica))
-  const bold:    PDFFont = roboto?.bold    ?? (await pdfDoc.embedFont(StandardFonts.HelveticaBold))
-  const display: PDFFont = jostLight ?? reg
-
-  const ML = 36
-  const MR = 36
-  const CW = PW - ML - MR
-  let y = 800
-
-  // ── HEADER ───────────────────────────────────────────────────────────────
+  // ── HEADER ────────────────────────────────────────────────────────────────
   const logoH = 50
-  try {
-    const logoBytes = await readFile(path.join(process.cwd(), 'public', 'NBE_LOGO_BK_PL.png'))
-    const logoImg   = await pdfDoc.embedPng(logoBytes)
+  if (logoImg) {
     const { width: lw, height: lh } = logoImg
     page.drawImage(logoImg, { x: ML, y: y - logoH, width: (lw / lh) * logoH, height: logoH })
-  } catch {
-    t(page, 'NBE', ML, y - 22, bold, 26, BLACK)
+  } else {
+    t(page, 'NBE',       ML, y - 22, bold, 26, BLACK)
     t(page, 'australia', ML, y - 44, bold, 15, BRAND)
   }
-  // ABN — black, small gap below logo bottom
   t(page, 'ABN: 17 007 048 008', ML, y - logoH - 10, reg, 9, DARK)
 
-  // "QUOTE" — cap top aligned with logo top: for 34pt font cap-height ≈ 24pt, so baseline at y-26
   t(page, 'QUOTE', PW - MR - display.widthOfTextAtSize('QUOTE', 34), y - 26, display, 34, BLACK)
 
-  // Subtitle — 8pt below QUOTE baseline (34pt baseline at y-26, subtitle at y-26-14 = y-40)
   const subtitle = 'INDUSTRIAL RAPID DOOR  |  SUMMARY'
   t(page, subtitle, PW - MR - bold.widthOfTextAtSize(subtitle, 13), y - 52, bold, 13, BRAND)
 
@@ -195,7 +479,6 @@ export async function generateRapidDoorQuotePdf(input: RapidDoorQuotePdfInput): 
   t(page, 'accountsreceivable@nbeaustralia.com.au',             ML, y - 24, reg,  8,   DARK)
   t(page, 'www.nbeaustralia.com.au',                            ML, y - 36, reg,  8,   DARK)
 
-  // Date block: labels bold left-aligned, values right-aligned to right margin
   const dateLabelX = ML + CW - 130
   const dateRows: [string, string][] = [
     ['DATE',        input.date],
@@ -203,10 +486,9 @@ export async function generateRapidDoorQuotePdf(input: RapidDoorQuotePdfInput): 
     ['QUOTE NO.',   input.quoteNumber],
   ]
   dateRows.forEach(([label, val], i) => {
-    t(page,      label, dateLabelX,    y - i * 14, bold, 8.5, DARK)
-    tRight(page, val,   ML + CW,       y - i * 14, reg,  8.5, DARK)
+    t(page,      label, dateLabelX,  y - i * 14, bold, 8.5, DARK)
+    tRight(page, val,   ML + CW,     y - i * 14, reg,  8.5, DARK)
   })
-
   y -= 56
 
   // ── CUSTOMER | QUOTE SUMMARY ──────────────────────────────────────────────
@@ -261,14 +543,11 @@ export async function generateRapidDoorQuotePdf(input: RapidDoorQuotePdfInput): 
   tRight(page,  'TOTAL',      cTotRight,    y - 14, bold, 9, WHITE)
   y -= TH + 4
 
-  // Door rows (one per door in the array)
   for (let di = 0; di < doors.length; di++) {
     const d = doors[di]
-    // Separator between doors (not before the first row)
     if (di > 0) drawHLine(page, ML, y, CW, 0.5, rgb(0.55, 0.55, 0.55))
     let descLines: string[]
     if (d.customDesc) {
-      // User-edited description: use every non-empty line as-is
       descLines = d.customDesc.split('\n').map(l => l.trim()).filter(Boolean)
     } else {
       const dl1 = `${d.doorType} | ${d.doorTypeName}`
@@ -279,8 +558,8 @@ export async function generateRapidDoorQuotePdf(input: RapidDoorQuotePdfInput): 
     }
     const rowH = descLines.length * 11 + 10
 
-    t(page, String(di + 1), cNo + 2,   y - 11, reg, 8.5, DARK)
-    t(page, d.doorType,     cItem,     y - 11, reg, 8.5, DARK)
+    t(page, String(di + 1), cNo + 2, y - 11, reg, 8.5, DARK)
+    t(page, d.doorType,     cItem,   y - 11, reg, 8.5, DARK)
     descLines.forEach((ln, i) => t(page, ln, cDesc, y - 11 - i * 11, reg, 8, DARK))
     tCenter(page, String(d.qty),               cQtyX, cQtyW, y - 11, reg, 8.5, DARK)
     tRight(page,  fmtAUD(d.unitPrice),         cUpRight,     y - 11, reg, 8.5, DARK)
@@ -288,10 +567,9 @@ export async function generateRapidDoorQuotePdf(input: RapidDoorQuotePdfInput): 
     y -= rowH
   }
 
-  // Empty filler rows
   const firstRowH = (() => {
     const d = doors[0]
-    const lines = [1,1,1, d.safetyLines.length > 0 ? 1 : 0].filter(Boolean).length
+    const lines = [1, 1, 1, d.safetyLines.length > 0 ? 1 : 0].filter(Boolean).length
     return lines * 11 + 10
   })()
   const emptyRowH = Math.max(Math.round(firstRowH * 0.7), 28)
@@ -300,10 +578,9 @@ export async function generateRapidDoorQuotePdf(input: RapidDoorQuotePdfInput): 
     drawHLine(page, ML, y, CW, 0.3, rgb(0.85, 0.85, 0.85))
     y -= emptyRowH
   }
-
   y -= 10
 
-  // ── ADDITIONAL COSTS (aggregated across all doors) ────────────────────────
+  // ── ADDITIONAL COSTS ─────────────────────────────────────────────────────
   const totalInstall = doors.reduce((s, d) => s + d.installation, 0)
   const totalDemol   = doors.reduce((s, d) => s + d.demolition, 0)
   const totalEquip   = doors.reduce((s, d) => s + d.equipHire, 0)
@@ -325,10 +602,9 @@ export async function generateRapidDoorQuotePdf(input: RapidDoorQuotePdfInput): 
     if (i === addlRows.length - 1) drawHLine(page, ML, y - addlRowH, CW, 0.6, rgb(0.65, 0.65, 0.65))
     y -= addlRowH
   })
-
   y -= 24
 
-  // ── BANK DETAILS + TOTALS ────────────────────────────────────────────────
+  // ── BANK DETAILS + TOTALS ─────────────────────────────────────────────────
   const bankY = y
   t(page, 'BANK DETAILS',                             ML, bankY,      bold, 8.5, DARK)
   t(page, 'Account Name: NBE Australia Pty Ltd',      ML, bankY - 14, reg,  8,   DARK)
@@ -339,7 +615,6 @@ export async function generateRapidDoorQuotePdf(input: RapidDoorQuotePdfInput): 
 
   tRight(page, 'Subtotal',         totLabelRight, bankY,      bold, 10, DARK)
   tRight(page, fmtAUD(grandTotal), totValRight,   bankY,      reg,  10, DARK)
-
   tRight(page, 'GST (10%)',              totLabelRight, bankY - 22, bold, 10, DARK)
   tRight(page, fmtAUD(grandTotal * 0.1), totValRight,  bankY - 22, reg,  10, DARK)
 
@@ -358,8 +633,67 @@ export async function generateRapidDoorQuotePdf(input: RapidDoorQuotePdfInput): 
   const footerLines = wrapText(terms, reg, footerSize, CW)
   const footerStartY = 80
   footerLines.forEach((ln, i) => {
-    t(page, ln, ML, footerStartY - i * footerLineH, reg, footerSize, DARK)
+    page.drawText(ln, { x: ML, y: footerStartY - i * footerLineH, size: footerSize, font: reg, color: DARK })
   })
+}
+
+// ── Entry point ───────────────────────────────────────────────────────────────
+
+export async function generateRapidDoorQuotePdf(input: RapidDoorQuotePdfInput): Promise<Uint8Array> {
+  // Normalise: support new multi-door `doors[]` and legacy single-door fields
+  const doors: DoorLineItem[] = input.doors?.length
+    ? input.doors
+    : [{
+        doorType:     input.doorType     ?? '',
+        doorTypeName: input.doorTypeName ?? '',
+        openingW:     input.openingW     ?? '',
+        openingH:     input.openingH     ?? '',
+        frame:        input.frame        ?? '',
+        curtain:      input.curtain      ?? '',
+        colour:       input.colour       ?? '',
+        motorKw:      input.motorKw      ?? '',
+        motorSide:    input.motorSide    ?? '',
+        cbSide:       input.cbSide       ?? '',
+        safetyLines:  input.safetyLines  ?? [],
+        qty:          input.qty          ?? 1,
+        unitPrice:    input.unitPrice    ?? 0,
+        installation: input.installation ?? 0,
+        demolition:   input.demolition   ?? 0,
+        equipHire:    input.equipHire    ?? 0,
+        accTravel:    input.accTravel    ?? 0,
+        lineTotal:    input.lineTotal    ?? 0,
+        customDesc:   null,
+        colourCode:   null,
+        doorImagePath: input.doorImagePath,
+      }]
+
+  const grandTotal = input.grandTotal ?? doors.reduce((s, d) => s + d.lineTotal, 0)
+
+  const pdfDoc = await PDFDocument.create()
+
+  // Embed fonts once, share across pages
+  const roboto    = await embedRobotoForPdfLib(pdfDoc)
+  const jostLight = await embedDisplayFont(pdfDoc)
+  const reg:     PDFFont = roboto?.regular ?? (await pdfDoc.embedFont(StandardFonts.Helvetica))
+  const bold:    PDFFont = roboto?.bold    ?? (await pdfDoc.embedFont(StandardFonts.HelveticaBold))
+  const display: PDFFont = jostLight ?? reg
+
+  // Embed logo once
+  let logoImg: Awaited<ReturnType<typeof PDFDocument.prototype.embedPng>> | null = null
+  try {
+    const logoBytes = await readFile(path.join(process.cwd(), 'public', 'NBE_LOGO_BK_PL.png'))
+    logoImg = await pdfDoc.embedPng(logoBytes)
+  } catch { /* use text fallback */ }
+
+  const fonts = { reg, bold, display }
+
+  // One page-1 per door (reference layout)
+  for (let i = 0; i < doors.length; i++) {
+    await drawPage1(pdfDoc, input, doors[i], i, doors.length, grandTotal, fonts, logoImg)
+  }
+
+  // Final page — summary of all doors
+  await drawPage2(pdfDoc, input, doors, grandTotal, fonts, logoImg)
 
   return pdfDoc.save()
 }

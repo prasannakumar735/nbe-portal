@@ -4,20 +4,25 @@ import { requirePortalStaff } from '@/lib/security/requirePortalStaff'
 import { unauthorizedOrForbiddenResponse } from '@/lib/security/httpAuthErrors'
 import { generateRapidDoorQuotePdf, type RapidDoorQuotePdfInput, type DoorLineItem } from '@/lib/pdf/generateRapidDoorQuotePdf'
 
-const DOOR_IMAGE_CONFIG: Record<string, { prefix: string; ext: string }> = {
-  PE01:  { prefix: 'PE125',  ext: 'webp' },
-  SP01:  { prefix: 'SP150',  ext: 'webp' },
-  FR01:  { prefix: 'FR150',  ext: 'webp' },
-  CAD01: { prefix: 'CAD200', ext: 'webp' },
-  CL01:  { prefix: 'CL125',  ext: 'png'  },
-  ES01:  { prefix: 'ES125',  ext: 'webp' },
+const DOOR_IMAGE_CONFIG: Record<string, string> = {
+  PE01:  'PE125',
+  SP01:  'SP150',
+  FR01:  'FR150',
+  CAD01: 'CAD200',
+  CL01:  'CL125',
+  ES01:  'ES125',
 }
 
-function resolveDoorImagePath(doorType: string, colourCode: string | null | undefined): string | null {
+function resolveDoorImagePath(
+  doorType: string,
+  colourCode: string | null | undefined,
+  imageStyle: string,
+): string | null {
   if (!doorType || !colourCode) return null
-  const cfg = DOOR_IMAGE_CONFIG[doorType]
-  if (!cfg) return null
-  return path.join(process.cwd(), 'public', 'images', 'quotes', doorType, `${cfg.prefix}_${colourCode}.${cfg.ext}`)
+  const prefix = DOOR_IMAGE_CONFIG[doorType]
+  if (!prefix) return null
+  const folder = imageStyle === 'withText' ? 'withText' : 'withOutText'
+  return path.join(process.cwd(), 'public', 'images', folder, doorType, `${prefix}_${colourCode}.png`)
 }
 
 export async function POST(request: NextRequest) {
@@ -27,17 +32,19 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as RapidDoorQuotePdfInput & {
       doors?: (DoorLineItem & { colourCode?: string | null })[]
       colourCode?: string
+      imageStyle?: string
     }
+
+    const imageStyle = body.imageStyle ?? 'withOutText'
 
     // Resolve door image paths for every door in the array
     if (body.doors?.length) {
       body.doors = body.doors.map(d => ({
         ...d,
-        doorImagePath: resolveDoorImagePath(d.doorType, d.colourCode),
+        doorImagePath: resolveDoorImagePath(d.doorType, d.colourCode, imageStyle),
       }))
     } else if (body.doorType && body.colourCode) {
-      // Legacy single-door path
-      body.doorImagePath = resolveDoorImagePath(body.doorType, body.colourCode)
+      body.doorImagePath = resolveDoorImagePath(body.doorType, body.colourCode, imageStyle)
     }
 
     const pdfBytes = await generateRapidDoorQuotePdf(body)

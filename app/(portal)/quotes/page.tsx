@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { loadDoorImageStyle } from '@/app/(portal)/admin/settings/QuoteSettingsClient'
 
 // ── Quote number helpers ──────────────────────────────────────────────────────
 function todayKey(): string {
@@ -23,6 +24,23 @@ function todayDisplay(): string {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const RAPID_DOOR_TYPES = ['PE01', 'SP01', 'FR01', 'CAD01', 'CL01', 'ES01']
+const DOOR_MODEL_SIZES = [100, 125, 150, 200]
+const EH_OFFSET: Record<string, number> = {
+  PE01: 400, FR01: 900, SP01: 450, CAD01: 950, CL01: 400, ES01: 400,
+}
+function getDoorPrefix(doorType: string) { return doorType.replace(/\d+$/, '') }
+function getDoorModelOptions(doorType: string) {
+  const prefix = getDoorPrefix(doorType)
+  return DOOR_MODEL_SIZES.map(s => `${prefix} ${s}`)
+}
+function calcExternal(openingW: string, openingH: string, doorType: string, doorModel: string): { ew: string; eh: string } {
+  const cw = parseInt(openingW) || 0
+  const ch = parseInt(openingH) || 0
+  const modelNum = parseInt(doorModel.split(' ')[1] ?? '0') || 0
+  const ew = cw + (modelNum * 2) + 158
+  const eh = ch + (EH_OFFSET[doorType] ?? 400)
+  return { ew: ew > 158 ? String(ew) : '', eh: eh > 400 ? String(eh) : '' }
+}
 
 const COLOUR_IMAGE_CODE: Record<string, string> = {
   'BL 543': 'BL', 'RD 356': 'RD', 'YL 119': 'YL',
@@ -40,7 +58,8 @@ function getDoorImageUrl(doorType: string, colourLabel: string): string | null {
   const code = COLOUR_IMAGE_CODE[colourLabel]
   const cfg  = DOOR_IMAGE_CONFIG[doorType]
   if (!code || !cfg) return null
-  return `/images/quotes/${doorType}/${cfg.prefix}_${code}.${cfg.ext}`
+  const folder = loadDoorImageStyle()
+  return `/images/${folder}/${doorType}/${cfg.prefix}_${code}.png`
 }
 
 const DOOR_TYPE_NAMES: Record<string, string> = {
@@ -95,6 +114,7 @@ type SavedDoor = {
   doorType: string
   openingW: string
   openingH: string
+  doorModel: string
   frame: string
   curtain: string
   colour: string
@@ -102,6 +122,7 @@ type SavedDoor = {
   motorSide: string
   cbSide: string
   safetyLines: string[]
+  safetyByCategory: Record<string, string>
   qty: number
   unitPrice: number
   installation: number
@@ -119,6 +140,7 @@ export default function NewQuotesPage() {
 
   // Door form
   const [doorType,      setDoorType]     = useState<string>('')
+  const [doorModel,     setDoorModel]    = useState('')
   const [openingW,      setOpeningW]     = useState('')
   const [openingH,      setOpeningH]     = useState('')
   const [frame,         setFrame]        = useState('')
@@ -177,7 +199,7 @@ export default function NewQuotesPage() {
   }
 
   function resetDoorForm() {
-    setDoorType(''); setOpeningW(''); setOpeningH(''); setFrame(''); setCurtain('')
+    setDoorType(''); setDoorModel(''); setOpeningW(''); setOpeningH(''); setFrame(''); setCurtain('')
     setColour(''); setMotorKw(''); setMotorSide(''); setCbSide(''); setQty('1')
     setUnitPrice(''); setSafetyEnabled(false); setSafetyValues({})
     setInstallation(''); setDemolition(''); setEquipHire(''); setAccTravel('')
@@ -229,7 +251,11 @@ export default function NewQuotesPage() {
   const grandTotal = lineTotal + savedDoors.reduce((sum, d) => sum + d.lineTotal, 0)
 
   const customerFilled = !!custName && !!custAddress
-  const canGenerate = !generating && !!doorType && !!openingW && !!openingH && !!frame &&
+  const { ew: extW, eh: extH } = doorType && doorModel && openingW && openingH
+    ? calcExternal(openingW, openingH, doorType, doorModel)
+    : { ew: '', eh: '' }
+
+  const canGenerate = !generating && !!doorType && !!doorModel && !!openingW && !!openingH && !!frame &&
     !!curtain && !!colour && !!motorKw && !!motorSide && !!cbSide && !!qty && !!unitPrice &&
     safetyEnabled && safetySelected.length > 0 &&
     (custCanBeBlank || customerFilled)
@@ -238,9 +264,10 @@ export default function NewQuotesPage() {
   function saveCurrentDoor() {
     const door: SavedDoor = {
       id: crypto.randomUUID(),
-      doorType, openingW, openingH, frame, curtain, colour,
+      doorType, doorModel, openingW, openingH, frame, curtain, colour,
       motorKw, motorSide, cbSide,
       safetyLines: safetySelected,
+      safetyByCategory: { ...safetyValues },
       qty: qtyN, unitPrice: unitN,
       installation: instN, demolition: demolN, equipHire: equipN, accTravel: travN,
       lineTotal, customDesc,
@@ -262,7 +289,7 @@ export default function NewQuotesPage() {
     const d = savedDoors.find(x => x.id === id)
     if (!d) return
     // Restore this door's fields into the current form
-    setDoorType(d.doorType); setOpeningW(d.openingW); setOpeningH(d.openingH)
+    setDoorType(d.doorType); setDoorModel(d.doorModel ?? ''); setOpeningW(d.openingW); setOpeningH(d.openingH)
     setFrame(d.frame); setCurtain(d.curtain); setColour(d.colour)
     setMotorKw(d.motorKw); setMotorSide(d.motorSide); setCbSide(d.cbSide)
     setQty(String(d.qty)); setUnitPrice(String(d.unitPrice))
@@ -301,24 +328,37 @@ export default function NewQuotesPage() {
 
       // Build all doors (saved + current)
       const allDoors = [
-        ...savedDoors.map(d => ({
-          doorType: d.doorType, doorTypeName: DOOR_TYPE_NAMES[d.doorType] ?? d.doorType,
-          openingW: d.openingW, openingH: d.openingH,
-          frame: FRAME_NAMES[d.frame] ?? d.frame,
-          curtain: d.curtain, colour: d.colour, motorSide: d.motorSide,
-          safetyLines: d.safetyLines,
-          qty: d.qty, unitPrice: d.unitPrice,
-          installation: d.installation, demolition: d.demolition,
-          equipHire: d.equipHire, accTravel: d.accTravel,
-          lineTotal: d.lineTotal, customDesc: d.customDesc,
-          colourCode: COLOUR_IMAGE_CODE[d.colour] ?? null,
-        })),
+        ...savedDoors.map(d => {
+          const { ew, eh } = calcExternal(d.openingW, d.openingH, d.doorType, d.doorModel ?? '')
+          return {
+            doorType: d.doorType, doorTypeName: DOOR_TYPE_NAMES[d.doorType] ?? d.doorType,
+            doorModel: d.doorModel,
+            openingW: d.openingW, openingH: d.openingH,
+            externalW: ew, externalH: eh,
+            frameRaw: d.frame,
+            frame: FRAME_NAMES[d.frame] ?? d.frame,
+            curtain: d.curtain, colour: d.colour,
+            motorKw: d.motorKw, motorSide: d.motorSide, cbSide: d.cbSide,
+            safetyLines: d.safetyLines,
+            safetyByCategory: d.safetyByCategory,
+            qty: d.qty, unitPrice: d.unitPrice,
+            installation: d.installation, demolition: d.demolition,
+            equipHire: d.equipHire, accTravel: d.accTravel,
+            lineTotal: d.lineTotal, customDesc: d.customDesc,
+            colourCode: COLOUR_IMAGE_CODE[d.colour] ?? null,
+          }
+        }),
         {
           doorType, doorTypeName: DOOR_TYPE_NAMES[doorType] ?? doorType,
+          doorModel,
           openingW, openingH,
+          externalW: extW, externalH: extH,
+          frameRaw: frame,
           frame: FRAME_NAMES[frame] ?? frame,
-          curtain, colour, motorSide,
+          curtain, colour,
+          motorKw, motorSide, cbSide,
           safetyLines: safetySelected,
+          safetyByCategory: { ...safetyValues },
           qty: qtyN, unitPrice: unitN,
           installation: instN, demolition: demolN, equipHire: equipN, accTravel: travN,
           lineTotal, customDesc,
@@ -333,6 +373,7 @@ export default function NewQuotesPage() {
           quoteNumber: qn, date: todayDisplay(), validUntil,
           doors: allDoors,
           grandTotal,
+          imageStyle: loadDoorImageStyle(),
           customerName: custName, customerAttn: custAttn,
           customerAddress: custAddress, customerPostcode: custPostcode,
           customerPhone: custPhone, customerEmail: custEmail,
@@ -462,16 +503,48 @@ export default function NewQuotesPage() {
             {/* Fields shown once door type chosen */}
             {isRapidDoor && doorType && (
               <>
+                {/* Door Model */}
+                <div>
+                  <label className={LABEL_CLS}>Door Model</label>
+                  <SelectWrapper>
+                    <select value={doorModel} onChange={e => setDoorModel(e.target.value)} className={SELECT_CLS}>
+                      <option value="" disabled>— Select model —</option>
+                      {getDoorModelOptions(doorType).map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </SelectWrapper>
+                </div>
+
+                {/* Opening dimensions + derived externals */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className={LABEL_CLS}>Opening W <span className="normal-case font-normal">(mm)</span></label>
+                    <label className={LABEL_CLS}>Clear Width <span className="normal-case font-normal">(mm)</span></label>
                     <input type="number" min={0} placeholder="e.g. 2500" value={openingW} onChange={e => setOpeningW(e.target.value)} className={INPUT_CLS} />
                   </div>
                   <div>
-                    <label className={LABEL_CLS}>Opening H <span className="normal-case font-normal">(mm)</span></label>
+                    <label className={LABEL_CLS}>Clear Height <span className="normal-case font-normal">(mm)</span></label>
                     <input type="number" min={0} placeholder="e.g. 3000" value={openingH} onChange={e => setOpeningH(e.target.value)} className={INPUT_CLS} />
                   </div>
                 </div>
+
+                {/* Derived external dimensions */}
+                {doorModel && openingW && openingH && extW && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className={LABEL_CLS}>External Width <span className="normal-case font-normal text-slate-400">(calculated)</span></label>
+                      <div className="flex items-center rounded-xl border border-indigo-100 bg-indigo-50 py-3 px-4">
+                        <span className="text-sm font-semibold text-indigo-700">{extW} mm</span>
+                        <span className="ml-2 text-xs text-indigo-400">CW + ({doorModel.split(' ')[1]}×2) + 158</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className={LABEL_CLS}>External Height <span className="normal-case font-normal text-slate-400">(calculated)</span></label>
+                      <div className="flex items-center rounded-xl border border-indigo-100 bg-indigo-50 py-3 px-4">
+                        <span className="text-sm font-semibold text-indigo-700">{extH} mm</span>
+                        <span className="ml-2 text-xs text-indigo-400">CH + {EH_OFFSET[doorType] ?? 400}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className={LABEL_CLS}>Frame</label>
