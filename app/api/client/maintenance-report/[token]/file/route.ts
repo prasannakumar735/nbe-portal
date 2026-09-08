@@ -6,6 +6,7 @@ import {
 } from '@/lib/maintenance-reports/clientAccess'
 import { createPdfBinaryResponse } from '@/lib/http/pdfBinaryResponse'
 import { loadClientPortalPdfScope } from '@/lib/client-portal/loadClientPortalPdfScope'
+import { getSingleFeatureFlag } from '@/lib/featureFlags'
 
 export const runtime = 'nodejs'
 
@@ -18,6 +19,32 @@ export async function GET(
     const accessToken = String(token ?? '').trim()
     if (!accessToken) {
       return NextResponse.json({ error: 'Invalid link' }, { status: 400 })
+    }
+
+    const publicAccess = await getSingleFeatureFlag('public_maintenance_reports')
+
+    if (publicAccess) {
+      // Public path — token is the only credential; enforce report is approved
+      const row = await fetchMaintenanceReportByShareToken(accessToken)
+      if (!row) {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      }
+      if (row.status !== 'approved' || !row.approved) {
+        return NextResponse.json({ error: 'Report is not approved for sharing' }, { status: 403 })
+      }
+      if (!row.pdf_url?.trim()) {
+        return NextResponse.json({ error: 'PDF not available' }, { status: 503 })
+      }
+      const pdfRes = await fetch(row.pdf_url.trim(), { cache: 'no-store' })
+      if (!pdfRes.ok) {
+        return NextResponse.json({ error: 'Failed to load PDF' }, { status: 502 })
+      }
+      const buf = Buffer.from(await pdfRes.arrayBuffer())
+      return createPdfBinaryResponse(buf, {
+        contentDisposition: 'inline; filename="maintenance-inspection-report.pdf"',
+        cacheControl: 'private, no-store',
+        extraHeaders: { 'X-Robots-Tag': 'noindex, nofollow' },
+      })
     }
 
     const serverSupabase = await createServerClient()

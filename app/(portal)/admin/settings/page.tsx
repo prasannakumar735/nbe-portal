@@ -85,12 +85,17 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
           </div>
 
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">All users</p>
-            <FeatureFlagsClient initialFlags={flags.filter(f => !['nav_sales_engine','nav_service_reminders','nav_inventory'].includes(f.key))} />
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Access Control</p>
+            <FeatureFlagsClient initialFlags={flags.filter(f => f.key === 'public_maintenance_reports')} />
           </div>
 
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Admin / Manager only</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Navigation — All users</p>
+            <FeatureFlagsClient initialFlags={flags.filter(f => !['nav_sales_engine','nav_service_reminders','nav_inventory','public_maintenance_reports'].includes(f.key))} />
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Navigation — Admin / Manager only</p>
             <FeatureFlagsClient initialFlags={flags.filter(f => ['nav_sales_engine','nav_service_reminders','nav_inventory'].includes(f.key))} />
           </div>
         </section>

@@ -83,6 +83,14 @@ export const FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [
     description: 'Show New Quotes in the sidebar navigation',
     defaultEnabled: true,
   },
+  // ── Access control ──────────────────────────────────────────────────────────
+  {
+    key: 'public_maintenance_reports',
+    label: 'Public Maintenance Report Access',
+    description:
+      'When ON: anyone with a report QR link can view and download the PDF without logging in. When OFF: login is required to access any report link.',
+    defaultEnabled: false,
+  },
   // ── Admin/manager-only modules ──────────────────────────────────────────────
   {
     key: 'nav_sales_engine',
@@ -103,6 +111,13 @@ export const FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [
     defaultEnabled: true,
   },
 ]
+
+/** Fetches a single feature flag value. Falls back to the definition's default. */
+export async function getSingleFeatureFlag(key: string): Promise<boolean> {
+  const flags = await getFeatureFlags()
+  const def = FEATURE_FLAG_DEFINITIONS.find((f) => f.key === key)
+  return flags[key] ?? def?.defaultEnabled ?? false
+}
 
 /** Fetches all feature flags from the DB. Missing keys fall back to their default. */
 export async function getFeatureFlags(): Promise<FeatureFlags> {

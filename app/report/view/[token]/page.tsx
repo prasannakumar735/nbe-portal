@@ -9,6 +9,7 @@ import { resolveValidatedPortalLocationId } from '@/lib/client-portal/getClientP
 import { safeProfilePortalLocationId } from '@/lib/client-portal/safeProfilePortalLocationId';
 import { mergedReportAllowedForClientPortal } from '@/lib/client-portal/clientMaintenancePortal';
 import { isTechnicianRole, isManagerOrAdminRole } from '@/lib/auth/roles';
+import { getSingleFeatureFlag } from '@/lib/featureFlags';
 type PageProps = {
     params: Promise<{
         token: string;
@@ -25,6 +26,24 @@ export default async function ReportViewPage({ params }: PageProps) {
     if (!accessToken) {
         return (<ClientReportMessage title="Invalid link" description="This report link is not valid. Please use the link from your email or contact NBE support."/>);
     }
+    const publicAccess = await getSingleFeatureFlag('public_maintenance_reports');
+
+    // Public access path — no login required when the feature flag is ON
+    if (publicAccess) {
+        const singleRow = await fetchMaintenanceReportByShareToken(accessToken);
+        if (!singleRow) {
+            return (<ClientReportMessage title="Report unavailable" description="This link is not valid or the report is no longer available." />);
+        }
+        if (singleRow.status !== 'approved' || !singleRow.approved) {
+            return (<ClientReportMessage title="Report not shared" description="This report is not yet approved for sharing." />);
+        }
+        if (!singleRow.pdf_url) {
+            return (<ClientReportMessage title="Report not ready" description="Unable to load report PDF. Please contact support." />);
+        }
+        const preparedName = (singleRow.client_name && singleRow.client_name.trim()) || 'your facility';
+        return (<MergedReportViewer pdfSrc={singleRow.pdf_url} preparedFor={preparedName} title="Maintenance Inspection Report" />);
+    }
+
     const supabase = await createServerClient();
     const { data: { user }, } = await supabase.auth.getUser();
     const viewPath = `/report/view/${encodeURIComponent(accessToken)}`;
