@@ -241,6 +241,7 @@ export default function NewQuotesPage() {
 
   // Generation / preview
   const [quoteNumber,  setQuoteNumber]  = useState<string | null>(null)
+  const quoteNumberRef = useRef<string | null>(null)  // stable ref — avoids stale closure in handleGenerateQuote
   const [generating,   setGenerating]   = useState(false)
   const [previewUrl,   setPreviewUrl]   = useState<string | null>(null)
   const [showPreview,  setShowPreview]  = useState(false)
@@ -274,6 +275,7 @@ export default function NewQuotesPage() {
   function resetAll() {
     resetDoorForm()
     setQuoteNumber(null)
+    quoteNumberRef.current = null
     setSavedDoors([])
     setPreviewUrl(null)
     setShowPreview(false)
@@ -383,8 +385,9 @@ export default function NewQuotesPage() {
   async function handleGenerateQuote() {
     setGenerating(true)
     try {
-      const qn = quoteNumber ?? buildRapidDoorQuoteNumber(nextRapidDoorSequence())
-      if (!quoteNumber) {
+      const qn = quoteNumberRef.current ?? buildRapidDoorQuoteNumber(nextRapidDoorSequence())
+      if (!quoteNumberRef.current) {
+        quoteNumberRef.current = qn
         setQuoteNumber(qn)
         loadNotesFromStorage(qn)
       }
