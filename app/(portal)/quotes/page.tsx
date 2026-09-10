@@ -474,6 +474,7 @@ Kind regards`
   function loadQuoteFromRow(q: RecentQuoteRow) {
     resetDoorForm()
     setPreviewUrl(null); setShowPreview(false)
+    setSelected('INDUSTRIAL_RAPID_DOOR')
     setQuoteNumber(q.quote_number)
     quoteNumberRef.current = q.quote_number
     quoteIdRef.current = q.id
