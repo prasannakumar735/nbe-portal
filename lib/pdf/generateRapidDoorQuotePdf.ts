@@ -55,6 +55,7 @@ export type RapidDoorQuotePdfInput = {
   page2SummaryNote?:  string
   endUser?:           'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER'
   includeSummary?:         boolean   // default true — set false to skip page 2 and show extras on page 1
+  individualInstall?:      boolean   // when true and !includeSummary, each door shows its own costs; otherwise combined on last door
   customDoorImageBase64?:  string    // data URL (data:image/...;base64,...) — overrides doorImagePath on all doors
   // Legacy single-door fields
   doorType?:         string
@@ -147,6 +148,7 @@ async function drawPage1(
   logoImg: Awaited<ReturnType<typeof PDFDocument.prototype.embedPng>> | null,
   allDoors: DoorLineItem[],
   includeSummary: boolean,
+  individualInstall: boolean,
 ) {
   const { reg, bold, display } = fonts
   const page = pdfDoc.addPage([595.28, 841.89])
@@ -450,21 +452,25 @@ async function drawPage1(
 
   y -= 20
 
-  // ── EXTRA COST ROWS (only when summary page is excluded, last door only) ──
+  // ── EXTRA COST ROWS (when summary page is excluded) ──────────────────────
   let extrasTotal = 0
   const isLastDoor = doorIndex === totalDoors - 1
-  if (!includeSummary && isLastDoor) {
-    const totalInst  = allDoors.reduce((s, d) => s + (d.installation ?? 0), 0)
-    const totalDemol = allDoors.reduce((s, d) => s + (d.demolition  ?? 0), 0)
-    const totalEquip = allDoors.reduce((s, d) => s + (d.equipHire   ?? 0), 0)
-    const totalTravel= allDoors.reduce((s, d) => s + (d.accTravel   ?? 0), 0)
-    extrasTotal = totalInst + totalDemol + totalEquip + totalTravel
+
+  // individualInstall: each door shows its own costs
+  // !individualInstall (default): combined costs shown only on the last door
+  const showExtras = !includeSummary && (individualInstall || isLastDoor)
+  if (showExtras) {
+    const inst  = individualInstall ? (door.installation ?? 0) : allDoors.reduce((s, d) => s + (d.installation ?? 0), 0)
+    const demol = individualInstall ? (door.demolition  ?? 0) : allDoors.reduce((s, d) => s + (d.demolition  ?? 0), 0)
+    const equip = individualInstall ? (door.equipHire   ?? 0) : allDoors.reduce((s, d) => s + (d.equipHire   ?? 0), 0)
+    const trav  = individualInstall ? (door.accTravel   ?? 0) : allDoors.reduce((s, d) => s + (d.accTravel   ?? 0), 0)
+    extrasTotal = inst + demol + equip + trav
 
     const extraRows: [string, number][] = [
-      ['Installation',              totalInst],
-      ['Demolition',                totalDemol],
-      ['Equipment Hire',            totalEquip],
-      ['Accommodation & Travel',    totalTravel],
+      ['Installation',              inst],
+      ['Demolition',                demol],
+      ['Equipment Hire',            equip],
+      ['Accommodation & Travel',    trav],
     ]
     extraRows.forEach(([label, amt]) => {
       drawHLine(page, ML, y, CW, 0.4, rgb(0.82, 0.82, 0.82))
@@ -491,8 +497,11 @@ async function drawPage1(
   const totLR = ML + CW - 70
   const totVR = ML + CW
 
-  // Per-door pages show only that door's total; only the last page with no summary shows the combined grand total
-  const subtotal = (!includeSummary && isLastDoor ? grandTotal : door.lineTotal) + extrasTotal
+  // Individual mode: each door shows its own subtotal
+  // Combined mode: last door shows the grand total; other doors show only their lineTotal
+  const subtotal = individualInstall && !includeSummary
+    ? door.lineTotal + extrasTotal
+    : (!includeSummary && isLastDoor ? grandTotal : door.lineTotal) + extrasTotal
 
   // Bank details — left side, aligned with totals
   t(page, 'BANK DETAILS',                             ML, y,      bold, 8.5, DARK)
@@ -778,11 +787,12 @@ export async function generateRapidDoorQuotePdf(input: RapidDoorQuotePdfInput): 
 
   const fonts = { reg, bold, display }
 
-  const includeSummary = input.includeSummary !== false  // default true
+  const includeSummary    = input.includeSummary    !== false  // default true
+  const individualInstall = input.individualInstall === true   // default false
 
   // One page-1 per door (reference layout)
   for (let i = 0; i < doors.length; i++) {
-    await drawPage1(pdfDoc, input, doors[i], i, doors.length, grandTotal, fonts, logoImg, doors, includeSummary)
+    await drawPage1(pdfDoc, input, doors[i], i, doors.length, grandTotal, fonts, logoImg, doors, includeSummary, individualInstall)
   }
 
   // Final page — summary of all doors (skipped if user opted out)
@@ -808,6 +818,12 @@ export async function generateRapidDoorQuotePdf(input: RapidDoorQuotePdfInput): 
       console.error('Failed to append T&C:', e)
     }
   }
+
+  // Set PDF title so the browser viewer's download button uses the correct filename
+  const safeCust = (input.customerName || 'CUSTOMER')
+    .replace(/[^a-zA-Z0-9\s]/g, ' ').trim().replace(/\s+/g, '_').slice(0, 50)
+  const euPart = input.endUser ? `_${input.endUser}` : ''
+  pdfDoc.setTitle(`${input.quoteNumber}_${safeCust}${euPart}`)
 
   return pdfDoc.save()
 }

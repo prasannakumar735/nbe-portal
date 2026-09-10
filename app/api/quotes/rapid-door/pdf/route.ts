@@ -49,7 +49,13 @@ export async function POST(request: NextRequest) {
     }
 
     const pdfBytes = await generateRapidDoorQuotePdf(body)
-    const filename = `${body.quoteNumber}_CUSTOMER_(SUMMARY).pdf`
+    const safeName = (body.customerName || 'CUSTOMER')
+      .replace(/[^a-zA-Z0-9\s]/g, ' ')
+      .trim()
+      .replace(/\s+/g, '_')
+      .slice(0, 50)
+    const endUserPart = body.endUser ? `_${body.endUser}` : ''
+    const filename = `${body.quoteNumber}_${safeName}${endUserPart}.pdf`
 
     return new NextResponse(Buffer.from(pdfBytes), {
       status: 200,

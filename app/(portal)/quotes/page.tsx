@@ -186,8 +186,9 @@ export default function NewQuotesPage() {
     }
     reader.readAsDataURL(file)
   }
-  const [endUser,        setEndUser]       = useState<'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER' | ''>('')
-  const [includeSummary, setIncludeSummary] = useState(true)
+  const [endUser,           setEndUser]           = useState<'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER' | ''>('')
+  const [includeSummary,    setIncludeSummary]    = useState(true)
+  const [individualInstall, setIndividualInstall] = useState(false)
   const [installation,  setInstallation] = useState('')
   const [demolition,    setDemolition]   = useState('')
   const [equipHire,     setEquipHire]    = useState('')
@@ -451,6 +452,7 @@ export default function NewQuotesPage() {
           page2SummaryNote: page2SummaryNote || undefined,
           endUser:          endUser          || undefined,
           includeSummary,
+          individualInstall: !includeSummary ? individualInstall : undefined,
           customDoorImageBase64: customDoorImage || undefined,
         }),
       })
@@ -480,7 +482,13 @@ export default function NewQuotesPage() {
     if (!previewUrl || !quoteNumber) return
     const a = document.createElement('a')
     a.href = previewUrl
-    a.download = `${quoteNumber}_CUSTOMER_(SUMMARY).pdf`
+    const safeCust = (custName || 'CUSTOMER')
+      .replace(/[^a-zA-Z0-9\s]/g, ' ')
+      .trim()
+      .replace(/\s+/g, '_')
+      .slice(0, 50)
+    const euPart = endUser ? `_${endUser}` : ''
+    a.download = `${quoteNumber}_${safeCust}${euPart}.pdf`
     a.click()
   }
 
@@ -981,6 +989,24 @@ export default function NewQuotesPage() {
               <div className="flex items-center gap-2">
                 <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Additional Costs</p>
                 <span className="text-[10px] text-slate-400 normal-case">(optional)</span>
+                {!includeSummary && savedDoors.length > 0 && (
+                  <>
+                    <span className="text-slate-300 text-xs">·</span>
+                    <span
+                      className="material-symbols-outlined text-[13px] text-slate-400 cursor-help"
+                      title="When ON, each door page shows its own installation cost. When OFF, all costs are combined and shown only on the last door's page."
+                    >info</span>
+                    <span className="text-[11px] text-slate-500 font-medium">Individual per-door costs</span>
+                    <button
+                      type="button"
+                      onClick={() => setIndividualInstall(v => !v)}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${individualInstall ? 'bg-indigo-500' : 'bg-slate-300'}`}
+                      title="Toggle to show installation costs on each door page individually, or combined on the last door page only."
+                    >
+                      <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ${individualInstall ? 'translate-x-4' : 'translate-x-0'}`} />
+                    </button>
+                  </>
+                )}
               </div>
               {!installation && (
                 <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
@@ -1239,7 +1265,7 @@ export default function NewQuotesPage() {
               {quoteNumber && (
                 <div className="flex items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2">
                   <span className="material-symbols-outlined text-[14px] text-indigo-500">picture_as_pdf</span>
-                  <span className="text-xs font-medium text-indigo-700">{quoteNumber}_CUSTOMER_(SUMMARY).pdf</span>
+                  <span className="text-xs font-medium text-indigo-700">{quoteNumber}_{(custName || 'CUSTOMER').replace(/[^a-zA-Z0-9\s]/g, ' ').trim().replace(/\s+/g, '_').slice(0, 50)}{endUser ? `_${endUser}` : ''}.pdf</span>
                 </div>
               )}
 
