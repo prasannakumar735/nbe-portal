@@ -236,14 +236,21 @@ async function drawPage1(
       imgBytes = await readFile(firstDoor.doorImagePath)
     }
     if (imgBytes) {
-      loadedDoorImg = isJpeg
-        ? await pdfDoc.embedJpg(imgBytes)
-        : await pdfDoc.embedPng(imgBytes)
-      const { width: dw, height: dh } = loadedDoorImg
-      const maxW = imgColW - 8
-      imgDrawW = maxW
-      imgDrawH = (dh / dw) * imgDrawW
-      if (imgDrawH > imgMaxH) { imgDrawH = imgMaxH; imgDrawW = (dw / dh) * imgDrawH }
+      try {
+        loadedDoorImg = isJpeg
+          ? await pdfDoc.embedJpg(imgBytes)
+          : await pdfDoc.embedPng(imgBytes)
+      } catch {
+        // Fallback: try the other codec (e.g. JPEG mis-detected as PNG)
+        try { loadedDoorImg = isJpeg ? await pdfDoc.embedPng(imgBytes) : await pdfDoc.embedJpg(imgBytes) } catch { /* give up */ }
+      }
+      if (loadedDoorImg) {
+        const { width: dw, height: dh } = loadedDoorImg
+        const maxW = imgColW - 8
+        imgDrawW = maxW
+        imgDrawH = (dh / dw) * imgDrawW
+        if (imgDrawH > imgMaxH) { imgDrawH = imgMaxH; imgDrawW = (dw / dh) * imgDrawH }
+      }
     }
   } catch { /* no image */ }
 
