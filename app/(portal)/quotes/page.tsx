@@ -1,21 +1,15 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { loadDoorImageStyle } from '@/app/(portal)/admin/settings/QuoteSettingsClient'
+import { createSupabaseClient } from '@/lib/supabase/client'
+import type { DoorLineItem } from '@/lib/pdf/generateRapidDoorQuotePdf'
 
 // ── Quote number helpers ──────────────────────────────────────────────────────
-function todayKey(): string {
-  const d = new Date()
-  return `${String(d.getFullYear()).slice(2)}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
-}
-function nextRapidDoorSequence(): number {
-  const key = `nbe_qrrd_seq_${todayKey()}`
-  const prev = parseInt(localStorage.getItem(key) ?? '0', 10) || 0
-  const next = prev + 1
-  localStorage.setItem(key, String(next))
-  return next
-}
-function buildRapidDoorQuoteNumber(seq: number): string {
-  return `QRRD${todayKey()}${String(seq).padStart(2, '0')}`
+async function fetchNextRapidDoorQuoteNumber(): Promise<string> {
+  const res = await fetch('/api/quotes/next-number?prefix=QRRD')
+  if (!res.ok) throw new Error('Failed to allocate quote number')
+  const { quoteNumber } = await res.json()
+  return quoteNumber as string
 }
 function todayDisplay(): string {
   const d = new Date()
@@ -187,7 +181,7 @@ export default function NewQuotesPage() {
     }
     reader.readAsDataURL(file)
   }
-  const [endUser,           setEndUser]           = useState<'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER' | ''>('')
+  const [endUser,           setEndUser]           = useState<'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER' | ''>('CUSTOMER')
   const [includeSummary,    setIncludeSummary]    = useState(true)
   const [individualInstall, setIndividualInstall] = useState(false)
   const [installation,  setInstallation] = useState('')
@@ -244,18 +238,140 @@ export default function NewQuotesPage() {
   // Generation / preview
   const [quoteNumber,  setQuoteNumber]  = useState<string | null>(null)
   const quoteNumberRef = useRef<string | null>(null)  // stable ref — avoids stale closure in handleGenerateQuote
+  const quoteIdRef     = useRef<string | null>(null)  // Supabase quotes.id — set after first save
   const [generating,   setGenerating]   = useState(false)
   const [previewUrl,   setPreviewUrl]   = useState<string | null>(null)
   const [showPreview,  setShowPreview]  = useState(false)
   const previewRef = useRef<HTMLDivElement>(null)
 
-  // Email modal
-  const [showEmailModal, setShowEmailModal] = useState(false)
-  const [emailTo,        setEmailTo]        = useState('')
-  const [emailSending,   setEmailSending]   = useState(false)
-  const [emailResult,    setEmailResult]    = useState<string | null>(null)
-  const NBE_DOMAIN = 'nbeaustralia.com.au'
-  const emailValid = emailTo.trim().toLowerCase().endsWith(`@${NBE_DOMAIN}`) && emailTo.includes('@')
+  // List view vs form view
+  const [view, setView] = useState<'list' | 'form'>('list')
+  const [search, setSearch] = useState('')
+
+  // Recent quotes (loaded from Supabase)
+  type DetailRow = {
+    customer_attn: string | null; customer_postcode: string | null
+    customer_phone: string | null; customer_email: string | null
+    doors: DoorLineItem[] | null
+    include_summary: boolean | null; individual_install: boolean | null
+    end_user_type: string | null; image_style: string | null
+    page1_disclaimer: string | null; page2_note: string | null
+  }
+  type RecentQuoteRow = {
+    id: string; quote_number: string; customer_name: string | null
+    site_address: string | null; valid_until: string | null
+    service_date: string; total: number; workflow_status: string
+    rapid_door_quote_details: DetailRow | null
+  }
+  const [recentQuotes, setRecentQuotes]     = useState<RecentQuoteRow[]>([])
+  const [recentLoading, setRecentLoading]   = useState(true)
+
+  function loadRecentQuotes() {
+    setRecentLoading(true)
+    fetch('/api/quotes/rapid-door/list?limit=25')
+      .then(r => r.json())
+      .then(j => { if (j.ok) setRecentQuotes(j.data ?? []) })
+      .catch(() => {/* non-fatal */})
+      .finally(() => setRecentLoading(false))
+  }
+
+  useEffect(() => { loadRecentQuotes() }, [])
+
+  // Logged-in user email (for CC self option)
+  const [loggedInEmail, setLoggedInEmail] = useState('')
+  useEffect(() => {
+    createSupabaseClient().auth.getUser().then(({ data }) => {
+      if (data.user?.email) setLoggedInEmail(data.user.email)
+    })
+  }, [])
+
+  // ── Signature (persisted in localStorage) ────────────────────────────────────
+  const [sigText,       setSigText]       = useState('')
+  const [sigImageB64,   setSigImageB64]   = useState<string | null>(null)  // base64 data URL
+  const [sigImageName,  setSigImageName]  = useState<string | null>(null)
+  const [includeSig,    setIncludeSig]    = useState(true)
+  const [showSigEditor, setShowSigEditor] = useState(false)
+  const sigFileRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    try {
+      const t = localStorage.getItem('nbe_sig_text')
+      const i = localStorage.getItem('nbe_sig_image')
+      const n = localStorage.getItem('nbe_sig_image_name')
+      const s = localStorage.getItem('nbe_sig_include')
+      if (t) setSigText(t)
+      if (i) setSigImageB64(i)
+      if (n) setSigImageName(n)
+      if (s !== null) setIncludeSig(s !== 'false')
+    } catch { /* ignore */ }
+  }, [])
+
+  function saveSig(text: string, imgB64: string | null, imgName: string | null, include: boolean) {
+    try {
+      localStorage.setItem('nbe_sig_text', text)
+      if (imgB64) localStorage.setItem('nbe_sig_image', imgB64)
+      else localStorage.removeItem('nbe_sig_image')
+      if (imgName) localStorage.setItem('nbe_sig_image_name', imgName)
+      else localStorage.removeItem('nbe_sig_image_name')
+      localStorage.setItem('nbe_sig_include', String(include))
+    } catch { /* ignore */ }
+  }
+
+  function handleSigImageUpload(file: File) {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const b64 = reader.result as string
+      setSigImageB64(b64)
+      setSigImageName(file.name)
+      saveSig(sigText, b64, file.name, includeSig)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // ── Email modal ───────────────────────────────────────────────────────────────
+  const [showEmailModal,  setShowEmailModal]  = useState(false)
+  const [emailTo,         setEmailTo]         = useState('')
+  const [emailCc,         setEmailCc]         = useState('')
+  const [ccSelf,          setCcSelf]          = useState(false)
+  const [emailSubject,    setEmailSubject]    = useState('')
+  const [emailBody,       setEmailBody]       = useState('')
+  const [attachPdf,       setAttachPdf]       = useState(true)
+  const [emailSending,    setEmailSending]    = useState(false)
+  const [emailResult,     setEmailResult]     = useState<{ ok: boolean; msg: string } | null>(null)
+
+  function buildDefaultEmailBody() {
+    // Only use custAttn (contact person) for the greeting — never the quote number fallback
+    const contactName = custAttn || (custName && custName !== quoteNumber ? custName : '')
+    const greeting = contactName ? `Hi ${contactName},` : 'Hi,'
+    const qnRef = quoteNumber ? `\nQuotation Ref: ${quoteNumber}\n` : ''
+    const companyName = custName && custName !== quoteNumber ? ` for ${custName}` : ''
+    return `${greeting}
+${qnRef}
+Please find attached the industrial rapid door quotation${companyName}.
+
+The quote includes all relevant specifications and pricing as discussed. Please do not hesitate to contact us should you require any further information or clarification.
+
+Kind regards`
+  }
+
+  function openEmailModal() {
+    setEmailTo(custEmail || '')
+    setEmailCc('')
+    setCcSelf(false)
+    setEmailSubject(quoteNumber ? `Rapid Door Quotation – ${quoteNumber}${custName ? ` – ${custName}` : ''}` : 'Rapid Door Quotation')
+    setEmailBody(buildDefaultEmailBody())
+    setEmailResult(null)
+    setAttachPdf(true)
+    setShowSigEditor(false)
+    setShowEmailModal(true)
+  }
+
+  function emailIsValid(addr: string) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr.trim()) }
+  const toList = emailTo.split(/[,;\n]/).map(e => e.trim()).filter(e => e.length > 0)
+  const toAllValid = toList.length > 0 && toList.every(emailIsValid)
+  const ccList = emailCc.split(/[,;\n]/).map(e => e.trim()).filter(e => e.length > 0)
+  const ccAllValid = ccList.length === 0 || ccList.every(emailIsValid)
+  const canSendEmail = toAllValid && ccAllValid && emailSubject.trim().length > 0 && emailBody.trim().length > 0 && !emailSending
 
   // Colour dropdown
   const [colourOpen, setColourOpen] = useState(false)
@@ -268,7 +384,7 @@ export default function NewQuotesPage() {
   function resetDoorForm() {
     setDoorType(''); setDoorModel(''); setOpeningW(''); setOpeningH(''); setFrame(''); setCurtain('')
     setColour(''); setMotorKw(''); setMotorSide(''); setCbSide(''); setQty('1')
-    setUnitPrice(''); setSafetyEnabled(true); setSafetyValues({}); setMotorEnabled(true); setEndUser('')
+    setUnitPrice(''); setSafetyEnabled(true); setSafetyValues({}); setMotorEnabled(true); setEndUser('CUSTOMER')
     setCustomDoorImage(null); setCustomDoorImageName(null)
     setInstallation(''); setDemolition(''); setEquipHire(''); setAccTravel('')
     setCustomDesc(null); setEditingDesc(false)
@@ -278,9 +394,147 @@ export default function NewQuotesPage() {
     resetDoorForm()
     setQuoteNumber(null)
     quoteNumberRef.current = null
+    quoteIdRef.current = null
     setSavedDoors([])
     setPreviewUrl(null)
     setShowPreview(false)
+    setPage1Disclaimer('')
+    setPage2SummaryNote('')
+    setCustName(''); setCustAttn(''); setCustAddress(''); setCustPostcode(''); setCustPhone(''); setCustEmail('')
+    setIncludeSummary(true); setIndividualInstall(false)
+  }
+
+  // ── Explicit save (without generating PDF) ───────────────────────────────────
+  const [saving, setSaving] = useState(false)
+  const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  async function handleSaveQuote() {
+    if (!quoteNumber && !quoteNumberRef.current) {
+      // Allocate a quote number if we don't have one yet
+      try {
+        const qn = await fetchNextRapidDoorQuoteNumber()
+        quoteNumberRef.current = qn
+        setQuoteNumber(qn)
+        loadNotesFromStorage(qn)
+      } catch {
+        setSaveMsg({ ok: false, text: 'Failed to allocate quote number. Try again.' })
+        return
+      }
+    }
+    const qn = quoteNumberRef.current!
+    setSaving(true)
+    setSaveMsg(null)
+    try {
+      const validDate = new Date(); validDate.setDate(validDate.getDate() + 30)
+      const validUntil = `${String(validDate.getDate()).padStart(2,'0')}/${String(validDate.getMonth()+1).padStart(2,'0')}/${validDate.getFullYear()}`
+      const res = await fetch('/api/quotes/rapid-door/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quoteNumber: qn,
+          quoteId: quoteIdRef.current ?? undefined,
+          date: todayDisplay(), validUntil,
+          customerName: custName, customerAttn: custAttn,
+          customerAddress: custAddress || '—',
+          customerPostcode: custPostcode, customerPhone: custPhone, customerEmail: custEmail,
+          grandTotal,
+          doors: [
+            ...savedDoors,
+            // include the active door if it has enough data to be meaningful
+            ...(doorModel && openingW && openingH ? [{
+              id: 'active',
+              doorType, doorModel, openingW, openingH, frame, curtain, colour,
+              motorKw, motorSide, cbSide,
+              safetyLines: safetySelected,
+              safetyByCategory: { ...safetyValues },
+              qty: qtyN, unitPrice: unitN,
+              installation: instN, demolition: demolN, equipHire: equipN, accTravel: travN,
+              lineTotal, customDesc,
+            }] : []),
+          ],
+          includeSummary, individualInstall: !includeSummary ? individualInstall : false,
+          endUser: endUser || undefined,
+          imageStyle: loadDoorImageStyle(),
+          page1Disclaimer: page1Disclaimer || undefined,
+          page2SummaryNote: page2SummaryNote || undefined,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Save failed')
+      if (json.quoteId && !quoteIdRef.current) quoteIdRef.current = json.quoteId
+      setSaveMsg({ ok: true, text: `Saved as ${qn}` })
+    } catch (e) {
+      setSaveMsg({ ok: false, text: e instanceof Error ? e.message : 'Save failed' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // ── Load a saved quote into the form ─────────────────────────────────────────
+  function loadQuoteFromRow(q: RecentQuoteRow) {
+    resetDoorForm()
+    setPreviewUrl(null); setShowPreview(false)
+    setQuoteNumber(q.quote_number)
+    quoteNumberRef.current = q.quote_number
+    quoteIdRef.current = q.id
+    // Customer
+    setCustName(q.customer_name ?? '')
+    setCustAddress(q.site_address ?? '')
+    const det = q.rapid_door_quote_details
+    if (det) {
+      setCustAttn(det.customer_attn ?? '')
+      setCustPostcode(det.customer_postcode ?? '')
+      setCustPhone(det.customer_phone ?? '')
+      setCustEmail(det.customer_email ?? '')
+      setIncludeSummary(det.include_summary !== false)
+      setIndividualInstall(det.individual_install ?? false)
+      const eu = det.end_user_type ?? ''
+      setEndUser((eu === 'CUSTOMER' || eu === 'DISTRIBUTOR' || eu === 'TENDER') ? eu : '')
+      if (det.page1_disclaimer) setPage1Disclaimer(det.page1_disclaimer)
+      if (det.page2_note) setPage2SummaryNote(det.page2_note)
+      // Load all doors except last into savedDoors; restore last door into form
+      const doors = Array.isArray(det.doors) ? det.doors as DoorLineItem[] : []
+      if (doors.length > 1) {
+        const saved: SavedDoor[] = doors.slice(0, -1).map(d => ({
+          id: crypto.randomUUID(),
+          doorType: d.doorType, doorModel: d.doorModel ?? '',
+          openingW: String(d.openingW ?? ''), openingH: String(d.openingH ?? ''),
+          frame: d.frameRaw ?? (d as unknown as SavedDoor).frame ?? '', curtain: d.curtain ?? '', colour: d.colour ?? '',
+          motorKw: d.motorKw ?? '', motorSide: d.motorSide ?? '', cbSide: d.cbSide ?? '',
+          safetyLines: (d.safetyLines ?? []) as string[], safetyByCategory: (d.safetyByCategory ?? {}) as Record<string, string>,
+          qty: Number(d.qty ?? 1), unitPrice: Number(d.unitPrice ?? 0),
+          installation: Number(d.installation ?? 0), demolition: Number(d.demolition ?? 0),
+          equipHire: Number(d.equipHire ?? 0), accTravel: Number(d.accTravel ?? 0),
+          lineTotal: Number(d.lineTotal ?? 0), customDesc: d.customDesc ?? null,
+        }))
+        setSavedDoors(saved)
+      } else {
+        setSavedDoors([])
+      }
+      // Restore last door into active form
+      const last = doors[doors.length - 1]
+      if (last) {
+        setDoorType(last.doorType ?? '')
+        setDoorModel(last.doorModel ?? '')
+        setOpeningW(String(last.openingW ?? ''))
+        setOpeningH(String(last.openingH ?? ''))
+        setFrame(last.frameRaw ?? (last as unknown as SavedDoor).frame ?? '')
+        setCurtain(last.curtain ?? '')
+        setColour(last.colour ?? '')
+        setMotorKw(last.motorKw ?? '')
+        setMotorSide(last.motorSide ?? '')
+        setCbSide(last.cbSide ?? '')
+        setQty(String(last.qty ?? 1))
+        setUnitPrice(String(last.unitPrice ?? ''))
+        setInstallation(String(last.installation || ''))
+        setDemolition(String(last.demolition || ''))
+        setEquipHire(String(last.equipHire || ''))
+        setAccTravel(String(last.accTravel || ''))
+        if (last.safetyByCategory) setSafetyValues(last.safetyByCategory as Record<string, string>)
+      }
+    }
+    setSaveMsg(null)
+    setView('form')
   }
 
   useEffect(() => {
@@ -399,7 +653,7 @@ export default function NewQuotesPage() {
   async function handleGenerateQuote() {
     setGenerating(true)
     try {
-      const qn = quoteNumberRef.current ?? buildRapidDoorQuoteNumber(nextRapidDoorSequence())
+      const qn = quoteNumberRef.current ?? await fetchNextRapidDoorQuoteNumber()
       if (!quoteNumberRef.current) {
         quoteNumberRef.current = qn
         setQuoteNumber(qn)
@@ -482,6 +736,33 @@ export default function NewQuotesPage() {
       setPreviewUrl(url)
       setShowPreview(true)
 
+      // Save to Supabase (non-fatal — PDF already generated)
+      try {
+        const saveRes = await fetch('/api/quotes/rapid-door/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            quoteNumber: qn,
+            quoteId: quoteIdRef.current ?? undefined,
+            date: todayDisplay(), validUntil,
+            customerName: custName, customerAttn: custAttn,
+            customerAddress: custAddress, customerPostcode: custPostcode,
+            customerPhone: custPhone, customerEmail: custEmail,
+            grandTotal, doors: allDoors,
+            includeSummary,
+            individualInstall: !includeSummary ? individualInstall : false,
+            endUser: endUser || undefined,
+            imageStyle: loadDoorImageStyle(),
+            page1Disclaimer: page1Disclaimer || undefined,
+            page2SummaryNote: page2SummaryNote || undefined,
+          }),
+        })
+        const saveJson = await saveRes.json()
+        if (saveJson.ok && saveJson.quoteId && !quoteIdRef.current) {
+          quoteIdRef.current = saveJson.quoteId
+        }
+      } catch { /* non-fatal */ }
+
       // Scroll to preview
       setTimeout(() => previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
     } catch (e) {
@@ -510,13 +791,164 @@ export default function NewQuotesPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  // ── Filtered list ────────────────────────────────────────────────────────────
+  const filteredQuotes = recentQuotes.filter(q => {
+    if (!search.trim()) return true
+    const s = search.trim().toLowerCase()
+    return (
+      (q.quote_number ?? '').toLowerCase().includes(s) ||
+      (q.customer_name ?? '').toLowerCase().includes(s)
+    )
+  })
+
   // ── Render ──────────────────────────────────────────────────────────────────
+  if (view === 'list') {
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">New Quotes</h1>
+            <p className="mt-1 text-sm text-slate-500">Create and manage quotations — General, Rapid Door, PVC, Maintenance &amp; Parts.</p>
+          </div>
+          <button type="button" onClick={() => { resetAll(); setView('form') }}
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700">
+            <span className="material-symbols-outlined text-[18px]">add</span>
+            New Quote
+          </button>
+        </div>
+
+        {/* Search bar */}
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-sm">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-[16px] text-slate-400">search</span>
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Customer name or quote number…"
+              className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-4 text-sm text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+          </div>
+          <button type="button" onClick={loadRecentQuotes}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50">
+            <span className="material-symbols-outlined text-[16px]">refresh</span>
+            Refresh
+          </button>
+        </div>
+
+        {/* Quotes table */}
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          {recentLoading ? (
+            <div className="flex items-center justify-center gap-2 py-20 text-slate-400">
+              <span className="material-symbols-outlined animate-spin text-2xl">progress_activity</span>
+              <span className="text-sm">Loading quotes…</span>
+            </div>
+          ) : filteredQuotes.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-20 text-slate-400">
+              <span className="material-symbols-outlined text-5xl text-slate-300">receipt_long</span>
+              <p className="text-sm font-medium">
+                {search.trim() ? 'No quotes match your search' : 'No rapid door quotes yet'}
+              </p>
+              {!search.trim() && (
+                <button type="button" onClick={() => { resetAll(); setView('form') }}
+                  className="mt-1 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700">
+                  <span className="material-symbols-outlined text-[16px]">add</span>
+                  Create first quote
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Desktop table */}
+              <div className="hidden overflow-x-auto xl:block">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
+                      <th className="px-6 py-3">Quote #</th>
+                      <th className="px-4 py-3">Customer</th>
+                      <th className="px-4 py-3">Doors</th>
+                      <th className="px-4 py-3">Date</th>
+                      <th className="px-4 py-3">Total (inc. GST)</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredQuotes.map(q => {
+                      const doorCount = Array.isArray(q.rapid_door_quote_details?.doors) ? q.rapid_door_quote_details!.doors.length : '—'
+                      const [y, m, d] = (q.service_date ?? '').split('-')
+                      const dateStr = y ? `${d}/${m}/${y}` : '—'
+                      return (
+                        <tr key={q.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition">
+                          <td className="px-6 py-3.5 font-mono text-xs font-semibold text-indigo-700">{q.quote_number}</td>
+                          <td className="px-4 py-3.5 font-medium text-slate-800">{q.customer_name || <span className="text-slate-400 italic font-normal">No customer</span>}</td>
+                          <td className="px-4 py-3.5 text-slate-500">{doorCount}</td>
+                          <td className="px-4 py-3.5 text-slate-500">{dateStr}</td>
+                          <td className="px-4 py-3.5 font-semibold text-slate-800">${Number(q.total ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</td>
+                          <td className="px-4 py-3.5">
+                            <span className="inline-flex items-center rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                              {(q.workflow_status ?? 'draft').replace(/_/g, ' ')}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button type="button" onClick={() => loadQuoteFromRow(q)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 transition">
+                                <span className="material-symbols-outlined text-[13px]">edit</span>Open
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile/tablet cards */}
+              <ul className="space-y-0 xl:hidden divide-y divide-slate-100">
+                {filteredQuotes.map(q => {
+                  const doorCount = Array.isArray(q.rapid_door_quote_details?.doors) ? q.rapid_door_quote_details!.doors.length : '—'
+                  const [y, m, d] = (q.service_date ?? '').split('-')
+                  const dateStr = y ? `${d}/${m}/${y}` : '—'
+                  return (
+                    <li key={q.id} className="flex items-start justify-between gap-4 px-5 py-4 hover:bg-slate-50 transition">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-mono text-xs font-semibold text-indigo-700">{q.quote_number}</p>
+                        <p className="mt-0.5 text-sm font-medium text-slate-800">{q.customer_name || <span className="text-slate-400 italic font-normal">No customer</span>}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">{doorCount} door{doorCount !== 1 ? 's' : ''} · {dateStr}</p>
+                        <button type="button" onClick={() => loadQuoteFromRow(q)}
+                          className="mt-2 inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 transition">
+                          <span className="material-symbols-outlined text-[13px]">edit</span>Open
+                        </button>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-sm font-semibold text-slate-800">${Number(q.total ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
+                        <span className="inline-flex items-center rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                          {(q.workflow_status ?? 'draft').replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
-      {/* Page header */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">New Quotes</h1>
-        <p className="mt-1 text-sm text-slate-500">Create and manage quotations — PVC, Service, Repair &amp; Rapid Door</p>
+      {/* Form header with back button */}
+      <div className="flex items-center gap-4">
+        <button type="button" onClick={() => { loadRecentQuotes(); setView('list') }}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50">
+          <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+          All Quotes
+        </button>
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">{quoteNumber ? `Quote ${quoteNumber}` : 'New Quote'}</h1>
+          <p className="mt-0.5 text-sm text-slate-500">Fill in the details below to generate a quotation PDF</p>
+        </div>
       </div>
 
       {/* ── Saved door chips (multi-door) ──────────────────────────────────── */}
@@ -959,7 +1391,7 @@ export default function NewQuotesPage() {
         </div>
       )}
 
-      {/* ── Pricing & Generate ────────────────────────────────────────────── */}
+      {/* ── Pricing ───────────────────────────────────────────────────────── */}
       {showRightPanel && (
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 px-6 py-4">
@@ -1049,6 +1481,18 @@ export default function NewQuotesPage() {
                 ))}
               </div>
             </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ── Quote Options ──────────────────────────────────────────────────── */}
+      {showRightPanel && (
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 px-6 py-4">
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-500">Quote Options</h2>
+          </div>
+          <div className="px-6 py-5 space-y-5">
 
             {/* Quote number + grand total */}
             <div className="flex items-center gap-3">
@@ -1194,6 +1638,23 @@ export default function NewQuotesPage() {
               </button>
             </div>
 
+            {/* Save draft */}
+            <div className="flex items-center gap-3">
+              <button type="button" disabled={saving || generating} onClick={handleSaveQuote}
+                className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">
+                {saving
+                  ? <><span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>Saving…</>
+                  : <><span className="material-symbols-outlined text-[16px]">save</span>Save Quote</>
+                }
+              </button>
+            </div>
+            {saveMsg && (
+              <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs ${saveMsg.ok ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+                <span className="material-symbols-outlined text-[14px]">{saveMsg.ok ? 'check_circle' : 'error'}</span>
+                {saveMsg.text}
+              </div>
+            )}
+
             {/* Missing fields warning — shown when button is disabled */}
             {!canGenerate && !generating && missingFields.length > 0 && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 space-y-1">
@@ -1237,7 +1698,7 @@ export default function NewQuotesPage() {
                 <span className="material-symbols-outlined text-[16px]">download</span>
                 Download PDF
               </button>
-              <button type="button" onClick={() => { setEmailTo(''); setEmailResult(null); setShowEmailModal(true) }}
+              <button type="button" onClick={openEmailModal}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50">
                 <span className="material-symbols-outlined text-[16px]">send</span>
                 Send Email
@@ -1254,115 +1715,241 @@ export default function NewQuotesPage() {
         </div>
       )}
 
-      {/* ── Recent Quotes placeholder ──────────────────────────────────────── */}
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-          <div>
-            <h2 className="text-base font-semibold text-slate-800">Recent Quotes</h2>
-            <p className="mt-0.5 text-xs text-slate-400">All quotes across types</p>
-          </div>
-        </div>
-        <div className="flex flex-col items-center justify-center gap-2 py-16 text-slate-400">
-          <span className="material-symbols-outlined text-4xl text-slate-300">receipt_long</span>
-          <p className="text-sm">Quote list will appear here</p>
-        </div>
-      </div>
-
       {/* ── Email Modal ────────────────────────────────────────────────────── */}
       {showEmailModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-indigo-600">send</span>
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-800">Send Quote via Email</h3>
-                  <p className="text-xs text-slate-400">Only @{NBE_DOMAIN} addresses allowed</p>
-                </div>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-6">
+          <div className="w-full sm:max-w-[680px] rounded-t-xl sm:rounded-xl bg-white shadow-[0_8px_40px_rgba(0,0,0,0.18)] flex flex-col max-h-[96vh] sm:max-h-[88vh] overflow-hidden border border-slate-300">
+
+            {/* ── Outlook-style title bar ── */}
+            <div className="bg-[#0f3d8c] flex items-center justify-between px-4 py-2 shrink-0 select-none">
+              <span className="text-white text-[13px] font-medium tracking-wide">New Message</span>
+              <div className="flex items-center gap-1">
+                <button type="button" title="Discard" onClick={() => setShowEmailModal(false)}
+                  className="w-7 h-7 flex items-center justify-center rounded hover:bg-white/20 transition text-white/80 hover:text-white">
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                </button>
               </div>
-              <button type="button" onClick={() => setShowEmailModal(false)}
-                className="text-slate-400 hover:text-slate-600 transition">
-                <span className="material-symbols-outlined text-xl">close</span>
-              </button>
             </div>
 
-            {/* Body */}
-            <div className="px-6 py-5 space-y-4">
-              {quoteNumber && (
-                <div className="flex items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2">
-                  <span className="material-symbols-outlined text-[14px] text-indigo-500">picture_as_pdf</span>
-                  <span className="text-xs font-medium text-indigo-700">{quoteNumber}_{(custName || 'CUSTOMER').replace(/[^a-zA-Z0-9\s]/g, ' ').trim().replace(/\s+/g, '_').slice(0, 50)}{endUser ? `_${endUser}` : ''}.pdf</span>
-                </div>
-              )}
+            {/* ── From bar (read-only, Outlook style) ── */}
+            {loggedInEmail && (
+              <div className="flex items-center gap-0 border-b border-slate-200 bg-white px-4 py-2">
+                <span className="text-[12px] text-slate-500 w-14 shrink-0 font-medium">From</span>
+                <span className="text-[13px] text-slate-700 truncate">{loggedInEmail}</span>
+              </div>
+            )}
 
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">
-                  Recipient Email
+            {/* ── To ── */}
+            <div className={`flex items-center border-b px-4 py-2 bg-white ${emailTo.trim() && !toAllValid ? 'border-red-300' : 'border-slate-200'}`}>
+              <span className="text-[12px] text-slate-500 w-14 shrink-0 font-medium">To</span>
+              <textarea rows={1} value={emailTo}
+                onChange={e => { setEmailTo(e.target.value); setEmailResult(null) }}
+                placeholder="Recipients"
+                className="flex-1 text-[13px] text-slate-800 bg-transparent outline-none resize-none leading-5 placeholder:text-slate-300" />
+              {emailTo.trim() && !toAllValid && (
+                <span className="material-symbols-outlined text-[14px] text-red-400 shrink-0 ml-1">error</span>
+              )}
+            </div>
+
+            {/* ── CC ── */}
+            <div className={`flex items-start border-b px-4 py-2 bg-white ${emailCc.trim() && !ccAllValid ? 'border-red-300' : 'border-slate-200'}`}>
+              <span className="text-[12px] text-slate-500 w-14 shrink-0 font-medium mt-0.5">Cc</span>
+              <div className="flex-1">
+                <textarea rows={1} value={emailCc}
+                  onChange={e => { setEmailCc(e.target.value); setCcSelf(false) }}
+                  placeholder="Carbon copy"
+                  className="w-full text-[13px] text-slate-800 bg-transparent outline-none resize-none leading-5 placeholder:text-slate-300" />
+                {loggedInEmail && (
+                  <label className="mt-1 flex items-center gap-1.5 cursor-pointer w-fit">
+                    <input type="checkbox" checked={ccSelf}
+                      onChange={e => {
+                        setCcSelf(e.target.checked)
+                        if (e.target.checked) {
+                          const existing = emailCc.split(/[,;\n]/).map(x => x.trim()).filter(Boolean)
+                          if (!existing.includes(loggedInEmail)) {
+                            setEmailCc(existing.length ? existing.join(', ') + ', ' + loggedInEmail : loggedInEmail)
+                          }
+                        }
+                      }}
+                      className="rounded-sm border-slate-400 text-[#0f3d8c] focus:ring-blue-500 h-3 w-3" />
+                    <span className="text-[11px] text-slate-400">CC myself</span>
+                  </label>
+                )}
+              </div>
+            </div>
+
+            {/* ── Subject ── */}
+            <div className="flex items-center border-b border-slate-200 bg-white px-4 py-2">
+              <span className="text-[12px] text-slate-500 w-14 shrink-0 font-medium">Subject</span>
+              <input type="text" value={emailSubject} onChange={e => setEmailSubject(e.target.value)}
+                placeholder="Subject"
+                className="flex-1 text-[13px] text-slate-800 bg-transparent outline-none placeholder:text-slate-300" />
+            </div>
+
+            {/* ── Attachment chip ── */}
+            {quoteNumber && (
+              <div className="px-4 py-2 border-b border-slate-200 bg-slate-50 flex items-center gap-2">
+                <div className="inline-flex items-center gap-1.5 rounded border border-slate-300 bg-white pl-2 pr-2.5 py-1 shadow-sm">
+                  <span className="material-symbols-outlined text-[14px] text-red-500">picture_as_pdf</span>
+                  <span className="text-[11px] text-slate-700 font-medium truncate max-w-[220px]">
+                    {quoteNumber}_{(custName && custName !== quoteNumber ? custName : 'CUSTOMER').replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_').slice(0, 28)}.pdf
+                  </span>
+                </div>
+                <label className="flex items-center gap-1.5 cursor-pointer ml-1">
+                  <input type="checkbox" checked={attachPdf} onChange={e => setAttachPdf(e.target.checked)}
+                    className="rounded-sm border-slate-400 text-[#0f3d8c] focus:ring-blue-500 h-3 w-3" />
+                  <span className="text-[11px] text-slate-500">Attach PDF</span>
                 </label>
-                <input
-                  type="email"
-                  value={emailTo}
-                  onChange={e => { setEmailTo(e.target.value); setEmailResult(null) }}
-                  placeholder={`name@${NBE_DOMAIN}`}
-                  className={`w-full rounded-xl border py-3 px-4 text-sm font-medium text-slate-800 outline-none transition focus:ring-2 focus:ring-indigo-500/20 ${
-                    emailTo && !emailValid
-                      ? 'border-red-300 focus:border-red-400'
-                      : 'border-slate-200 focus:border-indigo-400'
-                  }`}
-                />
-                {emailTo && !emailValid && (
-                  <p className="mt-1.5 flex items-center gap-1 text-xs text-red-500">
-                    <span className="material-symbols-outlined text-[13px]">error</span>
-                    Email must be an @{NBE_DOMAIN} address
-                  </p>
-                )}
-                {emailTo && emailValid && (
-                  <p className="mt-1.5 flex items-center gap-1 text-xs text-green-600">
-                    <span className="material-symbols-outlined text-[13px]">check_circle</span>
-                    Valid NBE Australia address
-                  </p>
-                )}
               </div>
+            )}
 
-              {emailResult && (
-                <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
-                  emailResult.startsWith('✓')
-                    ? 'bg-green-50 border border-green-200 text-green-700'
-                    : 'bg-red-50 border border-red-200 text-red-700'
-                }`}>
-                  {emailResult}
+            {/* ── Compose area ── */}
+            <div className="flex-1 overflow-y-auto bg-white">
+              <textarea value={emailBody} onChange={e => setEmailBody(e.target.value)}
+                className="w-full h-full min-h-[200px] text-[13.5px] text-slate-800 bg-transparent outline-none resize-none leading-relaxed font-[inherit] px-4 py-3 placeholder:text-slate-300"
+                placeholder="Compose your message…" />
+
+              {/* Signature inline divider */}
+              {includeSig && (sigText || sigImageB64) && !showSigEditor && (
+                <div className="border-t border-slate-200 mx-4 pt-3 pb-4">
+                  {sigText && <p className="text-[12px] text-slate-500 whitespace-pre-line leading-relaxed">{sigText}</p>}
+                  {sigImageB64 && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={sigImageB64} alt="sig" className="max-h-10 mt-1" />
+                  )}
+                </div>
+              )}
+
+              {/* Signature editor (expanded inline) */}
+              {showSigEditor && (
+                <div className="border-t border-slate-200 mx-4 mt-1 mb-4 pt-3 space-y-3">
+                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest">Edit Signature</p>
+                  <textarea rows={3} value={sigText}
+                    onChange={e => { setSigText(e.target.value); saveSig(e.target.value, sigImageB64, sigImageName, includeSig) }}
+                    placeholder="Your Name&#10;Job Title | NBE Australia&#10;+61 xxx xxx xxx"
+                    className="w-full border border-slate-200 rounded py-2 px-3 text-[13px] text-slate-800 outline-none focus:border-blue-500 resize-none font-[inherit]" />
+                  <div>
+                    {sigImageB64 ? (
+                      <div className="flex items-center gap-3 border border-slate-200 rounded px-3 py-2 bg-slate-50">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={sigImageB64} alt="sig" className="max-h-8 rounded" />
+                        <div>
+                          <p className="text-[11px] text-slate-500 truncate max-w-[160px]">{sigImageName}</p>
+                          <button type="button"
+                            onClick={() => { setSigImageB64(null); setSigImageName(null); saveSig(sigText, null, null, includeSig) }}
+                            className="text-[11px] text-red-500 hover:text-red-700">Remove image</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button type="button" onClick={() => sigFileRef.current?.click()}
+                        className="flex items-center gap-2 border border-dashed border-slate-300 rounded px-3 py-2 text-[12px] text-slate-500 hover:border-blue-400 hover:text-[#0f3d8c] transition">
+                        <span className="material-symbols-outlined text-[14px]">upload</span>
+                        Upload signature image (PNG / JPG)
+                      </button>
+                    )}
+                    <input ref={sigFileRef} type="file" accept="image/png,image/jpeg,image/gif" className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleSigImageUpload(f) }} />
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Footer */}
-            <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
-              <button type="button" onClick={() => setShowEmailModal(false)}
-                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition">
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={!emailValid || emailSending}
+            {/* ── Result banner ── */}
+            {emailResult && (
+              <div className={`flex items-start gap-2 px-4 py-2.5 text-[13px] font-medium border-t ${
+                emailResult.ok
+                  ? 'bg-green-50 border-green-200 text-green-700'
+                  : 'bg-red-50 border-red-200 text-red-700'
+              }`}>
+                <span className="material-symbols-outlined text-[15px] mt-0.5 shrink-0">
+                  {emailResult.ok ? 'check_circle' : 'error'}
+                </span>
+                {emailResult.msg}
+              </div>
+            )}
+
+            {/* ── Outlook-style toolbar footer ── */}
+            <div className="border-t border-slate-200 bg-[#f3f2f1] px-4 py-2.5 flex items-center gap-2 shrink-0">
+              {/* Send button — left, Outlook style */}
+              <button type="button" disabled={!canSendEmail}
                 onClick={async () => {
-                  setEmailSending(true)
-                  setEmailResult(null)
+                  if (!previewUrl) { setEmailResult({ ok: false, msg: 'Generate the quote PDF first before sending.' }); return }
+                  setEmailSending(true); setEmailResult(null)
                   try {
-                    // Placeholder — wire up real email API when ready
-                    await new Promise(r => setTimeout(r, 1200))
-                    setEmailResult(`✓ Quote sent to ${emailTo}`)
-                  } catch {
-                    setEmailResult('Failed to send. Please try again.')
+                    const blobRes = await fetch(previewUrl)
+                    const blob = await blobRes.blob()
+                    const pdfBase64 = await new Promise<string>((resolve, reject) => {
+                      const reader = new FileReader()
+                      reader.onload = () => resolve((reader.result as string).split(',')[1])
+                      reader.onerror = reject
+                      reader.readAsDataURL(blob)
+                    })
+                    const safeCust = (custName && custName !== quoteNumber ? custName : 'CUSTOMER').replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_').slice(0, 50)
+                    const fileName = `${quoteNumber}_${safeCust}${endUser ? `_${endUser}` : ''}.pdf`
+                    let fullBody = emailBody
+                    if (includeSig && sigText) fullBody += `\n\n${sigText}`
+                    const res = await fetch('/api/quotes/rapid-door/email', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        to: emailTo, cc: emailCc || undefined,
+                        subject: emailSubject, emailBody: fullBody,
+                        pdfBase64: attachPdf ? pdfBase64 : undefined,
+                        fileName: attachPdf ? fileName : undefined,
+                        attachPdf, quoteNumber,
+                        customerName: custName && custName !== quoteNumber ? custName : undefined,
+                        sigImageB64: includeSig && sigImageB64 ? sigImageB64 : undefined,
+                      }),
+                    })
+                    const json = await res.json()
+                    if (!res.ok) throw new Error(json.error || 'Send failed')
+                    const sentCount = (json.sent_to as string[]).length
+                    setEmailResult({ ok: true, msg: `Sent to ${sentCount} recipient${sentCount > 1 ? 's' : ''} successfully.` })
+                  } catch (e) {
+                    setEmailResult({ ok: false, msg: e instanceof Error ? e.message : 'Failed to send. Please try again.' })
                   } finally {
                     setEmailSending(false)
                   }
                 }}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40">
+                className="inline-flex items-center gap-1.5 rounded bg-[#0f3d8c] hover:bg-[#1e40af] px-4 py-1.5 text-[13px] font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-40 shadow-sm">
                 {emailSending
-                  ? <><span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>Sending…</>
-                  : <><span className="material-symbols-outlined text-[16px]">send</span>Send</>
+                  ? <><span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>Sending…</>
+                  : <><span className="material-symbols-outlined text-[14px]">send</span>Send</>
                 }
+              </button>
+
+              {/* Divider */}
+              <div className="w-px h-5 bg-slate-300 mx-1" />
+
+              {/* Signature toggle */}
+              <button type="button" title={includeSig ? 'Signature included' : 'Signature excluded'}
+                onClick={() => { setIncludeSig(v => { saveSig(sigText, sigImageB64, sigImageName, !v); return !v }) }}
+                className={`flex items-center gap-1 rounded px-2 py-1.5 text-[12px] transition font-medium ${
+                  includeSig ? 'bg-white text-[#0f3d8c] border border-slate-300 shadow-sm' : 'text-slate-500 hover:bg-white hover:border hover:border-slate-300'
+                }`}>
+                <span className="material-symbols-outlined text-[15px]">draw</span>
+                Sig
+              </button>
+
+              {/* Edit signature */}
+              <button type="button"
+                onClick={() => setShowSigEditor(v => !v)}
+                className={`flex items-center gap-1 rounded px-2 py-1.5 text-[12px] transition font-medium ${
+                  showSigEditor ? 'bg-white text-[#0f3d8c] border border-slate-300 shadow-sm' : 'text-slate-500 hover:bg-white hover:border hover:border-slate-300'
+                }`}>
+                <span className="material-symbols-outlined text-[15px]">edit</span>
+                {showSigEditor ? 'Done' : 'Edit sig'}
+              </button>
+
+              {/* Spacer */}
+              <div className="flex-1" />
+
+              {/* Discard */}
+              <button type="button" onClick={() => setShowEmailModal(false)}
+                title="Discard"
+                className="flex items-center gap-1 rounded px-2 py-1.5 text-[12px] text-slate-500 hover:bg-white hover:border hover:border-slate-300 transition font-medium">
+                <span className="material-symbols-outlined text-[15px]">delete</span>
+                Discard
               </button>
             </div>
           </div>
