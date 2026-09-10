@@ -456,7 +456,7 @@ async function drawPage1(
   const DEFAULT_PAGE1_DISCLAIMER = 'This quotation is based on the NBE Standard Door comprising a galvanized frame, PVC curtain (900 g/m²), and a zinc-coated control box (RAL 7035). Optional extras (e.g. powder coating, light curtain, remote control, radar, traffic light, induction loop, contactless exit button) are available at additional cost. All other matters shall be subject to our standard Terms and Conditions (T&C). The electrical scope is limited to the connection between the control panel and the doors only. Power supply and isolator shall be provided by others.'
   const terms = input.page1Disclaimer?.trim() || DEFAULT_PAGE1_DISCLAIMER
   const footerSize = 7.5
-  const footerLines = wrapText(terms, reg, footerSize, CW)
+  const footerLines = terms.split('\n').flatMap(para => wrapText(para, reg, footerSize, CW))
   footerLines.forEach((ln, i) => {
     page.drawText(ln, { x: ML, y: y - i * 10, size: footerSize, font: reg, color: GREY })
   })
@@ -659,7 +659,7 @@ async function drawPage2(
   const terms = input.page2SummaryNote?.trim() || DEFAULT_PAGE2_SUMMARY_NOTE
   const footerSize = 8.5
   const footerLineH = 11
-  const footerLines = wrapText(terms, reg, footerSize, CW)
+  const footerLines = terms.split('\n').flatMap(para => wrapText(para, reg, footerSize, CW))
   const footerStartY = 80
   footerLines.forEach((ln, i) => {
     page.drawText(ln, { x: ML, y: footerStartY - i * footerLineH, size: footerSize, font: reg, color: DARK })
