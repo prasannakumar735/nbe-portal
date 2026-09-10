@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 // ── Feature flags ─────────────────────────────────────────────────────────────
 export const IMAGE_STYLE_KEY = 'nbe_quote_image_style_v1'
@@ -297,9 +297,206 @@ export function QuoteSettingsClient() {
         })()}
       </div>
 
+      {/* T&C Document Upload */}
+      <TcUploadSection />
+
       <div className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-xs text-amber-700">
         <span className="font-semibold">Note:</span> Quote settings are currently stored in your browser. Supabase persistence will be added in a future update so settings are shared across all staff.
       </div>
+    </div>
+  )
+}
+
+// ── Terms & Conditions Upload ─────────────────────────────────────────────────
+
+type TcRow = {
+  quote_type:    string
+  end_user_type: string
+  file_name:     string
+  uploaded_at:   string
+  storage_path:  string
+}
+
+const TC_QUOTE_TYPES: { key: string; label: string; endUserTypes: { key: string; label: string }[] }[] = [
+  {
+    key: 'INDUSTRIAL_RAPID_DOOR',
+    label: 'Industrial Rapid Door',
+    endUserTypes: [
+      { key: 'CUSTOMER',    label: 'Customer' },
+      { key: 'DISTRIBUTOR', label: 'Distributor' },
+      { key: 'TENDER',      label: 'Tender' },
+    ],
+  },
+  {
+    key: 'PVC_FLEX_SYSTEM',
+    label: 'PVC Flex System',
+    endUserTypes: [{ key: 'ALL', label: 'General T&C' }],
+  },
+  {
+    key: 'MAINTENANCE_SERVICE_REPAIR',
+    label: 'Maintenance / Repair',
+    endUserTypes: [{ key: 'ALL', label: 'General T&C' }],
+  },
+  {
+    key: 'PARTS',
+    label: 'Parts',
+    endUserTypes: [{ key: 'ALL', label: 'General T&C' }],
+  },
+  {
+    key: 'GENERAL',
+    label: 'General',
+    endUserTypes: [{ key: 'ALL', label: 'General T&C' }],
+  },
+]
+
+function TcUploadSection() {
+  const [activeTcType, setActiveTcType] = useState('INDUSTRIAL_RAPID_DOOR')
+  const [tcDocs, setTcDocs]             = useState<TcRow[]>([])
+  const [uploading, setUploading]       = useState<string | null>(null)   // '<quoteType>|<endUserType>'
+  const [uploadMsg, setUploadMsg]       = useState<{ key: string; ok: boolean; text: string } | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const pendingUpload = useRef<{ quoteType: string; endUserType: string } | null>(null)
+
+  useEffect(() => { fetchTcDocs() }, [])
+
+  async function fetchTcDocs() {
+    try {
+      const res = await fetch('/api/admin/quote-tc/list')
+      const json = await res.json()
+      if (json.ok) setTcDocs(json.data)
+    } catch { /* silent */ }
+  }
+
+  function triggerUpload(quoteType: string, endUserType: string) {
+    pendingUpload.current = { quoteType, endUserType }
+    fileInputRef.current?.click()
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    const target = pendingUpload.current
+    if (!file || !target) return
+    e.target.value = ''
+
+    const key = `${target.quoteType}|${target.endUserType}`
+    setUploading(key)
+    setUploadMsg(null)
+
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('quoteType', target.quoteType)
+    fd.append('endUserType', target.endUserType)
+
+    try {
+      const res  = await fetch('/api/admin/quote-tc/upload', { method: 'POST', body: fd })
+      const json = await res.json()
+      if (json.ok) {
+        setUploadMsg({ key, ok: true, text: 'Uploaded successfully' })
+        await fetchTcDocs()
+      } else {
+        setUploadMsg({ key, ok: false, text: json.error ?? 'Upload failed' })
+      }
+    } catch {
+      setUploadMsg({ key, ok: false, text: 'Network error' })
+    } finally {
+      setUploading(null)
+      pendingUpload.current = null
+    }
+  }
+
+  const activeConfig = TC_QUOTE_TYPES.find(t => t.key === activeTcType)!
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-base font-semibold text-slate-800">Terms &amp; Conditions Documents</h2>
+        <p className="mt-0.5 text-sm text-slate-500">
+          Upload updated T&amp;C PDFs per quote type and end-user category. Uploaded files override the bundled defaults when generating quotes.
+        </p>
+      </div>
+
+      {/* Quote type tabs */}
+      <div className="flex gap-1 flex-wrap">
+        {TC_QUOTE_TYPES.map(t => (
+          <button key={t.key} type="button"
+            onClick={() => setActiveTcType(t.key)}
+            className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+              activeTcType === t.key
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+            }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Upload rows */}
+      <div className="rounded-2xl border border-slate-200 bg-white divide-y divide-slate-100">
+        {activeConfig.endUserTypes.map(eu => {
+          const key      = `${activeTcType}|${eu.key}`
+          const current  = tcDocs.find(d => d.quote_type === activeTcType && d.end_user_type === eu.key)
+          const isUp     = uploading === key
+          const msg      = uploadMsg?.key === key ? uploadMsg : null
+
+          return (
+            <div key={eu.key} className="flex items-center gap-4 px-5 py-4">
+              {/* Label */}
+              <div className="w-36 shrink-0">
+                <p className="text-sm font-semibold text-slate-700">{eu.label}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">{eu.key === 'ALL' ? 'All end users' : `End user: ${eu.key}`}</p>
+              </div>
+
+              {/* Current file info */}
+              <div className="flex-1 min-w-0">
+                {current ? (
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[16px] text-green-500">check_circle</span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-slate-700 truncate">{current.file_name}</p>
+                      <p className="text-[11px] text-slate-400">
+                        Uploaded {new Date(current.uploaded_at).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <span className="material-symbols-outlined text-[16px]">upload_file</span>
+                    <p className="text-xs">Using bundled default T&amp;C</p>
+                  </div>
+                )}
+                {msg && (
+                  <p className={`text-[11px] mt-1 font-medium ${msg.ok ? 'text-green-600' : 'text-red-500'}`}>{msg.text}</p>
+                )}
+              </div>
+
+              {/* Upload button */}
+              <button
+                type="button"
+                disabled={isUp}
+                onClick={() => triggerUpload(activeTcType, eu.key)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition disabled:opacity-50 shrink-0">
+                {isUp
+                  ? <><span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>Uploading…</>
+                  : <><span className="material-symbols-outlined text-[14px]">upload</span>{current ? 'Replace' : 'Upload PDF'}</>
+                }
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/pdf"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
+      <p className="text-[11px] text-slate-400">
+        PDF files only · Max 20 MB · Uploaded files are stored in Supabase Storage and applied immediately to all new quotes.
+      </p>
     </div>
   )
 }

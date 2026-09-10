@@ -57,6 +57,7 @@ export type RapidDoorQuotePdfInput = {
   includeSummary?:         boolean   // default true — set false to skip page 2 and show extras on page 1
   individualInstall?:      boolean   // when true and !includeSummary, each door shows its own costs; otherwise combined on last door
   customDoorImageBase64?:  string    // data URL (data:image/...;base64,...) — overrides doorImagePath on all doors
+  tcPdfBytes?:             Buffer    // pre-fetched T&C PDF bytes from Supabase storage; overrides local file lookup
   // Legacy single-door fields
   doorType?:         string
   doorTypeName?:     string
@@ -808,19 +809,18 @@ export async function generateRapidDoorQuotePdf(input: RapidDoorQuotePdfInput): 
     await drawPage2(pdfDoc, input, doors, grandTotal, fonts, logoImg)
   }
 
-  // ── Append T&C pages based on end-user type ───────────────────────────────
+  // ── Append T&C pages — Supabase-uploaded bytes take priority over bundled local files ──
   const TC_FILES: Record<string, string> = {
     CUSTOMER:    'Rapid Door_T&C for CUSTOMERS.pdf',
     DISTRIBUTOR: 'Rapid Door_T&C for DISTRIBUTOR.pdf',
     TENDER:      'Rapid Door_T&C for TENDER.pdf',
   }
   const tcFile = input.endUser ? TC_FILES[input.endUser] : null
-  if (tcFile) {
+  const tcSource = input.tcPdfBytes ?? (tcFile ? await readFile(path.join(process.cwd(), 'public', 'documents', tcFile)).catch(() => null) : null)
+  if (tcSource) {
     try {
-      const tcBytes = await readFile(path.join(process.cwd(), 'public', 'documents', tcFile))
-      const tcDoc   = await PDFDocument.load(tcBytes)
-      const indices = tcDoc.getPageIndices()
-      const copied  = await pdfDoc.copyPages(tcDoc, indices)
+      const tcDoc  = await PDFDocument.load(tcSource)
+      const copied = await pdfDoc.copyPages(tcDoc, tcDoc.getPageIndices())
       copied.forEach(p => pdfDoc.addPage(p))
     } catch (e) {
       console.error('Failed to append T&C:', e)

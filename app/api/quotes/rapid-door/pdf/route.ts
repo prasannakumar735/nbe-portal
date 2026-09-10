@@ -3,6 +3,7 @@ import path from 'node:path'
 import { requirePortalStaff } from '@/lib/security/requirePortalStaff'
 import { unauthorizedOrForbiddenResponse } from '@/lib/security/httpAuthErrors'
 import { generateRapidDoorQuotePdf, type RapidDoorQuotePdfInput, type DoorLineItem } from '@/lib/pdf/generateRapidDoorQuotePdf'
+import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 
 const DOOR_IMAGE_CONFIG: Record<string, string> = {
   PE01:  'PE125',
@@ -46,6 +47,28 @@ export async function POST(request: NextRequest) {
       }))
     } else if (body.doorType && body.colourCode) {
       body.doorImagePath = resolveDoorImagePath(body.doorType, body.colourCode, imageStyle)
+    }
+
+    // Resolve T&C bytes from Supabase storage (uploaded via admin), falling back to bundled local file
+    if (body.endUser) {
+      try {
+        const sb = createServiceRoleClient()
+        const { data: tcRow } = await sb
+          .from('quote_tc_documents')
+          .select('storage_path')
+          .eq('quote_type', 'INDUSTRIAL_RAPID_DOOR')
+          .eq('end_user_type', body.endUser)
+          .maybeSingle()
+
+        if (tcRow?.storage_path) {
+          const { data: fileData } = await sb.storage
+            .from('quote-tc-documents')
+            .download(tcRow.storage_path)
+          if (fileData) {
+            body.tcPdfBytes = Buffer.from(await fileData.arrayBuffer())
+          }
+        }
+      } catch { /* fall back to bundled local T&C */ }
     }
 
     const pdfBytes = await generateRapidDoorQuotePdf(body)
