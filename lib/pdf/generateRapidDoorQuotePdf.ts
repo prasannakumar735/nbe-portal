@@ -385,7 +385,6 @@ async function drawPage1(
     t(page, '4.',          cNo + 2, y - 11, reg, 8.5, DARK)
     t(page, 'Safety Edge', cItem,   y - 11, reg, 8.5, DARK)
     t(page, 'SOFT',        cW,      y - 11, reg, 8.5, DARK)
-    if (d.colour) { t(page, '-', cX, y - 11, reg, 8.5, DARK); t(page, d.colour, cH, y - 11, reg, 8.5, DARK) }
     y -= 18
 
     // Row 5: Drive System (TOTAL merged)
