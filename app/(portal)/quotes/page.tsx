@@ -285,46 +285,83 @@ export default function NewQuotesPage() {
     })
   }, [])
 
-  // ── Signature (persisted in localStorage) ────────────────────────────────────
-  const [sigText,       setSigText]       = useState('')
-  const [sigImageB64,   setSigImageB64]   = useState<string | null>(null)  // base64 data URL
-  const [sigImageName,  setSigImageName]  = useState<string | null>(null)
+  // ── Signature (single HTML blob, persisted in localStorage) ─────────────────
+  const [sigHtml,       setSigHtml]       = useState('')
   const [includeSig,    setIncludeSig]    = useState(true)
   const [showSigEditor, setShowSigEditor] = useState(false)
-  const sigFileRef = useRef<HTMLInputElement>(null)
+  const sigEditorRef  = useRef<HTMLDivElement>(null)
+  const sigFileRef    = useRef<HTMLInputElement>(null)
+  const savedRangeRef = useRef<Range | null>(null)
 
   useEffect(() => {
     try {
-      const t = localStorage.getItem('nbe_sig_text')
-      const i = localStorage.getItem('nbe_sig_image')
-      const n = localStorage.getItem('nbe_sig_image_name')
-      const s = localStorage.getItem('nbe_sig_include')
-      if (t) setSigText(t)
-      if (i) setSigImageB64(i)
-      if (n) setSigImageName(n)
-      if (s !== null) setIncludeSig(s !== 'false')
+      // Migrate old separate fields → single HTML blob
+      const oldText  = localStorage.getItem('nbe_sig_text')
+      const oldImage = localStorage.getItem('nbe_sig_image')
+      const html     = localStorage.getItem('nbe_sig_html')
+      const inc      = localStorage.getItem('nbe_sig_include')
+      if (html) {
+        setSigHtml(html)
+      } else if (oldText || oldImage) {
+        // Build HTML from legacy storage
+        const parts: string[] = []
+        if (oldImage) parts.push(`<img src="${oldImage}" style="max-height:48px;display:block" alt="logo">`)
+        if (oldText)  parts.push(`<div style="white-space:pre-wrap">${oldText.replace(/</g, '&lt;')}</div>`)
+        const migrated = parts.join('')
+        setSigHtml(migrated)
+        localStorage.setItem('nbe_sig_html', migrated)
+      }
+      if (inc !== null) setIncludeSig(inc !== 'false')
     } catch { /* ignore */ }
   }, [])
 
-  function saveSig(text: string, imgB64: string | null, imgName: string | null, include: boolean) {
+  function saveSigHtml(html: string, include: boolean) {
     try {
-      localStorage.setItem('nbe_sig_text', text)
-      if (imgB64) localStorage.setItem('nbe_sig_image', imgB64)
-      else localStorage.removeItem('nbe_sig_image')
-      if (imgName) localStorage.setItem('nbe_sig_image_name', imgName)
-      else localStorage.removeItem('nbe_sig_image_name')
+      localStorage.setItem('nbe_sig_html', html)
       localStorage.setItem('nbe_sig_include', String(include))
     } catch { /* ignore */ }
   }
 
+  function saveSelectionBeforeUpload() {
+    const sel = window.getSelection()
+    if (sel && sel.rangeCount > 0) {
+      savedRangeRef.current = sel.getRangeAt(0).cloneRange()
+    }
+  }
+
+  function insertImageAtCursor(dataUrl: string) {
+    const editor = sigEditorRef.current
+    if (!editor) return
+    editor.focus()
+    // Restore saved cursor position
+    if (savedRangeRef.current) {
+      const sel = window.getSelection()
+      if (sel) { sel.removeAllRanges(); sel.addRange(savedRangeRef.current) }
+    }
+    const img = document.createElement('img')
+    img.src = dataUrl
+    img.style.cssText = 'max-height:48px;vertical-align:middle;display:inline-block'
+    img.alt = 'logo'
+    const sel = window.getSelection()
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0)
+      range.deleteContents()
+      range.insertNode(img)
+      range.setStartAfter(img)
+      range.collapse(true)
+      sel.removeAllRanges()
+      sel.addRange(range)
+    } else {
+      editor.appendChild(img)
+    }
+    const html = editor.innerHTML
+    setSigHtml(html)
+    saveSigHtml(html, includeSig)
+  }
+
   function handleSigImageUpload(file: File) {
     const reader = new FileReader()
-    reader.onload = () => {
-      const b64 = reader.result as string
-      setSigImageB64(b64)
-      setSigImageName(file.name)
-      saveSig(sigText, b64, file.name, includeSig)
-    }
+    reader.onload = () => insertImageAtCursor(reader.result as string)
     reader.readAsDataURL(file)
   }
 
@@ -1812,73 +1849,56 @@ The quote includes all relevant specifications and pricing as discussed. Please 
               {includeSig && (
                 <div className="border-t border-slate-200 mx-4 pt-3 pb-4">
                   {showSigEditor ? (
-                    /* Editor mode */
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center justify-between">
                         <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Signature</span>
-                        <span className="text-[10px] text-slate-400">You can paste your Outlook signature directly below</span>
-                      </div>
-                      {/* Image row — upload first (Outlook puts logo on top) */}
-                      <div className="flex items-center gap-3">
-                        {sigImageB64 ? (
-                          <div className="flex items-center gap-2 border border-slate-200 rounded px-2 py-1.5 bg-white">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={sigImageB64} alt="sig" className="max-h-8" />
-                            <div className="flex flex-col">
-                              <span className="text-[10px] text-slate-400 truncate max-w-[140px]">{sigImageName}</span>
-                              <button type="button"
-                                onClick={() => { setSigImageB64(null); setSigImageName(null); saveSig(sigText, null, null, includeSig) }}
-                                className="text-[10px] text-red-500 hover:text-red-700 text-left">Remove</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <button type="button" onClick={() => sigFileRef.current?.click()}
-                            className="flex items-center gap-1.5 border border-dashed border-slate-300 rounded px-3 py-1.5 text-[12px] text-slate-500 hover:border-[#0f3d8c] hover:text-[#0f3d8c] transition bg-white">
-                            <span className="material-symbols-outlined text-[14px]">add_photo_alternate</span>
-                            Add logo / image
+                        <div className="flex items-center gap-2">
+                          {/* Insert image at cursor */}
+                          <button type="button"
+                            onMouseDown={e => { e.preventDefault(); saveSelectionBeforeUpload(); sigFileRef.current?.click() }}
+                            className="flex items-center gap-1 border border-slate-300 rounded px-2 py-1 text-[11px] text-slate-600 hover:border-[#0f3d8c] hover:text-[#0f3d8c] transition bg-white">
+                            <span className="material-symbols-outlined text-[13px]">add_photo_alternate</span>
+                            Insert image at cursor
                           </button>
-                        )}
-                        <input ref={sigFileRef} type="file" accept="image/png,image/jpeg,image/gif" className="hidden"
-                          onChange={e => { const f = e.target.files?.[0]; if (f) handleSigImageUpload(f) }} />
+                          <input ref={sigFileRef} type="file" accept="image/png,image/jpeg,image/gif" className="hidden"
+                            onChange={e => { const f = e.target.files?.[0]; if (f) handleSigImageUpload(f); e.target.value = '' }} />
+                        </div>
                       </div>
-                      {/* Contenteditable text — supports pasting rich content */}
+                      {/* Single contenteditable editor — type text, paste/insert images anywhere */}
                       <div
+                        ref={sigEditorRef}
                         contentEditable
                         suppressContentEditableWarning
-                        onBlur={e => {
-                          const text = e.currentTarget.innerText
-                          setSigText(text)
-                          saveSig(text, sigImageB64, sigImageName, includeSig)
+                        onInput={e => {
+                          const html = (e.currentTarget as HTMLDivElement).innerHTML
+                          setSigHtml(html)
+                          saveSigHtml(html, includeSig)
                         }}
                         onPaste={e => {
-                          // Capture any pasted image
                           const items = Array.from(e.clipboardData.items)
                           const imgItem = items.find(i => i.type.startsWith('image/'))
                           if (imgItem) {
+                            e.preventDefault()
                             const file = imgItem.getAsFile()
-                            if (file) { e.preventDefault(); handleSigImageUpload(file) }
+                            if (file) handleSigImageUpload(file)
                           }
+                          // Text paste: let browser handle it naturally
                         }}
-                        dangerouslySetInnerHTML={{ __html: sigText.replace(/\n/g, '<br>') }}
-                        className="min-h-[56px] w-full border border-slate-200 rounded px-3 py-2 text-[13px] text-slate-800 outline-none focus:border-[#0f3d8c] bg-white leading-relaxed font-[inherit] empty:before:content-['Your_Name,_Title,_Phone…'] empty:before:text-slate-300"
+                        dangerouslySetInnerHTML={{ __html: sigHtml }}
+                        className="min-h-[80px] w-full border border-slate-200 rounded px-3 py-2.5 text-[13px] text-slate-800 outline-none focus:border-[#0f3d8c] bg-white leading-relaxed font-[inherit]"
                         style={{ whiteSpace: 'pre-wrap' }}
+                        data-placeholder="Type your signature here, or paste directly from Outlook…"
                       />
+                      <p className="text-[10px] text-slate-400">Tip: position your cursor then click &quot;Insert image&quot; to place a logo anywhere in the signature.</p>
                     </div>
+                  ) : sigHtml ? (
+                    /* Preview — render the stored HTML as-is */
+                    <div
+                      className="text-[13px] text-slate-700 leading-relaxed [&_img]:inline-block [&_img]:max-h-12 [&_img]:align-middle"
+                      dangerouslySetInnerHTML={{ __html: sigHtml }}
+                    />
                   ) : (
-                    /* Preview mode — image first (Outlook convention), then text */
-                    (sigImageB64 || sigText) ? (
-                      <div className="space-y-1">
-                        {sigImageB64 && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={sigImageB64} alt="sig" className="max-h-10 block" />
-                        )}
-                        {sigText && (
-                          <p className="text-[12px] text-slate-500 whitespace-pre-line leading-relaxed">{sigText}</p>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-slate-400 italic">No signature — click &quot;Edit sig&quot; to add one.</p>
-                    )
+                    <p className="text-[11px] text-slate-400 italic">No signature — click &quot;Edit sig&quot; to add one.</p>
                   )}
                 </div>
               )}
@@ -1916,19 +1936,17 @@ The quote includes all relevant specifications and pricing as discussed. Please 
                     })
                     const safeCust = (custName && custName !== quoteNumber ? custName : 'CUSTOMER').replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_').slice(0, 50)
                     const fileName = `${quoteNumber}_${safeCust}${endUser ? `_${endUser}` : ''}.pdf`
-                    let fullBody = emailBody
-                    if (includeSig && sigText) fullBody += `\n\n${sigText}`
                     const res = await fetch('/api/quotes/rapid-door/email', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
                         to: emailTo, cc: emailCc || undefined,
-                        subject: emailSubject, emailBody: fullBody,
+                        subject: emailSubject, emailBody,
                         pdfBase64: attachPdf ? pdfBase64 : undefined,
                         fileName: attachPdf ? fileName : undefined,
                         attachPdf, quoteNumber,
                         customerName: custName && custName !== quoteNumber ? custName : undefined,
-                        sigImageB64: includeSig && sigImageB64 ? sigImageB64 : undefined,
+                        sigHtml: includeSig && sigHtml ? sigHtml : undefined,
                       }),
                     })
                     const json = await res.json()
@@ -1954,7 +1972,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
 
               {/* Signature toggle */}
               <button type="button" title={includeSig ? 'Signature included' : 'Signature excluded'}
-                onClick={() => { setIncludeSig(v => { saveSig(sigText, sigImageB64, sigImageName, !v); return !v }) }}
+                onClick={() => { setIncludeSig(v => { saveSigHtml(sigHtml, !v); return !v }) }}
                 className={`flex items-center gap-1 rounded px-2 py-1.5 text-[12px] transition font-medium ${
                   includeSig ? 'bg-white text-[#0f3d8c] border border-slate-300 shadow-sm' : 'text-slate-500 hover:bg-white hover:border hover:border-slate-300'
                 }`}>
