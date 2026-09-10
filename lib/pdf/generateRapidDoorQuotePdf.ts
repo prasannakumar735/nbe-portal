@@ -163,16 +163,16 @@ async function drawPage1(
   t(page, 'ABN: 17 007 048 008', ML, y - logoH - 10, reg, 9, DARK)
 
   // "QUOTE" large
-  t(page, 'QUOTE', PW - MR - display.widthOfTextAtSize('QUOTE', 34), y - 26, display, 34, BLACK)
+  t(page, 'QUOTE', PW - MR - display.widthOfTextAtSize('QUOTE', 38), y - 24, display, 38, BLACK)
 
   // Subtitle: INDUSTRIAL RAPID DOOR | PE01  (+ Door X of N for multi-door)
   const doorLabel = totalDoors > 1 ? `  (Door ${doorIndex + 1} of ${totalDoors})` : ''
   const subtitle = `INDUSTRIAL RAPID DOOR  |  ${firstDoor.doorType}${doorLabel}`
-  t(page, subtitle, PW - MR - bold.widthOfTextAtSize(subtitle, 13), y - 52, bold, 13, BRAND)
+  t(page, subtitle, PW - MR - bold.widthOfTextAtSize(subtitle, 14), y - 58, bold, 14, BRAND)
 
   y -= logoH + 22
-  drawHLine(page, ML, y, CW, 1, DARK)
-  y -= 16
+  drawHLine(page, ML, y, CW, 2.5, DARK)
+  y -= 24
 
   // ── COMPANY INFO + DATE BLOCK ─────────────────────────────────────────────
   t(page, 'NBE AUSTRALIA',                                      ML, y,      bold, 8.5, DARK)
@@ -184,17 +184,16 @@ async function drawPage1(
   const dateRows: [string, string][] = [
     ['DATE',        input.date],
     ['VALID UNTIL', input.validUntil],
-    ['QUOTE NO.',   input.quoteNumber],
   ]
   dateRows.forEach(([label, val], i) => {
     t(page,      label, dateLabelX,  y - i * 14, bold, 8.5, DARK)
     tRight(page, val,   ML + CW,     y - i * 14, reg,  8.5, DARK)
   })
-  y -= 56
+  y -= 44
 
   // ── CUSTOMER DETAILS (left) + DOOR IMAGE (right) ──────────────────────────
   const custLabelX = ML + 8
-  const custValueX = ML + 72
+  const custValueX = ML + 58   // tighter: label→value gap reduced
   const custRows: [string, string][] = [
     ['Customer',  input.customerName     || '—'],
     ['Attention', input.customerAttn     || '—'],
@@ -203,9 +202,15 @@ async function drawPage1(
     ['Phone',     input.customerPhone    || '—'],
     ['Email',     input.customerEmail    || '—'],
   ]
-  const imgColX = ML + CW * 0.48
-  const imgColW = CW * 0.52
-  const custSectionH = custRows.length * 13 + 16
+  const STRIP_H = 18
+  const custBlockW = 160       // label+value text block width
+  const imgColX = ML + custBlockW + 8
+  const imgColW = CW - custBlockW - 8
+  const rowSpacing = 12
+  // Image top starts above the CUSTOMER bar
+  const imgTopOffset = 22   // how far above the bar the image extends
+  const imgMaxH = 180
+  const custSectionH = custRows.length * rowSpacing + 14
 
   // Pre-compute image dimensions so section height can expand if needed
   let imgDrawW = 0, imgDrawH = 0
@@ -215,48 +220,48 @@ async function drawPage1(
       const imgBytes = await readFile(firstDoor.doorImagePath)
       loadedDoorImg = await pdfDoc.embedPng(imgBytes)
       const { width: dw, height: dh } = loadedDoorImg
-      const maxW = imgColW - 4
-      const maxH = 190
+      const maxW = imgColW - 8
       imgDrawW = maxW
       imgDrawH = (dh / dw) * imgDrawW
-      if (imgDrawH > maxH) { imgDrawH = maxH; imgDrawW = (dw / dh) * imgDrawH }
+      if (imgDrawH > imgMaxH) { imgDrawH = imgMaxH; imgDrawW = (dw / dh) * imgDrawH }
     } catch { /* no image */ }
   }
 
-  const sectionH = Math.max(custSectionH, imgDrawH + 8)
+  // sectionH must cover image bottom (image extends below bar by imgDrawH - STRIP_H - imgTopOffset)
+  const imgOverhang = Math.max(0, imgDrawH - STRIP_H - imgTopOffset)
+  const sectionH = Math.max(custSectionH, imgOverhang + 8)
 
-  // ── CUSTOMER HEADER BAR (left column only) ────────────────────────────────
-  const STRIP_H = 18
-  const custColW = CW * 0.46
-  drawRect(page, ML, y - STRIP_H, custColW, STRIP_H, BLACK)
+  // ── CUSTOMER HEADER BAR (width = label+value content width) ──────────────
+  drawRect(page, ML, y - STRIP_H, custBlockW, STRIP_H, BLACK)
   t(page, 'CUSTOMER', ML + 8, y - 12, bold, 9, WHITE)
   y -= STRIP_H
 
   custRows.forEach(([label, val], i) => {
-    t(page, label, custLabelX, y - 8 - i * 13, bold, 8, DARK)
-    t(page, val,   custValueX, y - 8 - i * 13, reg,  8, DARK)
+    t(page, label, custLabelX, y - 12 - i * rowSpacing, bold, 8, DARK)
+    t(page, val,   custValueX, y - 12 - i * rowSpacing, reg,  8, DARK)
   })
 
   if (loadedDoorImg && imgDrawW > 0) {
+    // Top starts imgTopOffset above the CUSTOMER bar top
     page.drawImage(loadedDoorImg, {
       x: imgColX + (imgColW - imgDrawW) / 2,
-      y: y - imgDrawH,
+      y: y - imgDrawH + STRIP_H + imgTopOffset,
       width: imgDrawW,
       height: imgDrawH,
     })
   }
 
   y -= sectionH
-  y -= 12
+  y -= 4
 
   // ── TABLE ─────────────────────────────────────────────────────────────────
   // Columns
   const cNo    = ML
   const cItem  = ML + 18
   const cDesc  = ML + 130
-  const cQtyX  = ML + CW - 162  // left of QTY col
-  const cQtyW  = 28
-  const cUpR   = ML + CW - 65   // right edge of UNIT PRICE
+  const cQtyX  = ML + CW - 195  // left of QTY col
+  const cQtyW  = 30
+  const cUpR   = ML + CW - 90   // right edge of UNIT PRICE
   const cTotR  = ML + CW        // right edge of TOTAL
 
   // Header row
@@ -264,20 +269,22 @@ async function drawPage1(
   drawRect(page, ML, y - TH, CW, TH, BLACK)
   t(page,      'NO',          cNo + 2,  y - 12, bold, 8, WHITE)
   t(page,      'ITEM',        cItem,    y - 12, bold, 8, WHITE)
-  t(page,      'DESCRIPTION', cDesc,    y - 12, bold, 8, WHITE)
+  t(page,      'DESCRIPTION', cDesc + 30, y - 12, bold, 8, WHITE)
   tCenter(page, 'QTY',        cQtyX, cQtyW, y - 12, bold, 8, WHITE)
   tRight(page, 'UNIT PRICE',  cUpR,     y - 12, bold, 8, WHITE)
   tRight(page, 'TOTAL',       cTotR,    y - 12, bold, 8, WHITE)
   y -= TH
 
-  // Sub-header
+  // Sub-header (WIDTH/HEIGHT aligned with data columns defined per-door below)
+  const cWH = cDesc + 38   // WIDTH col (mirrors cW inside door loop)
+  const cHH = cDesc + 92   // HEIGHT col (mirrors cH inside door loop)
   drawRect(page, ML, y - 13, CW, 13, rgb(0.93, 0.93, 0.93))
-  t(page,      '#',      cNo + 2,   y - 9, reg, 7, GREY)
-  t(page,      'WIDTH',  cDesc + 30, y - 9, reg, 7, GREY)
-  t(page,      'HEIGHT', cDesc + 140, y - 9, reg, 7, GREY)
+  t(page,      '#',      cNo + 2, y - 9, reg, 7, GREY)
+  t(page,      'WIDTH',  cWH,     y - 9, reg, 7, GREY)
+  t(page,      'HEIGHT', cHH,     y - 9, reg, 7, GREY)
   tCenter(page, '#',     cQtyX, cQtyW, y - 9, reg, 7, GREY)
-  tRight(page,  '$',     cUpR,   y - 9, reg, 7, GREY)
-  tRight(page,  '$$',    cTotR,  y - 9, reg, 7, GREY)
+  tRight(page,  '$',     cUpR,  y - 9, reg, 7, GREY)
+  tRight(page,  '$$',    cTotR, y - 9, reg, 7, GREY)
   y -= 13
 
   // ── DOOR ROWS ─────────────────────────────────────────────────────────────
@@ -285,132 +292,153 @@ async function drawPage1(
     const d = doors[di]
     if (di > 0) { drawHLine(page, ML, y, CW, 0.5, rgb(0.55, 0.55, 0.55)); y -= 4 }
 
-    // Category row: "Industrial Door   Rapid Roller Door (Performance | PE01)"
+    // Column positions within description area
+    // cDesc          = label qualifier (Clear:, External:, VF Drive:)
+    // cDesc+38       = WIDTH value
+    // cDesc+76       = 'x' / '-' separator column
+    // cDesc+92       = HEIGHT value
+    const cW  = cDesc + 38   // WIDTH value col
+    const cX  = cDesc + 76   // separator ('x'/'-') col
+    const cH  = cDesc + 92   // HEIGHT value col
+
+    // Category row: smaller, regular weight to match reference
     const shortName = d.doorTypeName.replace(/ Rapid Door$/, '').replace(/ Door$/, '')
     const catDesc = `Rapid Roller Door (${shortName} | ${d.doorType})`
     drawRect(page, ML, y - 17, CW, 17, rgb(0.97, 0.97, 0.97))
-    t(page, 'Industrial Door', cItem, y - 11, reg,  9,  DARK)
-    t(page, catDesc,           cDesc, y - 11, bold, 11, DARK)
+    t(page, 'Industrial Door', cItem, y - 11, reg, 9,   DARK)
+    t(page, catDesc,           cDesc, y - 11, reg, 9,   DARK)
     y -= 17
 
     // Row 1: Width × Height
-    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
+    drawHLine(page, ML, y, CW, 0.5, rgb(0.82, 0.82, 0.82))
     const exW = d.externalW ?? ''
     const exH = d.externalH ?? ''
-    t(page, '1.',             cNo + 2,  y - 11, reg, 8.5, DARK)
-    t(page, 'Width × Height', cItem,    y - 11, reg, 8.5, DARK)
-    t(page, 'Clear:',         cDesc,    y - 11, reg, 8.5, DARK)
-    t(page, d.openingW,       cDesc + 38, y - 11, reg, 8.5, DARK)
-    t(page, 'x',              cDesc + 88, y - 11, reg, 8.5, DARK)
-    t(page, d.openingH,       cDesc + 98, y - 11, reg, 8.5, DARK)
-    if (exW) {
-      t(page, 'External:',   cDesc,    y - 22, reg, 8, GREY)
-      t(page, exW,           cDesc + 38, y - 22, reg, 8, GREY)
-      t(page, 'x',           cDesc + 88, y - 22, reg, 8, GREY)
-      t(page, exH,           cDesc + 98, y - 22, reg, 8, GREY)
-    }
+    t(page, '1.',             cNo + 2, y - 11, reg, 8.5, DARK)
+    t(page, 'Width × Height', cItem,   y - 11, reg, 8.5, DARK)
+    t(page, 'Clear:',         cDesc,   y - 11, reg, 8.5, DARK)
+    t(page, d.openingW,       cW,      y - 11, reg, 8.5, DARK)
+    t(page, 'x',              cX,      y - 11, reg, 8.5, DARK)
+    t(page, d.openingH,       cH,      y - 11, reg, 8.5, DARK)
+    // External row always shown
+    t(page, 'External:',   cDesc,   y - 22, reg, 8, GREY)
+    if (exW) t(page, exW,  cW,      y - 22, reg, 8, GREY)
+    t(page, 'x',           cX,      y - 22, reg, 8, GREY)
+    if (exH) t(page, exH,  cH,      y - 22, reg, 8, GREY)
     tCenter(page, String(d.qty),          cQtyX, cQtyW, y - 11, reg, 8.5, DARK)
     tRight(page,  fmtAUD(d.unitPrice),    cUpR,          y - 11, reg, 8.5, DARK)
     tRight(page,  fmtAUD(d.qty * d.unitPrice), cTotR,    y - 11, bold, 8.5, DARK)
     y -= 32
 
-    // Row 2: Door Frame
-    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
-    t(page, '2.',          cNo + 2, y - 11, reg, 8.5, DARK)
-    t(page, 'Door Frame',  cItem,   y - 11, reg, 8.5, DARK)
+    // Partial-line widths for merged columns:
+    //   rows 2-4: line stops at end of QTY (UNIT PRICE + TOTAL merged/blank)
+    //   rows 5-7: line stops at end of UNIT PRICE (only TOTAL merged/blank)
+    const lineToQty  = cQtyX + cQtyW - ML   // stop before UNIT PRICE
+    const lineToUpR  = cUpR - ML            // stop before TOTAL
+
+    // Row 2: Door Frame (UNIT PRICE + TOTAL merged)
+    drawHLine(page, ML, y, lineToQty, 0.5, rgb(0.82, 0.82, 0.82))
+    t(page, '2.',         cNo + 2, y - 11, reg, 8.5, DARK)
+    t(page, 'Door Frame', cItem,   y - 11, reg, 8.5, DARK)
     const frameDisplay = d.frameRaw ?? d.frame
-    t(page, frameDisplay,  cDesc,   y - 11, reg, 8.5, DARK)
-    if (d.motorSide) t(page, `- ${d.motorSide}`, cDesc + reg.widthOfTextAtSize(frameDisplay, 8.5) + 6, y - 11, reg, 8.5, DARK)
+    t(page, frameDisplay, cW, y - 11, reg, 8.5, DARK)
+    if (d.motorSide) { t(page, '-', cX, y - 11, reg, 8.5, DARK); t(page, d.motorSide, cH, y - 11, reg, 8.5, DARK) }
     y -= 18
 
-    // Row 3: Curtain
-    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
+    // Row 3: Curtain (UNIT PRICE + TOTAL merged)
+    drawHLine(page, ML, y, lineToQty, 0.5, rgb(0.82, 0.82, 0.82))
     t(page, '3.',      cNo + 2, y - 11, reg, 8.5, DARK)
     t(page, 'Curtain', cItem,   y - 11, reg, 8.5, DARK)
-    t(page, d.curtain, cDesc,   y - 11, reg, 8.5, DARK)
-    if (d.colour) t(page, `- ${d.colour}`, cDesc + reg.widthOfTextAtSize(d.curtain, 8.5) + 6, y - 11, reg, 8.5, DARK)
+    t(page, d.curtain, cW,      y - 11, reg, 8.5, DARK)
+    if (d.colour) { t(page, '-', cX, y - 11, reg, 8.5, DARK); t(page, d.colour, cH, y - 11, reg, 8.5, DARK) }
     y -= 18
 
-    // Row 4: Safety Edge
-    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
-    t(page, '4.',           cNo + 2, y - 11, reg,  8.5, DARK)
-    t(page, 'Safety Edge',  cItem,   y - 11, reg,  8.5, DARK)
-    t(page, 'SOFT',         cDesc,   y - 11, bold, 8.5, DARK)
-    if (d.colour) t(page, `- ${d.colour}`, cDesc + bold.widthOfTextAtSize('SOFT', 8.5) + 6, y - 11, reg, 8.5, DARK)
+    // Row 4: Safety Edge (UNIT PRICE + TOTAL merged)
+    drawHLine(page, ML, y, lineToQty, 0.5, rgb(0.82, 0.82, 0.82))
+    t(page, '4.',          cNo + 2, y - 11, reg, 8.5, DARK)
+    t(page, 'Safety Edge', cItem,   y - 11, reg, 8.5, DARK)
+    t(page, 'SOFT',        cW,      y - 11, reg, 8.5, DARK)
+    if (d.colour) { t(page, '-', cX, y - 11, reg, 8.5, DARK); t(page, d.colour, cH, y - 11, reg, 8.5, DARK) }
     y -= 18
 
-    // Row 5: Drive System
-    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
-    t(page, '5.',            cNo + 2, y - 11, reg,  8.5, DARK)
-    t(page, 'Drive System',  cItem,   y - 11, reg,  8.5, DARK)
-    t(page, 'VF Drive:',     cDesc,   y - 11, reg,  8.5, DARK)
+    // Row 5: Drive System (TOTAL merged)
+    drawHLine(page, ML, y, lineToUpR, 0.5, rgb(0.82, 0.82, 0.82))
+    t(page, '5.',           cNo + 2, y - 11, reg, 8.5, DARK)
+    t(page, 'Drive System', cItem,   y - 11, reg, 8.5, DARK)
+    t(page, 'VF Drive:',    cDesc,   y - 11, reg, 8.5, DARK)
     if (d.motorKw) {
-      const vfW = reg.widthOfTextAtSize('VF Drive:', 8.5) + 6
-      t(page, d.motorKw,  cDesc + vfW,       y - 11, bold, 10, DARK)
-      t(page, ' up to',   cDesc + vfW + bold.widthOfTextAtSize(d.motorKw, 10) + 2, y - 11, reg, 8.5, DARK)
+      t(page, d.motorKw, cW,      y - 11, reg, 8.5, DARK)
+      t(page, 'up to',   cX + 10, y - 11, reg, 8.5, DARK)
     }
     y -= 18
 
-    // Row 6: Safety Features
-    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
+    // Row 6: Safety Features (TOTAL merged, no gap when PEC not selected)
+    drawHLine(page, ML, y, lineToUpR, 0.5, rgb(0.82, 0.82, 0.82))
     t(page, '6.',              cNo + 2, y - 11, reg, 8.5, DARK)
     t(page, 'Safety Features', cItem,   y - 11, reg, 8.5, DARK)
     const safetyVal = d.safetyByCategory?.safety ?? ''
-    if (safetyVal && safetyVal !== '-') {
-      t(page, safetyVal,     cDesc,    y - 11, bold, 10, DARK)
-      tCenter(page, '2',     cQtyX, cQtyW, y - 11, reg, 8, DARK)
-      tRight(page, '(incl.)', cUpR,   y - 11, reg,  8, GREY)
+    const hasPec = safetyVal && safetyVal !== '-'
+    let sfY = y - 11
+    if (hasPec) {
+      t(page, safetyVal,      cW,    sfY, reg, 8.5, DARK)
+      tCenter(page, '1',      cQtyX, cQtyW, sfY, reg, 8, DARK)
+      tRight(page, '(incl.)', cUpR,  sfY, reg, 8, GREY)
+      sfY -= 13
     }
-    t(page, 'Hazard Lamp',   cDesc,    y - 22, reg, 8.5, DARK)
-    tCenter(page, '1',       cQtyX, cQtyW, y - 22, reg, 8, DARK)
-    tRight(page, '(incl.)',  cUpR,     y - 22, reg, 8, GREY)
-    y -= 30
+    t(page, 'Hazard Lamp',   cW,    sfY, reg, 8.5, DARK)
+    tCenter(page, '1',       cQtyX, cQtyW, sfY, reg, 8, DARK)
+    tRight(page, '(incl.)',  cUpR,  sfY, reg, 8, GREY)
+    y -= hasPec ? 30 : 18
 
-    // Row 7: Detection — always show all 5 items
-    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
+    // Row 7: Detection — all 5 sub-rows with separators, TOTAL merged
+    drawHLine(page, ML, y, lineToUpR, 0.5, rgb(0.82, 0.82, 0.82))
     t(page, '7.',        cNo + 2, y - 11, reg, 8.5, DARK)
     t(page, 'Detection', cItem,   y - 11, reg, 8.5, DARK)
     const allDetection: [string, string, string][] = [
-      ['a', 'Push Button',            d.safetyByCategory?.pushButton    ?? ''],
-      ['b', 'Radar (1set)',           d.safetyByCategory?.radar         ?? ''],
-      ['c', 'Remote Control',        d.safetyByCategory?.remoteControl  ?? ''],
-      ['d', 'Induction Loop',        d.safetyByCategory?.inductLoop     ?? ''],
+      ['a', 'Push Button',             d.safetyByCategory?.pushButton   ?? ''],
+      ['b', 'Radar (1set)',            d.safetyByCategory?.radar        ?? ''],
+      ['c', 'Remote Control',         d.safetyByCategory?.remoteControl ?? ''],
+      ['d', 'Induction Loop',         d.safetyByCategory?.inductLoop    ?? ''],
       ['e', 'Contactless Exit Button', d.safetyByCategory?.swipe        ?? ''],
     ]
     allDetection.forEach(([letter, label, val], i) => {
-      const selected = val && val !== '-'
+      const isSelected = val && val !== '-'
+      if (i > 0) drawHLine(page, ML, y - i * 13, lineToUpR, 0.3, rgb(0.88, 0.88, 0.88))
       t(page, `${letter}:`, cDesc,      y - 11 - i * 13, reg, 8.5, DARK)
       t(page, label,        cDesc + 16, y - 11 - i * 13, reg, 8.5, DARK)
-      tCenter(page, selected ? '1' : '-', cQtyX, cQtyW, y - 11 - i * 13, reg, 8, DARK)
-      tRight(page, selected ? '(incl.)' : '(excl.)', cUpR, y - 11 - i * 13, reg, 8, selected ? GREY : rgb(0.6, 0.6, 0.6))
+      tCenter(page, isSelected ? '1' : '-', cQtyX, cQtyW, y - 11 - i * 13, reg, 8, DARK)
+      tRight(page, isSelected ? '(incl.)' : '(excl.)', cUpR, y - 11 - i * 13, reg, 8, isSelected ? GREY : rgb(0.6, 0.6, 0.6))
     })
     y -= allDetection.length * 13 + 8
 
-    // Row 8: Installation (only if > 0)
-    if (d.installation > 0) {
-      drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
-      t(page, '8.',           cNo + 2, y - 11, reg, 8.5, DARK)
-      t(page, 'Installation', cItem,   y - 11, reg, 8.5, DARK)
-      tCenter(page, '1',      cQtyX, cQtyW, y - 11, reg, 8.5, DARK)
-      tRight(page, fmtAUD(d.installation), cUpR,  y - 11, reg,  8.5, DARK)
-      tRight(page, fmtAUD(d.installation), cTotR, y - 11, bold, 8.5, DARK)
-      y -= 18
-    }
   }
 
-  y -= 8
+  // Blank ruled lines after table (reference style)
+  const blankRowH = 14
+  const blankRowCount = 4
+  for (let i = 0; i < blankRowCount; i++) {
+    drawHLine(page, ML, y, CW, 0.4, rgb(0.82, 0.82, 0.82))
+    y -= blankRowH
+  }
+  drawHLine(page, ML, y, CW, 0.4, rgb(0.82, 0.82, 0.82))
 
-  // ── TOTALS ────────────────────────────────────────────────────────────────
+  y -= 20
+
+  // ── TOTALS + BANK DETAILS ─────────────────────────────────────────────────
   drawHLine(page, ML, y, CW, 0.5, DARK)
-  y -= 6
+  y -= 10
 
   const totLR = ML + CW - 70
   const totVR = ML + CW
 
-  tRight(page, 'Subtotal',               totLR, y,      bold, 10, DARK)
-  tRight(page, fmtAUD(grandTotal),       totVR, y,      reg,  10, DARK)
-  tRight(page, 'GST (10%)',              totLR, y - 18, bold, 10, DARK)
-  tRight(page, fmtAUD(grandTotal * 0.1), totVR, y - 18, reg,  10, DARK)
+  // Bank details — left side, aligned with totals
+  t(page, 'BANK DETAILS',                             ML, y,      bold, 8.5, DARK)
+  t(page, 'Account Name: NBE Australia Pty Ltd',      ML, y - 14, reg,  8,   DARK)
+  t(page, 'BSB: 013-525  |  Account No.: 3473-93755', ML, y - 26, reg,  8,   DARK)
+
+  tRight(page, 'Subtotal',               totLR, y,      reg, 10, DARK)
+  tRight(page, fmtAUD(grandTotal),       totVR, y,      reg, 10, DARK)
+  tRight(page, 'GST (10%)',              totLR, y - 18, reg, 10, DARK)
+  tRight(page, fmtAUD(grandTotal * 0.1), totVR, y - 18, reg, 10, DARK)
 
   drawHLine(page, ML + CW - 170, y - 26, 170, 0.5)
 
@@ -421,16 +449,6 @@ async function drawPage1(
   tRight(page, fmtAUD(grandTotal * 1.1), ML + CW,               totBoxY + 6, bold, 11, WHITE)
 
   y = totBoxY - 22
-
-  // ── CLIENT SIGNATURE BAR ──────────────────────────────────────────────────
-  const sigBarH = 20
-  const sigY = y - sigBarH
-  drawRect(page, ML, sigY, CW, sigBarH, BLACK)
-  const third = CW / 3
-  t(page, 'Client Signature', ML + 8,              sigY + 6, bold, 9, WHITE)
-  tCenter(page, 'Printed Name', ML + third, third, sigY + 6, bold, 9, WHITE)
-  tCenter(page, 'Date',  ML + third * 2, third,    sigY + 6, bold, 9, WHITE)
-  y = sigY - 14
 
   // ── FOOTER TERMS ─────────────────────────────────────────────────────────
   const terms = 'This quotation is based on the NBE Standard Door comprising a galvanized frame, PVC curtain (900 g/m²), and a zinc-coated control box (RAL 7035). Optional extras (e.g. powder coating, light curtain, remote control, radar, traffic light, induction loop, contactless exit button) are available at additional cost. All other matters shall be subject to our standard Terms and Conditions (T&C). The electrical scope is limited to the connection between the control panel and the doors only. Power supply and isolator shall be provided by others.'
