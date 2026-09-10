@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { loadDoorImageStyle } from '@/app/(portal)/admin/settings/QuoteSettingsClient'
+import { createSupabaseClient } from '@/lib/supabase/client'
 
 // ── Quote number helpers ──────────────────────────────────────────────────────
 async function fetchNextRapidDoorQuoteNumber(): Promise<string> {
@@ -266,13 +267,52 @@ export default function NewQuotesPage() {
 
   useEffect(() => { loadRecentQuotes() }, [])
 
+  // Logged-in user email (for CC self option)
+  const [loggedInEmail, setLoggedInEmail] = useState('')
+  useEffect(() => {
+    createSupabaseClient().auth.getUser().then(({ data }) => {
+      if (data.user?.email) setLoggedInEmail(data.user.email)
+    })
+  }, [])
+
   // Email modal
-  const [showEmailModal, setShowEmailModal] = useState(false)
-  const [emailTo,        setEmailTo]        = useState('')
-  const [emailSending,   setEmailSending]   = useState(false)
-  const [emailResult,    setEmailResult]    = useState<string | null>(null)
-  const NBE_DOMAIN = 'nbeaustralia.com.au'
-  const emailValid = emailTo.trim().toLowerCase().endsWith(`@${NBE_DOMAIN}`) && emailTo.includes('@')
+  const [showEmailModal,  setShowEmailModal]  = useState(false)
+  const [emailTo,         setEmailTo]         = useState('')
+  const [emailCc,         setEmailCc]         = useState('')
+  const [ccSelf,          setCcSelf]          = useState(false)
+  const [emailSubject,    setEmailSubject]    = useState('')
+  const [emailBody,       setEmailBody]       = useState('')
+  const [attachPdf,       setAttachPdf]       = useState(true)
+  const [emailSending,    setEmailSending]    = useState(false)
+  const [emailResult,     setEmailResult]     = useState<{ ok: boolean; msg: string } | null>(null)
+
+  function buildDefaultEmailBody() {
+    const cust = custName ? `for ${custName}` : ''
+    const qn = quoteNumber ? ` (${quoteNumber})` : ''
+    return `Please find attached the industrial rapid door quotation${qn} ${cust}.
+
+The quote includes all relevant specifications and pricing as discussed. Please do not hesitate to contact us should you require any further information or clarification.
+
+Kind regards`
+  }
+
+  function openEmailModal() {
+    setEmailTo(custEmail || '')
+    setEmailCc(ccSelf && loggedInEmail ? loggedInEmail : '')
+    setCcSelf(false)
+    setEmailSubject(quoteNumber ? `Rapid Door Quotation – ${quoteNumber}${custName ? ` – ${custName}` : ''}` : 'Rapid Door Quotation')
+    setEmailBody(buildDefaultEmailBody())
+    setEmailResult(null)
+    setAttachPdf(true)
+    setShowEmailModal(true)
+  }
+
+  function emailIsValid(addr: string) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr.trim()) }
+  const toList = emailTo.split(/[,;\n]/).map(e => e.trim()).filter(e => e.length > 0)
+  const toAllValid = toList.length > 0 && toList.every(emailIsValid)
+  const ccList = emailCc.split(/[,;\n]/).map(e => e.trim()).filter(e => e.length > 0)
+  const ccAllValid = ccList.length === 0 || ccList.every(emailIsValid)
+  const canSendEmail = toAllValid && ccAllValid && emailSubject.trim().length > 0 && emailBody.trim().length > 0 && !emailSending
 
   // Colour dropdown
   const [colourOpen, setColourOpen] = useState(false)
@@ -1431,7 +1471,7 @@ export default function NewQuotesPage() {
                 <span className="material-symbols-outlined text-[16px]">download</span>
                 Download PDF
               </button>
-              <button type="button" onClick={() => { setEmailTo(''); setEmailResult(null); setShowEmailModal(true) }}
+              <button type="button" onClick={openEmailModal}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50">
                 <span className="material-symbols-outlined text-[16px]">send</span>
                 Send Email
@@ -1450,15 +1490,16 @@ export default function NewQuotesPage() {
 
       {/* ── Email Modal ────────────────────────────────────────────────────── */}
       {showEmailModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 shrink-0">
               <div className="flex items-center gap-3">
                 <span className="material-symbols-outlined text-indigo-600">send</span>
                 <div>
                   <h3 className="text-sm font-semibold text-slate-800">Send Quote via Email</h3>
-                  <p className="text-xs text-slate-400">Only @{NBE_DOMAIN} addresses allowed</p>
+                  <p className="text-xs text-slate-400">Quote will be sent to the client with PDF attached</p>
                 </div>
               </div>
               <button type="button" onClick={() => setShowEmailModal(false)}
@@ -1467,83 +1508,174 @@ export default function NewQuotesPage() {
               </button>
             </div>
 
-            {/* Body */}
-            <div className="px-6 py-5 space-y-4">
+            {/* Body — scrollable */}
+            <div className="overflow-y-auto px-6 py-5 space-y-4">
+
+              {/* PDF attachment chip */}
               {quoteNumber && (
-                <div className="flex items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2">
-                  <span className="material-symbols-outlined text-[14px] text-indigo-500">picture_as_pdf</span>
-                  <span className="text-xs font-medium text-indigo-700">{quoteNumber}_{(custName || 'CUSTOMER').replace(/[^a-zA-Z0-9\s]/g, ' ').trim().replace(/\s+/g, '_').slice(0, 50)}{endUser ? `_${endUser}` : ''}.pdf</span>
+                <div className="flex items-center justify-between rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="material-symbols-outlined text-[16px] text-indigo-500 shrink-0">picture_as_pdf</span>
+                    <span className="text-xs font-medium text-indigo-700 truncate">
+                      {quoteNumber}_{(custName || 'CUSTOMER').replace(/[^a-zA-Z0-9\s]/g, ' ').trim().replace(/\s+/g, '_').slice(0, 40)}{endUser ? `_${endUser}` : ''}.pdf
+                    </span>
+                  </div>
+                  <label className="flex items-center gap-1.5 ml-3 shrink-0 cursor-pointer">
+                    <input type="checkbox" checked={attachPdf} onChange={e => setAttachPdf(e.target.checked)}
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                    <span className="text-xs text-slate-600">Attach</span>
+                  </label>
                 </div>
               )}
 
+              {/* To */}
               <div>
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">
-                  Recipient Email
+                  To <span className="text-red-400">*</span>
                 </label>
-                <input
-                  type="email"
-                  value={emailTo}
+                <textarea rows={2} value={emailTo}
                   onChange={e => { setEmailTo(e.target.value); setEmailResult(null) }}
-                  placeholder={`name@${NBE_DOMAIN}`}
-                  className={`w-full rounded-xl border py-3 px-4 text-sm font-medium text-slate-800 outline-none transition focus:ring-2 focus:ring-indigo-500/20 ${
-                    emailTo && !emailValid
-                      ? 'border-red-300 focus:border-red-400'
-                      : 'border-slate-200 focus:border-indigo-400'
-                  }`}
-                />
-                {emailTo && !emailValid && (
-                  <p className="mt-1.5 flex items-center gap-1 text-xs text-red-500">
+                  placeholder="client@company.com, another@company.com"
+                  className={`w-full rounded-xl border py-2.5 px-4 text-sm text-slate-800 shadow-sm outline-none transition resize-none focus:ring-2 focus:ring-indigo-500/20 ${
+                    emailTo.trim() && !toAllValid ? 'border-red-300 focus:border-red-400' : 'border-slate-200 focus:border-indigo-400'
+                  }`} />
+                <p className="mt-1 text-[11px] text-slate-400">Separate multiple addresses with commas or new lines</p>
+                {emailTo.trim() && !toAllValid && (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-red-500">
                     <span className="material-symbols-outlined text-[13px]">error</span>
-                    Email must be an @{NBE_DOMAIN} address
-                  </p>
-                )}
-                {emailTo && emailValid && (
-                  <p className="mt-1.5 flex items-center gap-1 text-xs text-green-600">
-                    <span className="material-symbols-outlined text-[13px]">check_circle</span>
-                    Valid NBE Australia address
+                    One or more email addresses are invalid
                   </p>
                 )}
               </div>
 
+              {/* CC */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-widest text-slate-400">CC</label>
+                  {loggedInEmail && (
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="checkbox" checked={ccSelf}
+                        onChange={e => {
+                          setCcSelf(e.target.checked)
+                          if (e.target.checked) {
+                            const existing = emailCc.split(/[,;\n]/).map(x => x.trim()).filter(Boolean)
+                            if (!existing.includes(loggedInEmail)) {
+                              setEmailCc(existing.length ? existing.join(', ') + ', ' + loggedInEmail : loggedInEmail)
+                            }
+                          }
+                        }}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                      <span className="text-xs text-slate-600">Include my email ({loggedInEmail})</span>
+                    </label>
+                  )}
+                </div>
+                <textarea rows={2} value={emailCc}
+                  onChange={e => { setEmailCc(e.target.value); setCcSelf(false) }}
+                  placeholder="cc@company.com (optional)"
+                  className={`w-full rounded-xl border py-2.5 px-4 text-sm text-slate-800 shadow-sm outline-none transition resize-none focus:ring-2 focus:ring-indigo-500/20 ${
+                    emailCc.trim() && !ccAllValid ? 'border-red-300 focus:border-red-400' : 'border-slate-200 focus:border-indigo-400'
+                  }`} />
+                {emailCc.trim() && !ccAllValid && (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-red-500">
+                    <span className="material-symbols-outlined text-[13px]">error</span>
+                    One or more CC addresses are invalid
+                  </p>
+                )}
+              </div>
+
+              {/* Subject */}
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">
+                  Subject <span className="text-red-400">*</span>
+                </label>
+                <input type="text" value={emailSubject} onChange={e => setEmailSubject(e.target.value)}
+                  placeholder="Rapid Door Quotation"
+                  className="w-full rounded-xl border border-slate-200 py-2.5 px-4 text-sm text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+              </div>
+
+              {/* Body */}
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">
+                  Message <span className="text-red-400">*</span>
+                </label>
+                <textarea rows={7} value={emailBody} onChange={e => setEmailBody(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 py-2.5 px-4 text-sm text-slate-800 shadow-sm outline-none transition resize-y focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+                <p className="mt-1 text-[11px] text-slate-400">NBE signature and company details are appended automatically.</p>
+              </div>
+
+              {/* Result */}
               {emailResult && (
-                <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
-                  emailResult.startsWith('✓')
-                    ? 'bg-green-50 border border-green-200 text-green-700'
-                    : 'bg-red-50 border border-red-200 text-red-700'
+                <div className={`flex items-start gap-2 rounded-lg px-3 py-2.5 text-sm ${
+                  emailResult.ok ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'
                 }`}>
-                  {emailResult}
+                  <span className="material-symbols-outlined text-[16px] mt-0.5 shrink-0">
+                    {emailResult.ok ? 'check_circle' : 'error'}
+                  </span>
+                  {emailResult.msg}
                 </div>
               )}
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
-              <button type="button" onClick={() => setShowEmailModal(false)}
-                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition">
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={!emailValid || emailSending}
-                onClick={async () => {
-                  setEmailSending(true)
-                  setEmailResult(null)
-                  try {
-                    // Placeholder — wire up real email API when ready
-                    await new Promise(r => setTimeout(r, 1200))
-                    setEmailResult(`✓ Quote sent to ${emailTo}`)
-                  } catch {
-                    setEmailResult('Failed to send. Please try again.')
-                  } finally {
-                    setEmailSending(false)
+            <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4 shrink-0">
+              <p className="text-[11px] text-slate-400">
+                Sent via NBE portal · saved to Sent Items
+              </p>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => setShowEmailModal(false)}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition">
+                  Cancel
+                </button>
+                <button type="button" disabled={!canSendEmail}
+                  onClick={async () => {
+                    if (!previewUrl) { setEmailResult({ ok: false, msg: 'Generate the quote PDF first before sending.' }); return }
+                    setEmailSending(true)
+                    setEmailResult(null)
+                    try {
+                      // Convert the local blob URL to base64
+                      const blobRes = await fetch(previewUrl)
+                      const blob = await blobRes.blob()
+                      const pdfBase64 = await new Promise<string>((resolve, reject) => {
+                        const reader = new FileReader()
+                        reader.onload = () => resolve((reader.result as string).split(',')[1])
+                        reader.onerror = reject
+                        reader.readAsDataURL(blob)
+                      })
+                      const safeCust = (custName || 'CUSTOMER').replace(/[^a-zA-Z0-9\s]/g, ' ').trim().replace(/\s+/g, '_').slice(0, 50)
+                      const fileName = `${quoteNumber}_${safeCust}${endUser ? `_${endUser}` : ''}.pdf`
+
+                      const res = await fetch('/api/quotes/rapid-door/email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          to: emailTo,
+                          cc: emailCc || undefined,
+                          subject: emailSubject,
+                          emailBody,
+                          pdfBase64: attachPdf ? pdfBase64 : undefined,
+                          fileName: attachPdf ? fileName : undefined,
+                          attachPdf,
+                          quoteNumber,
+                          customerName: custName || undefined,
+                        }),
+                      })
+                      const json = await res.json()
+                      if (!res.ok) throw new Error(json.error || 'Send failed')
+                      const sentCount = (json.sent_to as string[]).length
+                      setEmailResult({ ok: true, msg: `Quote sent successfully to ${sentCount} recipient${sentCount > 1 ? 's' : ''}.` })
+                    } catch (e) {
+                      setEmailResult({ ok: false, msg: e instanceof Error ? e.message : 'Failed to send. Please try again.' })
+                    } finally {
+                      setEmailSending(false)
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40">
+                  {emailSending
+                    ? <><span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>Sending…</>
+                    : <><span className="material-symbols-outlined text-[16px]">send</span>Send</>
                   }
-                }}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40">
-                {emailSending
-                  ? <><span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>Sending…</>
-                  : <><span className="material-symbols-outlined text-[16px]">send</span>Send</>
-                }
-              </button>
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -13,6 +13,8 @@ export type GraphSendMailAttachment = {
 
 export type GraphSendMailOptions = {
   to: string
+  /** Comma- or semicolon-separated CC addresses, or an array. */
+  cc?: string | string[]
   subject: string
   /** Plain-text body (used when bodyHtml is not set). */
   bodyText?: string
@@ -72,6 +74,7 @@ export async function sendMailViaGraphWithResult(
 ): Promise<GraphSendMailResult> {
   const {
     to,
+    cc,
     subject,
     bodyText,
     bodyHtml,
@@ -97,20 +100,23 @@ export async function sendMailViaGraphWithResult(
       ? crypto.randomUUID()
       : `nbe-${Date.now()}`)
 
+  const parseCcAddresses = (raw: string | string[] | undefined) => {
+    if (!raw) return []
+    const list = Array.isArray(raw) ? raw : raw.split(/[,;]/)
+    return list.map(e => e.trim()).filter(e => e.includes('@')).map(e => ({ emailAddress: { address: e, name: e } }))
+  }
+
+  const toAddresses = to.split(/[,;]/).map(e => e.trim()).filter(e => e.includes('@')).map(e => ({ emailAddress: { address: e, name: e } }))
+  const ccAddresses = parseCcAddresses(cc)
+
   const payload: Record<string, unknown> = {
     message: {
       subject,
       body: html
         ? { contentType: 'HTML', content: html }
         : { contentType: 'Text', content: text! },
-      toRecipients: [
-        {
-          emailAddress: {
-            address: to,
-            name: to,
-          },
-        },
-      ],
+      toRecipients: toAddresses,
+      ...(ccAddresses.length > 0 ? { ccRecipients: ccAddresses } : {}),
       internetMessageHeaders: [
         {
           name: 'X-NBE-Correlation-Id',
