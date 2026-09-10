@@ -154,7 +154,8 @@ export default function NewQuotesPage() {
   const [safetyEnabled, setSafetyEnabled]= useState(false)
   const [safetyValues,  setSafetyValues] = useState<Record<string, string>>({})
   const [motorEnabled,  setMotorEnabled] = useState(false)
-  const [endUser,       setEndUser]      = useState<'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER' | ''>('')
+  const [endUser,        setEndUser]       = useState<'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER' | ''>('')
+  const [includeSummary, setIncludeSummary] = useState(true)
   const [installation,  setInstallation] = useState('')
   const [demolition,    setDemolition]   = useState('')
   const [equipHire,     setEquipHire]    = useState('')
@@ -413,6 +414,7 @@ export default function NewQuotesPage() {
           page1Disclaimer:  page1Disclaimer  || undefined,
           page2SummaryNote: page2SummaryNote || undefined,
           endUser:          endUser          || undefined,
+          includeSummary,
         }),
       })
 
@@ -956,6 +958,22 @@ export default function NewQuotesPage() {
                   <span className="text-sm font-bold text-white">${grandTotal.toLocaleString('en-AU', { minimumFractionDigits: 2 })}</span>
                 </div>
               )}
+            </div>
+
+            {/* Include Summary Page toggle */}
+            <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-700">Include Summary Page</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {includeSummary
+                    ? 'Page 2 summary will be appended to the quote.'
+                    : 'No summary page — Installation, Demolition, Equipment Hire & Travel shown on page 1 with updated total.'}
+                </p>
+              </div>
+              <button type="button" onClick={() => setIncludeSummary(v => !v)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${includeSummary ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+                <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${includeSummary ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
             </div>
 
             {/* End User — T&C selector */}

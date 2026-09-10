@@ -54,6 +54,7 @@ export type RapidDoorQuotePdfInput = {
   page1Disclaimer?:   string
   page2SummaryNote?:  string
   endUser?:           'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER'
+  includeSummary?:    boolean   // default true — set false to skip page 2 and show extras on page 1
   // Legacy single-door fields
   doorType?:         string
   doorTypeName?:     string
@@ -143,6 +144,8 @@ async function drawPage1(
   grandTotal: number,
   fonts: { reg: PDFFont; bold: PDFFont; display: PDFFont },
   logoImg: Awaited<ReturnType<typeof PDFDocument.prototype.embedPng>> | null,
+  allDoors: DoorLineItem[],
+  includeSummary: boolean,
 ) {
   const { reg, bold, display } = fonts
   const page = pdfDoc.addPage([595.28, 841.89])
@@ -426,6 +429,40 @@ async function drawPage1(
 
   y -= 20
 
+  // ── EXTRA COST ROWS (only when summary page is excluded, last door only) ──
+  let extrasTotal = 0
+  const isLastDoor = doorIndex === totalDoors - 1
+  if (!includeSummary && isLastDoor) {
+    const totalInst  = allDoors.reduce((s, d) => s + (d.installation ?? 0), 0)
+    const totalDemol = allDoors.reduce((s, d) => s + (d.demolition  ?? 0), 0)
+    const totalEquip = allDoors.reduce((s, d) => s + (d.equipHire   ?? 0), 0)
+    const totalTravel= allDoors.reduce((s, d) => s + (d.accTravel   ?? 0), 0)
+    extrasTotal = totalInst + totalDemol + totalEquip + totalTravel
+
+    const extraRows: [string, number][] = [
+      ['Installation',              totalInst],
+      ['Demolition',                totalDemol],
+      ['Equipment Hire',            totalEquip],
+      ['Accommodation & Travel',    totalTravel],
+    ]
+    extraRows.forEach(([label, amt]) => {
+      drawHLine(page, ML, y, CW, 0.4, rgb(0.82, 0.82, 0.82))
+      t(page, label, cItem, y - 11, reg, 8.5, DARK)
+      if (amt > 0) {
+        tCenter(page, '1',         cQtyX, cQtyW, y - 11, reg, 8, DARK)
+        tRight(page, fmtAUD(amt),  cUpR,          y - 11, reg, 8.5, DARK)
+        tRight(page, fmtAUD(amt),  cTotR,         y - 11, reg, 8.5, DARK)
+      } else {
+        tCenter(page, '-',          cQtyX, cQtyW, y - 11, reg, 8, GREY)
+        tRight(page, '(excl.)',     cUpR,          y - 11, reg, 8, GREY)
+        tRight(page, '-',           cTotR,         y - 11, reg, 8, GREY)
+      }
+      y -= 14
+    })
+    drawHLine(page, ML, y, CW, 0.4, rgb(0.82, 0.82, 0.82))
+    y -= 20
+  }
+
   // ── TOTALS + BANK DETAILS ─────────────────────────────────────────────────
   drawHLine(page, ML, y, CW, 0.5, DARK)
   y -= 10
@@ -433,15 +470,17 @@ async function drawPage1(
   const totLR = ML + CW - 70
   const totVR = ML + CW
 
+  const subtotal = grandTotal + extrasTotal
+
   // Bank details — left side, aligned with totals
   t(page, 'BANK DETAILS',                             ML, y,      bold, 8.5, DARK)
   t(page, 'Account Name: NBE Australia Pty Ltd',      ML, y - 14, reg,  8,   DARK)
   t(page, 'BSB: 013-525  |  Account No.: 3473-93755', ML, y - 26, reg,  8,   DARK)
 
-  tRight(page, 'Subtotal',               totLR, y,      reg, 10, DARK)
-  tRight(page, fmtAUD(grandTotal),       totVR, y,      reg, 10, DARK)
-  tRight(page, 'GST (10%)',              totLR, y - 18, reg, 10, DARK)
-  tRight(page, fmtAUD(grandTotal * 0.1), totVR, y - 18, reg, 10, DARK)
+  tRight(page, 'Subtotal',             totLR, y,      reg, 10, DARK)
+  tRight(page, fmtAUD(subtotal),       totVR, y,      reg, 10, DARK)
+  tRight(page, 'GST (10%)',            totLR, y - 18, reg, 10, DARK)
+  tRight(page, fmtAUD(subtotal * 0.1), totVR, y - 18, reg, 10, DARK)
 
   drawHLine(page, ML + CW - 170, y - 26, 170, 0.5)
 
@@ -449,7 +488,7 @@ async function drawPage1(
   const totBoxY = y - 48
   drawRect(page, ML + CW - totBoxW, totBoxY, totBoxW, 22, BLACK)
   t(page,      'TOTAL',                  ML + CW - totBoxW + 8, totBoxY + 6, bold, 11, WHITE)
-  tRight(page, fmtAUD(grandTotal * 1.1), ML + CW,               totBoxY + 6, bold, 11, WHITE)
+  tRight(page, fmtAUD(subtotal * 1.1),   ML + CW,               totBoxY + 6, bold, 11, WHITE)
 
   y = totBoxY - 22
 
@@ -717,13 +756,17 @@ export async function generateRapidDoorQuotePdf(input: RapidDoorQuotePdfInput): 
 
   const fonts = { reg, bold, display }
 
+  const includeSummary = input.includeSummary !== false  // default true
+
   // One page-1 per door (reference layout)
   for (let i = 0; i < doors.length; i++) {
-    await drawPage1(pdfDoc, input, doors[i], i, doors.length, grandTotal, fonts, logoImg)
+    await drawPage1(pdfDoc, input, doors[i], i, doors.length, grandTotal, fonts, logoImg, doors, includeSummary)
   }
 
-  // Final page — summary of all doors
-  await drawPage2(pdfDoc, input, doors, grandTotal, fonts, logoImg)
+  // Final page — summary of all doors (skipped if user opted out)
+  if (includeSummary) {
+    await drawPage2(pdfDoc, input, doors, grandTotal, fonts, logoImg)
+  }
 
   // ── Append T&C pages based on end-user type ───────────────────────────────
   const TC_FILES: Record<string, string> = {
