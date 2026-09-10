@@ -53,6 +53,7 @@ export type RapidDoorQuotePdfInput = {
   imageStyle?:        string
   page1Disclaimer?:   string
   page2SummaryNote?:  string
+  endUser?:           'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER'
   // Legacy single-door fields
   doorType?:         string
   doorTypeName?:     string
@@ -723,6 +724,25 @@ export async function generateRapidDoorQuotePdf(input: RapidDoorQuotePdfInput): 
 
   // Final page — summary of all doors
   await drawPage2(pdfDoc, input, doors, grandTotal, fonts, logoImg)
+
+  // ── Append T&C pages based on end-user type ───────────────────────────────
+  const TC_FILES: Record<string, string> = {
+    CUSTOMER:    'Rapid Door_T&C for CUSTOMERS.pdf',
+    DISTRIBUTOR: 'Rapid Door_T&C for DISTRIBUTOR.pdf',
+    TENDER:      'Rapid Door_T&C for TENDER.pdf',
+  }
+  const tcFile = input.endUser ? TC_FILES[input.endUser] : null
+  if (tcFile) {
+    try {
+      const tcBytes = await readFile(path.join(process.cwd(), 'public', 'documents', tcFile))
+      const tcDoc   = await PDFDocument.load(tcBytes)
+      const indices = tcDoc.getPageIndices()
+      const copied  = await pdfDoc.copyPages(tcDoc, indices)
+      copied.forEach(p => pdfDoc.addPage(p))
+    } catch (e) {
+      console.error('Failed to append T&C:', e)
+    }
+  }
 
   return pdfDoc.save()
 }

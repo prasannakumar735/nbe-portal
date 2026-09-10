@@ -154,6 +154,7 @@ export default function NewQuotesPage() {
   const [safetyEnabled, setSafetyEnabled]= useState(false)
   const [safetyValues,  setSafetyValues] = useState<Record<string, string>>({})
   const [motorEnabled,  setMotorEnabled] = useState(false)
+  const [endUser,       setEndUser]      = useState<'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER' | ''>('')
   const [installation,  setInstallation] = useState('')
   const [demolition,    setDemolition]   = useState('')
   const [equipHire,     setEquipHire]    = useState('')
@@ -231,7 +232,7 @@ export default function NewQuotesPage() {
   function resetDoorForm() {
     setDoorType(''); setDoorModel(''); setOpeningW(''); setOpeningH(''); setFrame(''); setCurtain('')
     setColour(''); setMotorKw(''); setMotorSide(''); setCbSide(''); setQty('1')
-    setUnitPrice(''); setSafetyEnabled(false); setSafetyValues({}); setMotorEnabled(false)
+    setUnitPrice(''); setSafetyEnabled(false); setSafetyValues({}); setMotorEnabled(false); setEndUser('')
     setInstallation(''); setDemolition(''); setEquipHire(''); setAccTravel('')
     setCustomDesc(null); setEditingDesc(false)
   }
@@ -411,6 +412,7 @@ export default function NewQuotesPage() {
           customerPhone: custPhone, customerEmail: custEmail,
           page1Disclaimer:  page1Disclaimer  || undefined,
           page2SummaryNote: page2SummaryNote || undefined,
+          endUser:          endUser          || undefined,
         }),
       })
 
@@ -953,6 +955,35 @@ export default function NewQuotesPage() {
                   <span className="text-xs font-semibold text-white">Combined Total (ex GST)</span>
                   <span className="text-sm font-bold text-white">${grandTotal.toLocaleString('en-AU', { minimumFractionDigits: 2 })}</span>
                 </div>
+              )}
+            </div>
+
+            {/* End User — T&C selector */}
+            <div>
+              <label className={LABEL_CLS}>
+                End User <span className="normal-case font-normal text-slate-400">— selects which T&amp;C document is appended to the quote</span>
+              </label>
+              <div className="grid grid-cols-3 gap-3">
+                {(['CUSTOMER', 'DISTRIBUTOR', 'TENDER'] as const).map(type => (
+                  <button key={type} type="button"
+                    onClick={() => setEndUser(prev => prev === type ? '' : type)}
+                    className={`flex items-center justify-center gap-2 rounded-xl border py-3 text-sm font-semibold transition ${
+                      endUser === type
+                        ? 'border-indigo-500 bg-indigo-600 text-white shadow-sm'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50'
+                    }`}>
+                    <span className="material-symbols-outlined text-[18px]">
+                      {type === 'CUSTOMER' ? 'person' : type === 'DISTRIBUTOR' ? 'local_shipping' : 'gavel'}
+                    </span>
+                    {type.charAt(0) + type.slice(1).toLowerCase()}
+                  </button>
+                ))}
+              </div>
+              {!endUser && (
+                <p className="mt-1.5 text-[11px] text-slate-400 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[13px]">info</span>
+                  No T&amp;C will be appended if no end user is selected.
+                </p>
               )}
             </div>
 
