@@ -17,8 +17,12 @@ function buildHtml(params: {
   senderName: string
   quoteNumber: string
   customerName: string
+  sigImageB64?: string
 }): string {
   const bodyHtml = escapeHtml(params.body).replace(/\n/g, '<br>')
+  const sigImg = params.sigImageB64
+    ? `<p style="margin:12px 0 0"><img src="${params.sigImageB64}" alt="signature" style="max-height:48px;max-width:200px"></p>`
+    : ''
   return `<!DOCTYPE html><html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NBE Quote</title></head>
 <body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
@@ -39,7 +43,8 @@ function buildHtml(params: {
       <tr>
         <td style="padding:8px 28px 28px;color:#6b7280;font-size:13px;line-height:1.6;border-top:1px solid #f3f4f6">
           <p style="margin:16px 0 4px"><strong style="color:#111827">${escapeHtml(params.senderName)}</strong></p>
-          <p style="margin:0">NBE Australia Pty Ltd | ABN 17 007 048 008</p>
+          ${sigImg}
+          <p style="margin:12px 0 0">NBE Australia Pty Ltd | ABN 17 007 048 008</p>
           <p style="margin:0">22A Humeside Drive, Campbellfield VIC 3061</p>
           <p style="margin:4px 0 0">Quote reference: <strong>${escapeHtml(params.quoteNumber)}</strong></p>
         </td>
@@ -64,6 +69,7 @@ export async function POST(request: NextRequest) {
       quoteNumber?: string
       customerName?: string
       attachPdf?: boolean
+      sigImageB64?: string
     }
 
     if (!body.to || !body.subject || !body.emailBody) {
@@ -100,6 +106,7 @@ export async function POST(request: NextRequest) {
       senderName,
       quoteNumber: body.quoteNumber ?? '',
       customerName: body.customerName ?? '',
+      sigImageB64: body.sigImageB64,
     })
 
     await sendMailViaGraph({

@@ -181,7 +181,7 @@ export default function NewQuotesPage() {
     }
     reader.readAsDataURL(file)
   }
-  const [endUser,           setEndUser]           = useState<'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER' | ''>('')
+  const [endUser,           setEndUser]           = useState<'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER' | ''>('CUSTOMER')
   const [includeSummary,    setIncludeSummary]    = useState(true)
   const [individualInstall, setIndividualInstall] = useState(false)
   const [installation,  setInstallation] = useState('')
@@ -285,7 +285,50 @@ export default function NewQuotesPage() {
     })
   }, [])
 
-  // Email modal
+  // ── Signature (persisted in localStorage) ────────────────────────────────────
+  const [sigText,       setSigText]       = useState('')
+  const [sigImageB64,   setSigImageB64]   = useState<string | null>(null)  // base64 data URL
+  const [sigImageName,  setSigImageName]  = useState<string | null>(null)
+  const [includeSig,    setIncludeSig]    = useState(true)
+  const [showSigEditor, setShowSigEditor] = useState(false)
+  const sigFileRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    try {
+      const t = localStorage.getItem('nbe_sig_text')
+      const i = localStorage.getItem('nbe_sig_image')
+      const n = localStorage.getItem('nbe_sig_image_name')
+      const s = localStorage.getItem('nbe_sig_include')
+      if (t) setSigText(t)
+      if (i) setSigImageB64(i)
+      if (n) setSigImageName(n)
+      if (s !== null) setIncludeSig(s !== 'false')
+    } catch { /* ignore */ }
+  }, [])
+
+  function saveSig(text: string, imgB64: string | null, imgName: string | null, include: boolean) {
+    try {
+      localStorage.setItem('nbe_sig_text', text)
+      if (imgB64) localStorage.setItem('nbe_sig_image', imgB64)
+      else localStorage.removeItem('nbe_sig_image')
+      if (imgName) localStorage.setItem('nbe_sig_image_name', imgName)
+      else localStorage.removeItem('nbe_sig_image_name')
+      localStorage.setItem('nbe_sig_include', String(include))
+    } catch { /* ignore */ }
+  }
+
+  function handleSigImageUpload(file: File) {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const b64 = reader.result as string
+      setSigImageB64(b64)
+      setSigImageName(file.name)
+      saveSig(sigText, b64, file.name, includeSig)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // ── Email modal ───────────────────────────────────────────────────────────────
   const [showEmailModal,  setShowEmailModal]  = useState(false)
   const [emailTo,         setEmailTo]         = useState('')
   const [emailCc,         setEmailCc]         = useState('')
@@ -297,9 +340,14 @@ export default function NewQuotesPage() {
   const [emailResult,     setEmailResult]     = useState<{ ok: boolean; msg: string } | null>(null)
 
   function buildDefaultEmailBody() {
-    const cust = custName ? `for ${custName}` : ''
-    const qn = quoteNumber ? ` (${quoteNumber})` : ''
-    return `Please find attached the industrial rapid door quotation${qn} ${cust}.
+    // Only use custAttn (contact person) for the greeting — never the quote number fallback
+    const contactName = custAttn || (custName && custName !== quoteNumber ? custName : '')
+    const greeting = contactName ? `Hi ${contactName},` : 'Hi,'
+    const qnRef = quoteNumber ? `\nQuotation Ref: ${quoteNumber}\n` : ''
+    const companyName = custName && custName !== quoteNumber ? ` for ${custName}` : ''
+    return `${greeting}
+${qnRef}
+Please find attached the industrial rapid door quotation${companyName}.
 
 The quote includes all relevant specifications and pricing as discussed. Please do not hesitate to contact us should you require any further information or clarification.
 
@@ -308,12 +356,13 @@ Kind regards`
 
   function openEmailModal() {
     setEmailTo(custEmail || '')
-    setEmailCc(ccSelf && loggedInEmail ? loggedInEmail : '')
+    setEmailCc('')
     setCcSelf(false)
     setEmailSubject(quoteNumber ? `Rapid Door Quotation – ${quoteNumber}${custName ? ` – ${custName}` : ''}` : 'Rapid Door Quotation')
     setEmailBody(buildDefaultEmailBody())
     setEmailResult(null)
     setAttachPdf(true)
+    setShowSigEditor(false)
     setShowEmailModal(true)
   }
 
@@ -335,7 +384,7 @@ Kind regards`
   function resetDoorForm() {
     setDoorType(''); setDoorModel(''); setOpeningW(''); setOpeningH(''); setFrame(''); setCurtain('')
     setColour(''); setMotorKw(''); setMotorSide(''); setCbSide(''); setQty('1')
-    setUnitPrice(''); setSafetyEnabled(true); setSafetyValues({}); setMotorEnabled(true); setEndUser('')
+    setUnitPrice(''); setSafetyEnabled(true); setSafetyValues({}); setMotorEnabled(true); setEndUser('CUSTOMER')
     setCustomDoorImage(null); setCustomDoorImageName(null)
     setInstallation(''); setDemolition(''); setEquipHire(''); setAccTravel('')
     setCustomDesc(null); setEditingDesc(false)
@@ -389,7 +438,20 @@ Kind regards`
           customerAddress: custAddress || '—',
           customerPostcode: custPostcode, customerPhone: custPhone, customerEmail: custEmail,
           grandTotal,
-          doors: savedDoors.map(d => ({ ...d })),
+          doors: [
+            ...savedDoors,
+            // include the active door if it has enough data to be meaningful
+            ...(doorModel && openingW && openingH ? [{
+              id: 'active',
+              doorType, doorModel, openingW, openingH, frame, curtain, colour,
+              motorKw, motorSide, cbSide,
+              safetyLines: safetySelected,
+              safetyByCategory: { ...safetyValues },
+              qty: qtyN, unitPrice: unitN,
+              installation: instN, demolition: demolN, equipHire: equipN, accTravel: travN,
+              lineTotal, customDesc,
+            }] : []),
+          ],
           includeSummary, individualInstall: !includeSummary ? individualInstall : false,
           endUser: endUser || undefined,
           imageStyle: loadDoorImageStyle(),
@@ -437,7 +499,7 @@ Kind regards`
           id: crypto.randomUUID(),
           doorType: d.doorType, doorModel: d.doorModel ?? '',
           openingW: String(d.openingW ?? ''), openingH: String(d.openingH ?? ''),
-          frame: d.frameRaw ?? '', curtain: d.curtain ?? '', colour: d.colour ?? '',
+          frame: d.frameRaw ?? (d as unknown as SavedDoor).frame ?? '', curtain: d.curtain ?? '', colour: d.colour ?? '',
           motorKw: d.motorKw ?? '', motorSide: d.motorSide ?? '', cbSide: d.cbSide ?? '',
           safetyLines: (d.safetyLines ?? []) as string[], safetyByCategory: (d.safetyByCategory ?? {}) as Record<string, string>,
           qty: Number(d.qty ?? 1), unitPrice: Number(d.unitPrice ?? 0),
@@ -456,7 +518,7 @@ Kind regards`
         setDoorModel(last.doorModel ?? '')
         setOpeningW(String(last.openingW ?? ''))
         setOpeningH(String(last.openingH ?? ''))
-        setFrame(last.frameRaw ?? '')
+        setFrame(last.frameRaw ?? (last as unknown as SavedDoor).frame ?? '')
         setCurtain(last.curtain ?? '')
         setColour(last.colour ?? '')
         setMotorKw(last.motorKw ?? '')
@@ -1655,192 +1717,240 @@ Kind regards`
 
       {/* ── Email Modal ────────────────────────────────────────────────────── */}
       {showEmailModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-6">
+          <div className="w-full sm:max-w-[680px] rounded-t-xl sm:rounded-xl bg-white shadow-[0_8px_40px_rgba(0,0,0,0.18)] flex flex-col max-h-[96vh] sm:max-h-[88vh] overflow-hidden border border-slate-300">
 
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 shrink-0">
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-indigo-600">send</span>
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-800">Send Quote via Email</h3>
-                  <p className="text-xs text-slate-400">Quote will be sent to the client with PDF attached</p>
-                </div>
+            {/* ── Outlook-style title bar ── */}
+            <div className="bg-[#0f3d8c] flex items-center justify-between px-4 py-2 shrink-0 select-none">
+              <span className="text-white text-[13px] font-medium tracking-wide">New Message</span>
+              <div className="flex items-center gap-1">
+                <button type="button" title="Discard" onClick={() => setShowEmailModal(false)}
+                  className="w-7 h-7 flex items-center justify-center rounded hover:bg-white/20 transition text-white/80 hover:text-white">
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                </button>
               </div>
-              <button type="button" onClick={() => setShowEmailModal(false)}
-                className="text-slate-400 hover:text-slate-600 transition">
-                <span className="material-symbols-outlined text-xl">close</span>
-              </button>
             </div>
 
-            {/* Body — scrollable */}
-            <div className="overflow-y-auto px-6 py-5 space-y-4">
+            {/* ── From bar (read-only, Outlook style) ── */}
+            {loggedInEmail && (
+              <div className="flex items-center gap-0 border-b border-slate-200 bg-white px-4 py-2">
+                <span className="text-[12px] text-slate-500 w-14 shrink-0 font-medium">From</span>
+                <span className="text-[13px] text-slate-700 truncate">{loggedInEmail}</span>
+              </div>
+            )}
 
-              {/* PDF attachment chip */}
-              {quoteNumber && (
-                <div className="flex items-center justify-between rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="material-symbols-outlined text-[16px] text-indigo-500 shrink-0">picture_as_pdf</span>
-                    <span className="text-xs font-medium text-indigo-700 truncate">
-                      {quoteNumber}_{(custName || 'CUSTOMER').replace(/[^a-zA-Z0-9\s]/g, ' ').trim().replace(/\s+/g, '_').slice(0, 40)}{endUser ? `_${endUser}` : ''}.pdf
-                    </span>
-                  </div>
-                  <label className="flex items-center gap-1.5 ml-3 shrink-0 cursor-pointer">
-                    <input type="checkbox" checked={attachPdf} onChange={e => setAttachPdf(e.target.checked)}
-                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-                    <span className="text-xs text-slate-600">Attach</span>
-                  </label>
-                </div>
+            {/* ── To ── */}
+            <div className={`flex items-center border-b px-4 py-2 bg-white ${emailTo.trim() && !toAllValid ? 'border-red-300' : 'border-slate-200'}`}>
+              <span className="text-[12px] text-slate-500 w-14 shrink-0 font-medium">To</span>
+              <textarea rows={1} value={emailTo}
+                onChange={e => { setEmailTo(e.target.value); setEmailResult(null) }}
+                placeholder="Recipients"
+                className="flex-1 text-[13px] text-slate-800 bg-transparent outline-none resize-none leading-5 placeholder:text-slate-300" />
+              {emailTo.trim() && !toAllValid && (
+                <span className="material-symbols-outlined text-[14px] text-red-400 shrink-0 ml-1">error</span>
               )}
+            </div>
 
-              {/* To */}
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">
-                  To <span className="text-red-400">*</span>
-                </label>
-                <textarea rows={2} value={emailTo}
-                  onChange={e => { setEmailTo(e.target.value); setEmailResult(null) }}
-                  placeholder="client@company.com, another@company.com"
-                  className={`w-full rounded-xl border py-2.5 px-4 text-sm text-slate-800 shadow-sm outline-none transition resize-none focus:ring-2 focus:ring-indigo-500/20 ${
-                    emailTo.trim() && !toAllValid ? 'border-red-300 focus:border-red-400' : 'border-slate-200 focus:border-indigo-400'
-                  }`} />
-                <p className="mt-1 text-[11px] text-slate-400">Separate multiple addresses with commas or new lines</p>
-                {emailTo.trim() && !toAllValid && (
-                  <p className="mt-1 flex items-center gap-1 text-xs text-red-500">
-                    <span className="material-symbols-outlined text-[13px]">error</span>
-                    One or more email addresses are invalid
-                  </p>
+            {/* ── CC ── */}
+            <div className={`flex items-start border-b px-4 py-2 bg-white ${emailCc.trim() && !ccAllValid ? 'border-red-300' : 'border-slate-200'}`}>
+              <span className="text-[12px] text-slate-500 w-14 shrink-0 font-medium mt-0.5">Cc</span>
+              <div className="flex-1">
+                <textarea rows={1} value={emailCc}
+                  onChange={e => { setEmailCc(e.target.value); setCcSelf(false) }}
+                  placeholder="Carbon copy"
+                  className="w-full text-[13px] text-slate-800 bg-transparent outline-none resize-none leading-5 placeholder:text-slate-300" />
+                {loggedInEmail && (
+                  <label className="mt-1 flex items-center gap-1.5 cursor-pointer w-fit">
+                    <input type="checkbox" checked={ccSelf}
+                      onChange={e => {
+                        setCcSelf(e.target.checked)
+                        if (e.target.checked) {
+                          const existing = emailCc.split(/[,;\n]/).map(x => x.trim()).filter(Boolean)
+                          if (!existing.includes(loggedInEmail)) {
+                            setEmailCc(existing.length ? existing.join(', ') + ', ' + loggedInEmail : loggedInEmail)
+                          }
+                        }
+                      }}
+                      className="rounded-sm border-slate-400 text-[#0f3d8c] focus:ring-blue-500 h-3 w-3" />
+                    <span className="text-[11px] text-slate-400">CC myself</span>
+                  </label>
                 )}
               </div>
+            </div>
 
-              {/* CC */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold uppercase tracking-widest text-slate-400">CC</label>
-                  {loggedInEmail && (
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="checkbox" checked={ccSelf}
-                        onChange={e => {
-                          setCcSelf(e.target.checked)
-                          if (e.target.checked) {
-                            const existing = emailCc.split(/[,;\n]/).map(x => x.trim()).filter(Boolean)
-                            if (!existing.includes(loggedInEmail)) {
-                              setEmailCc(existing.length ? existing.join(', ') + ', ' + loggedInEmail : loggedInEmail)
-                            }
-                          }
-                        }}
-                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-                      <span className="text-xs text-slate-600">Include my email ({loggedInEmail})</span>
-                    </label>
+            {/* ── Subject ── */}
+            <div className="flex items-center border-b border-slate-200 bg-white px-4 py-2">
+              <span className="text-[12px] text-slate-500 w-14 shrink-0 font-medium">Subject</span>
+              <input type="text" value={emailSubject} onChange={e => setEmailSubject(e.target.value)}
+                placeholder="Subject"
+                className="flex-1 text-[13px] text-slate-800 bg-transparent outline-none placeholder:text-slate-300" />
+            </div>
+
+            {/* ── Attachment chip ── */}
+            {quoteNumber && (
+              <div className="px-4 py-2 border-b border-slate-200 bg-slate-50 flex items-center gap-2">
+                <div className="inline-flex items-center gap-1.5 rounded border border-slate-300 bg-white pl-2 pr-2.5 py-1 shadow-sm">
+                  <span className="material-symbols-outlined text-[14px] text-red-500">picture_as_pdf</span>
+                  <span className="text-[11px] text-slate-700 font-medium truncate max-w-[220px]">
+                    {quoteNumber}_{(custName && custName !== quoteNumber ? custName : 'CUSTOMER').replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_').slice(0, 28)}.pdf
+                  </span>
+                </div>
+                <label className="flex items-center gap-1.5 cursor-pointer ml-1">
+                  <input type="checkbox" checked={attachPdf} onChange={e => setAttachPdf(e.target.checked)}
+                    className="rounded-sm border-slate-400 text-[#0f3d8c] focus:ring-blue-500 h-3 w-3" />
+                  <span className="text-[11px] text-slate-500">Attach PDF</span>
+                </label>
+              </div>
+            )}
+
+            {/* ── Compose area ── */}
+            <div className="flex-1 overflow-y-auto bg-white">
+              <textarea value={emailBody} onChange={e => setEmailBody(e.target.value)}
+                className="w-full h-full min-h-[200px] text-[13.5px] text-slate-800 bg-transparent outline-none resize-none leading-relaxed font-[inherit] px-4 py-3 placeholder:text-slate-300"
+                placeholder="Compose your message…" />
+
+              {/* Signature inline divider */}
+              {includeSig && (sigText || sigImageB64) && !showSigEditor && (
+                <div className="border-t border-slate-200 mx-4 pt-3 pb-4">
+                  {sigText && <p className="text-[12px] text-slate-500 whitespace-pre-line leading-relaxed">{sigText}</p>}
+                  {sigImageB64 && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={sigImageB64} alt="sig" className="max-h-10 mt-1" />
                   )}
                 </div>
-                <textarea rows={2} value={emailCc}
-                  onChange={e => { setEmailCc(e.target.value); setCcSelf(false) }}
-                  placeholder="cc@company.com (optional)"
-                  className={`w-full rounded-xl border py-2.5 px-4 text-sm text-slate-800 shadow-sm outline-none transition resize-none focus:ring-2 focus:ring-indigo-500/20 ${
-                    emailCc.trim() && !ccAllValid ? 'border-red-300 focus:border-red-400' : 'border-slate-200 focus:border-indigo-400'
-                  }`} />
-                {emailCc.trim() && !ccAllValid && (
-                  <p className="mt-1 flex items-center gap-1 text-xs text-red-500">
-                    <span className="material-symbols-outlined text-[13px]">error</span>
-                    One or more CC addresses are invalid
-                  </p>
-                )}
-              </div>
+              )}
 
-              {/* Subject */}
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">
-                  Subject <span className="text-red-400">*</span>
-                </label>
-                <input type="text" value={emailSubject} onChange={e => setEmailSubject(e.target.value)}
-                  placeholder="Rapid Door Quotation"
-                  className="w-full rounded-xl border border-slate-200 py-2.5 px-4 text-sm text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
-              </div>
-
-              {/* Body */}
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">
-                  Message <span className="text-red-400">*</span>
-                </label>
-                <textarea rows={7} value={emailBody} onChange={e => setEmailBody(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 py-2.5 px-4 text-sm text-slate-800 shadow-sm outline-none transition resize-y focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
-                <p className="mt-1 text-[11px] text-slate-400">NBE signature and company details are appended automatically.</p>
-              </div>
-
-              {/* Result */}
-              {emailResult && (
-                <div className={`flex items-start gap-2 rounded-lg px-3 py-2.5 text-sm ${
-                  emailResult.ok ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'
-                }`}>
-                  <span className="material-symbols-outlined text-[16px] mt-0.5 shrink-0">
-                    {emailResult.ok ? 'check_circle' : 'error'}
-                  </span>
-                  {emailResult.msg}
+              {/* Signature editor (expanded inline) */}
+              {showSigEditor && (
+                <div className="border-t border-slate-200 mx-4 mt-1 mb-4 pt-3 space-y-3">
+                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest">Edit Signature</p>
+                  <textarea rows={3} value={sigText}
+                    onChange={e => { setSigText(e.target.value); saveSig(e.target.value, sigImageB64, sigImageName, includeSig) }}
+                    placeholder="Your Name&#10;Job Title | NBE Australia&#10;+61 xxx xxx xxx"
+                    className="w-full border border-slate-200 rounded py-2 px-3 text-[13px] text-slate-800 outline-none focus:border-blue-500 resize-none font-[inherit]" />
+                  <div>
+                    {sigImageB64 ? (
+                      <div className="flex items-center gap-3 border border-slate-200 rounded px-3 py-2 bg-slate-50">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={sigImageB64} alt="sig" className="max-h-8 rounded" />
+                        <div>
+                          <p className="text-[11px] text-slate-500 truncate max-w-[160px]">{sigImageName}</p>
+                          <button type="button"
+                            onClick={() => { setSigImageB64(null); setSigImageName(null); saveSig(sigText, null, null, includeSig) }}
+                            className="text-[11px] text-red-500 hover:text-red-700">Remove image</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button type="button" onClick={() => sigFileRef.current?.click()}
+                        className="flex items-center gap-2 border border-dashed border-slate-300 rounded px-3 py-2 text-[12px] text-slate-500 hover:border-blue-400 hover:text-[#0f3d8c] transition">
+                        <span className="material-symbols-outlined text-[14px]">upload</span>
+                        Upload signature image (PNG / JPG)
+                      </button>
+                    )}
+                    <input ref={sigFileRef} type="file" accept="image/png,image/jpeg,image/gif" className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleSigImageUpload(f) }} />
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Footer */}
-            <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4 shrink-0">
-              <p className="text-[11px] text-slate-400">
-                Sent via NBE portal · saved to Sent Items
-              </p>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={() => setShowEmailModal(false)}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition">
-                  Cancel
-                </button>
-                <button type="button" disabled={!canSendEmail}
-                  onClick={async () => {
-                    if (!previewUrl) { setEmailResult({ ok: false, msg: 'Generate the quote PDF first before sending.' }); return }
-                    setEmailSending(true)
-                    setEmailResult(null)
-                    try {
-                      // Convert the local blob URL to base64
-                      const blobRes = await fetch(previewUrl)
-                      const blob = await blobRes.blob()
-                      const pdfBase64 = await new Promise<string>((resolve, reject) => {
-                        const reader = new FileReader()
-                        reader.onload = () => resolve((reader.result as string).split(',')[1])
-                        reader.onerror = reject
-                        reader.readAsDataURL(blob)
-                      })
-                      const safeCust = (custName || 'CUSTOMER').replace(/[^a-zA-Z0-9\s]/g, ' ').trim().replace(/\s+/g, '_').slice(0, 50)
-                      const fileName = `${quoteNumber}_${safeCust}${endUser ? `_${endUser}` : ''}.pdf`
-
-                      const res = await fetch('/api/quotes/rapid-door/email', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          to: emailTo,
-                          cc: emailCc || undefined,
-                          subject: emailSubject,
-                          emailBody,
-                          pdfBase64: attachPdf ? pdfBase64 : undefined,
-                          fileName: attachPdf ? fileName : undefined,
-                          attachPdf,
-                          quoteNumber,
-                          customerName: custName || undefined,
-                        }),
-                      })
-                      const json = await res.json()
-                      if (!res.ok) throw new Error(json.error || 'Send failed')
-                      const sentCount = (json.sent_to as string[]).length
-                      setEmailResult({ ok: true, msg: `Quote sent successfully to ${sentCount} recipient${sentCount > 1 ? 's' : ''}.` })
-                    } catch (e) {
-                      setEmailResult({ ok: false, msg: e instanceof Error ? e.message : 'Failed to send. Please try again.' })
-                    } finally {
-                      setEmailSending(false)
-                    }
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40">
-                  {emailSending
-                    ? <><span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>Sending…</>
-                    : <><span className="material-symbols-outlined text-[16px]">send</span>Send</>
-                  }
-                </button>
+            {/* ── Result banner ── */}
+            {emailResult && (
+              <div className={`flex items-start gap-2 px-4 py-2.5 text-[13px] font-medium border-t ${
+                emailResult.ok
+                  ? 'bg-green-50 border-green-200 text-green-700'
+                  : 'bg-red-50 border-red-200 text-red-700'
+              }`}>
+                <span className="material-symbols-outlined text-[15px] mt-0.5 shrink-0">
+                  {emailResult.ok ? 'check_circle' : 'error'}
+                </span>
+                {emailResult.msg}
               </div>
+            )}
+
+            {/* ── Outlook-style toolbar footer ── */}
+            <div className="border-t border-slate-200 bg-[#f3f2f1] px-4 py-2.5 flex items-center gap-2 shrink-0">
+              {/* Send button — left, Outlook style */}
+              <button type="button" disabled={!canSendEmail}
+                onClick={async () => {
+                  if (!previewUrl) { setEmailResult({ ok: false, msg: 'Generate the quote PDF first before sending.' }); return }
+                  setEmailSending(true); setEmailResult(null)
+                  try {
+                    const blobRes = await fetch(previewUrl)
+                    const blob = await blobRes.blob()
+                    const pdfBase64 = await new Promise<string>((resolve, reject) => {
+                      const reader = new FileReader()
+                      reader.onload = () => resolve((reader.result as string).split(',')[1])
+                      reader.onerror = reject
+                      reader.readAsDataURL(blob)
+                    })
+                    const safeCust = (custName && custName !== quoteNumber ? custName : 'CUSTOMER').replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_').slice(0, 50)
+                    const fileName = `${quoteNumber}_${safeCust}${endUser ? `_${endUser}` : ''}.pdf`
+                    let fullBody = emailBody
+                    if (includeSig && sigText) fullBody += `\n\n${sigText}`
+                    const res = await fetch('/api/quotes/rapid-door/email', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        to: emailTo, cc: emailCc || undefined,
+                        subject: emailSubject, emailBody: fullBody,
+                        pdfBase64: attachPdf ? pdfBase64 : undefined,
+                        fileName: attachPdf ? fileName : undefined,
+                        attachPdf, quoteNumber,
+                        customerName: custName && custName !== quoteNumber ? custName : undefined,
+                        sigImageB64: includeSig && sigImageB64 ? sigImageB64 : undefined,
+                      }),
+                    })
+                    const json = await res.json()
+                    if (!res.ok) throw new Error(json.error || 'Send failed')
+                    const sentCount = (json.sent_to as string[]).length
+                    setEmailResult({ ok: true, msg: `Sent to ${sentCount} recipient${sentCount > 1 ? 's' : ''} successfully.` })
+                  } catch (e) {
+                    setEmailResult({ ok: false, msg: e instanceof Error ? e.message : 'Failed to send. Please try again.' })
+                  } finally {
+                    setEmailSending(false)
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 rounded bg-[#0f3d8c] hover:bg-[#1e40af] px-4 py-1.5 text-[13px] font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-40 shadow-sm">
+                {emailSending
+                  ? <><span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>Sending…</>
+                  : <><span className="material-symbols-outlined text-[14px]">send</span>Send</>
+                }
+              </button>
+
+              {/* Divider */}
+              <div className="w-px h-5 bg-slate-300 mx-1" />
+
+              {/* Signature toggle */}
+              <button type="button" title={includeSig ? 'Signature included' : 'Signature excluded'}
+                onClick={() => { setIncludeSig(v => { saveSig(sigText, sigImageB64, sigImageName, !v); return !v }) }}
+                className={`flex items-center gap-1 rounded px-2 py-1.5 text-[12px] transition font-medium ${
+                  includeSig ? 'bg-white text-[#0f3d8c] border border-slate-300 shadow-sm' : 'text-slate-500 hover:bg-white hover:border hover:border-slate-300'
+                }`}>
+                <span className="material-symbols-outlined text-[15px]">draw</span>
+                Sig
+              </button>
+
+              {/* Edit signature */}
+              <button type="button"
+                onClick={() => setShowSigEditor(v => !v)}
+                className={`flex items-center gap-1 rounded px-2 py-1.5 text-[12px] transition font-medium ${
+                  showSigEditor ? 'bg-white text-[#0f3d8c] border border-slate-300 shadow-sm' : 'text-slate-500 hover:bg-white hover:border hover:border-slate-300'
+                }`}>
+                <span className="material-symbols-outlined text-[15px]">edit</span>
+                {showSigEditor ? 'Done' : 'Edit sig'}
+              </button>
+
+              {/* Spacer */}
+              <div className="flex-1" />
+
+              {/* Discard */}
+              <button type="button" onClick={() => setShowEmailModal(false)}
+                title="Discard"
+                className="flex items-center gap-1 rounded px-2 py-1.5 text-[12px] text-slate-500 hover:bg-white hover:border hover:border-slate-300 transition font-medium">
+                <span className="material-symbols-outlined text-[15px]">delete</span>
+                Discard
+              </button>
             </div>
           </div>
         </div>

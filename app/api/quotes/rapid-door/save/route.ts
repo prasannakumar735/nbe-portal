@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
         .from('quotes')
         .insert({
           quote_number:       payload.quoteNumber,
-          customer_name:      payload.customerName || null,
+          customer_name:      payload.customerName || payload.quoteNumber,
           site_address:       payload.customerAddress || null,
           service_date:       payload.date,
           valid_until:        payload.validUntil,
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
       // Regenerate — update totals on the existing quotes row
       const { error: updateErr } = await supabase
         .from('quotes')
-        .update({ subtotal, gst, total, customer_name: payload.customerName || null, updated_at: new Date().toISOString() })
+        .update({ subtotal, gst, total, customer_name: payload.customerName || payload.quoteNumber, updated_at: new Date().toISOString() })
         .eq('id', quoteId)
 
       if (updateErr) throw updateErr
@@ -103,7 +103,10 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const auth = unauthorizedOrForbiddenResponse(error)
     if (auth) return auth
-    const message = error instanceof Error ? error.message : 'Failed to save quote.'
+    const message =
+      error instanceof Error ? error.message :
+      (error && typeof error === 'object' && 'message' in error) ? String((error as { message: unknown }).message) :
+      'Failed to save quote.'
     return NextResponse.json({ error: message }, { status: 400 })
   }
 }
