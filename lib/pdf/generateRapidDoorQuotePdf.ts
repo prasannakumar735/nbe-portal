@@ -444,16 +444,12 @@ async function drawPage1(
 
   }
 
-  // Blank ruled lines after table (reference style)
-  const blankRowH = 14
-  const blankRowCount = 4
-  for (let i = 0; i < blankRowCount; i++) {
-    drawHLine(page, ML, y, CW, 0.4, rgb(0.82, 0.82, 0.82))
-    y -= blankRowH
-  }
+  // One blank ruled line after table
+  drawHLine(page, ML, y, CW, 0.4, rgb(0.82, 0.82, 0.82))
+  y -= 14
   drawHLine(page, ML, y, CW, 0.4, rgb(0.82, 0.82, 0.82))
 
-  y -= 20
+  y -= 16
 
   // ── EXTRA COST ROWS (when summary page is excluded) ──────────────────────
   let extrasTotal = 0
