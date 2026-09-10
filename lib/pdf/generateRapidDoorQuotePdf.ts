@@ -129,7 +129,7 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): 
   return lines
 }
 
-// ── Page 1: Customer-facing quote (reference style) ───────────────────────────
+// ── Page 1: Brochure-style door specification sheet ──────────────────────────
 
 async function drawPage1(
   pdfDoc: PDFDocument,
@@ -147,301 +147,188 @@ async function drawPage1(
   const ML = 36, MR = 36, CW = PW - ML - MR
   let y = 800
 
-  // For multi-door, each page shows only that door's detail
-  const doors = [door]
-  const firstDoor = door
+  const d = door
+  const doorRef = `DOOR D${String(doorIndex + 1).padStart(2, '0')}`
 
   // ── HEADER ────────────────────────────────────────────────────────────────
-  const logoH = 50
+  const logoH = 44
   if (logoImg) {
     const { width: lw, height: lh } = logoImg
     page.drawImage(logoImg, { x: ML, y: y - logoH, width: (lw / lh) * logoH, height: logoH })
   } else {
     t(page, 'NBE',       ML, y - 22, bold, 26, BLACK)
-    t(page, 'australia', ML, y - 44, bold, 15, BRAND)
+    t(page, 'australia', ML, y - 40, bold, 15, BRAND)
   }
-  t(page, 'ABN: 17 007 048 008', ML, y - logoH - 10, reg, 9, DARK)
+  t(page, 'ABN: 17 007 048 008', ML, y - logoH - 8, reg, 8, GREY)
 
-  // "QUOTE" large
-  t(page, 'QUOTE', PW - MR - display.widthOfTextAtSize('QUOTE', 34), y - 26, display, 34, BLACK)
+  // "QUOTE" right-aligned
+  t(page, 'QUOTE', PW - MR - display.widthOfTextAtSize('QUOTE', 32), y - 28, display, 32, BLACK)
 
-  // Subtitle: INDUSTRIAL RAPID DOOR | PE01  (+ Door X of N for multi-door)
-  const doorLabel = totalDoors > 1 ? `  (Door ${doorIndex + 1} of ${totalDoors})` : ''
-  const subtitle = `INDUSTRIAL RAPID DOOR  |  ${firstDoor.doorType}${doorLabel}`
-  t(page, subtitle, PW - MR - bold.widthOfTextAtSize(subtitle, 13), y - 52, bold, 13, BRAND)
+  // Subtitle: INDUSTRIAL RAPID DOOR (RAPID in bold)
+  const s1 = 'INDUSTRIAL ', s2 = 'RAPID', s3 = ' DOOR'
+  const subSz = 11
+  const subX = PW - MR - reg.widthOfTextAtSize(s1, subSz) - bold.widthOfTextAtSize(s2, subSz) - reg.widthOfTextAtSize(s3, subSz)
+  t(page, s1, subX,                                              y - 50, reg,  subSz, DARK)
+  t(page, s2, subX + reg.widthOfTextAtSize(s1, subSz),          y - 50, bold, subSz, DARK)
+  t(page, s3, subX + reg.widthOfTextAtSize(s1, subSz) + bold.widthOfTextAtSize(s2, subSz), y - 50, reg, subSz, DARK)
 
-  y -= logoH + 22
-  drawHLine(page, ML, y, CW, 1, DARK)
-  y -= 16
+  y -= logoH + 16
 
-  // ── COMPANY INFO + DATE BLOCK ─────────────────────────────────────────────
-  t(page, 'NBE AUSTRALIA',                                      ML, y,      bold, 8.5, DARK)
-  t(page, '22A Humeside Dr, Campbellfield VIC 3061, Australia', ML, y - 12, reg,  8,   DARK)
-  t(page, 'accountsreceivable@nbeaustralia.com.au',             ML, y - 24, reg,  8,   DARK)
-  t(page, 'www.nbeaustralia.com.au',                            ML, y - 36, reg,  8,   DARK)
+  // Brand purple rule
+  page.drawLine({ start: { x: ML, y }, end: { x: PW - MR, y }, thickness: 2, color: BRAND })
+  y -= 18
 
-  const dateLabelX = ML + CW - 130
-  const dateRows: [string, string][] = [
-    ['DATE',        input.date],
-    ['VALID UNTIL', input.validUntil],
-    ['QUOTE NO.',   input.quoteNumber],
+  // ── DOOR IDENTIFIER ───────────────────────────────────────────────────────
+  t(page, doorRef, ML, y, bold, 16, BRAND)
+  y -= 22
+
+  const doorTitle = `${d.doorType}  |  ${d.doorTypeName.toUpperCase()}`
+  t(page, doorTitle, ML, y, bold, 14, DARK)
+  y -= 20
+
+  t(page, `Opening: ${d.openingW} W × ${d.openingH} H mm   |   Quantity: ${d.qty}`, ML, y, reg, 10, DARK)
+  y -= 18
+
+  // ── TWO-COLUMN BODY ───────────────────────────────────────────────────────
+  const leftColW  = Math.floor(CW * 0.49)
+  const rightColX = ML + leftColW + 10
+  const rightColW = CW - leftColW - 10
+  const twoColTopY = y
+
+  // ─ LEFT: DOOR SPECIFICATION TABLE ────────────────────────────────────────
+  page.drawRectangle({ x: ML, y: y - 20, width: leftColW, height: 20, color: rgb(0.18, 0.18, 0.44) })
+  t(page, 'DOOR SPECIFICATION', ML + 8, y - 14, bold, 9, WHITE)
+  y -= 20
+
+  const isPresent = (v: string | undefined) => !!v && v !== '-'
+
+  const motorSideLabel = (() => {
+    const ms = (d.motorSide ?? '').toUpperCase()
+    if (ms === 'RHD') return 'Right Hand Drive (RHD)'
+    if (ms === 'LHD') return 'Left Hand Drive (LHD)'
+    return d.motorSide || ''
+  })()
+
+  const specRows: [string, string][] = [
+    ['Door Reference',               doorRef],
+    ['Model',                        `${d.doorType} – ${d.doorTypeName}`],
+    ['Opening Size (Clear)',          `${d.openingW} W × ${d.openingH} H mm`],
+    ...(d.externalW ? [['External Size', `${d.externalW} W × ${d.externalH} H mm`] as [string,string]] : []),
+    ['Frame',                        d.frame],
+    ['Curtain',                      d.curtain],
+    ...(d.colour ? [['Curtain Colour', d.colour] as [string,string]] : []),
+    ['Safety Edge',                  'Soft'],
+    ...(d.motorKw ? [['Motor', `${d.motorKw} kW`] as [string,string]] : []),
+    ...(motorSideLabel ? [['Motor Side', motorSideLabel] as [string,string]] : []),
+    ...(isPresent(d.safetyByCategory?.safety) ? [['Control Box', d.safetyByCategory!.safety] as [string,string]] : []),
+    ['Hazard Lamp',                  'Included'],
+    ['Activation – Push Button',        isPresent(d.safetyByCategory?.pushButton)    ? 'Included' : 'Excluded'],
+    ['Activation – Radar',              isPresent(d.safetyByCategory?.radar)          ? 'Included' : 'Excluded'],
+    ['Activation – Remote Control',     isPresent(d.safetyByCategory?.remoteControl)  ? 'Included' : 'Excluded'],
+    ['Activation – Induction Loop',     isPresent(d.safetyByCategory?.inductLoop)     ? 'Included' : 'Excluded'],
+    ['Activation – Contactless Exit',   isPresent(d.safetyByCategory?.swipe)          ? 'Included' : 'Excluded'],
   ]
-  dateRows.forEach(([label, val], i) => {
-    t(page,      label, dateLabelX,  y - i * 14, bold, 8.5, DARK)
-    tRight(page, val,   ML + CW,     y - i * 14, reg,  8.5, DARK)
-  })
-  y -= 56
 
-  // ── CUSTOMER HEADER BAR ───────────────────────────────────────────────────
-  const STRIP_H = 18
-  const custColW = CW * 0.44   // header bar only covers the customer text column
-  drawRect(page, ML, y - STRIP_H, custColW, STRIP_H, BLACK)
-  t(page, 'CUSTOMER', ML + 8, y - 12, bold, 9, WHITE)
-  y -= STRIP_H
+  const SPEC_ROW_H = 18
+  const labelX  = ML + 6
+  const valueX  = ML + leftColW * 0.50
 
-  // ── CUSTOMER DETAILS (left) + DOOR IMAGE (right) ──────────────────────────
-  const custStartY = y
-  const custLabelX = ML + 8
-  const custValueX = ML + 72
-  const custRows: [string, string][] = [
-    ['Customer',  input.customerName     || '—'],
-    ['Attention', input.customerAttn     || '—'],
-    ['Address',   input.customerAddress  || '—'],
-    ['Location',  input.customerPostcode || '—'],
-    ['Phone',     input.customerPhone    || '—'],
-    ['Email',     input.customerEmail    || '—'],
-  ]
-  const ROW_H = 13  // keep text spacing compact
-  custRows.forEach(([label, val], i) => {
-    t(page, label, custLabelX, y - 16 - i * ROW_H, bold, 8, DARK)  // 16px top gap under header
-    t(page, val,   custValueX, y - 16 - i * ROW_H, reg,  8, DARK)
+  specRows.forEach(([label, value], i) => {
+    const rowY = y - i * SPEC_ROW_H
+    if (i % 2 === 0) {
+      page.drawRectangle({ x: ML, y: rowY - SPEC_ROW_H, width: leftColW, height: SPEC_ROW_H, color: rgb(0.96, 0.96, 0.98) })
+    }
+    t(page, label, labelX, rowY - 12, bold, 7.5, DARK)
+    const isExcl = value === 'Excluded'
+    t(page, value, valueX, rowY - 12, reg, 8, isExcl ? GREY : DARK)
   })
 
-  // Door image — right column, matching reference position (~58% across content)
-  const imgColX = ML + CW * 0.58  // matches reference horizontal start
-  const imgColW = CW * 0.42       // ~220pt wide column
-  const custSectionH = custRows.length * ROW_H + 24
+  // Bottom border
+  const specBottom = y - specRows.length * SPEC_ROW_H
+  page.drawLine({ start: { x: ML, y: specBottom }, end: { x: ML + leftColW, y: specBottom }, thickness: 0.5, color: rgb(0.78, 0.78, 0.85) })
 
-  // Pre-compute image dimensions so we can size the section correctly
-  let imgDrawH = 0
-  let imgDrawW = 0
-  let loadedDoorImg: Awaited<ReturnType<typeof PDFDocument.prototype.embedPng>> | null = null
-  if (firstDoor.doorImagePath) {
+  // ─ RIGHT: IMAGE + KEY FEATURES + PRICE ───────────────────────────────────
+  let ry = twoColTopY
+
+  // Door image
+  let actualImgH = 0
+  if (d.doorImagePath) {
     try {
-      const imgBytes = await readFile(firstDoor.doorImagePath)
-      loadedDoorImg = await pdfDoc.embedPng(imgBytes)
-      const { width: dw, height: dh } = loadedDoorImg
-      const maxW = imgColW - 4
-      const maxH = 190
-      imgDrawW = maxW
-      imgDrawH = (dh / dw) * imgDrawW
-      if (imgDrawH > maxH) { imgDrawH = maxH; imgDrawW = (dw / dh) * imgDrawH }
+      const imgBytes = await readFile(d.doorImagePath)
+      const doorImg  = await pdfDoc.embedPng(imgBytes)
+      const { width: dw, height: dh } = doorImg
+      const maxW = rightColW, maxH = 218
+      let drawW = maxW, drawH = (dh / dw) * drawW
+      if (drawH > maxH) { drawH = maxH; drawW = (dw / dh) * drawH }
+      page.drawImage(doorImg, {
+        x: rightColX + (rightColW - drawW) / 2,
+        y: ry - drawH,
+        width: drawW, height: drawH,
+      })
+      actualImgH = drawH
     } catch { /* no image */ }
   }
+  ry -= actualImgH + 4
 
-  // Section height = whichever is taller: customer text or image
-  const sectionH = Math.max(custSectionH, imgDrawH + 8)
+  // "Indicative image" caption
+  t(page, 'Indicative image', rightColX, ry, reg, 7.5, GREY)
+  ry -= 20
 
-  if (loadedDoorImg && imgDrawH > 0) {
-    // Top-align image within the section
-    page.drawImage(loadedDoorImg, {
-      x: imgColX + (imgColW - imgDrawW) / 2,
-      y: y - imgDrawH,
-      width: imgDrawW,
-      height: imgDrawH,
-    })
-  }
+  // KEY FEATURES heading + rule
+  t(page, 'KEY FEATURES', rightColX, ry, bold, 11, BRAND)
+  ry -= 14
+  page.drawLine({ start: { x: rightColX, y: ry }, end: { x: rightColX + rightColW, y: ry }, thickness: 0.5, color: BRAND })
+  ry -= 14
 
-  y -= sectionH + 8
+  // Feature rows
+  const includedControls = [
+    isPresent(d.safetyByCategory?.pushButton)   ? 'push button' : '',
+    isPresent(d.safetyByCategory?.radar)         ? 'radar' : '',
+    isPresent(d.safetyByCategory?.remoteControl) ? 'remote control' : '',
+  ].filter(Boolean)
+  const controlsDesc = includedControls.length > 0 ? includedControls.join(', ') : 'Standard controls'
 
-  // ── TABLE ─────────────────────────────────────────────────────────────────
-  // Columns
-  const cNo    = ML
-  const cItem  = ML + 18
-  const cDesc  = ML + 130
-  const cQtyX  = ML + CW - 162  // left of QTY col
-  const cQtyW  = 28
-  const cUpR   = ML + CW - 65   // right edge of UNIT PRICE
-  const cTotR  = ML + CW        // right edge of TOTAL
+  const features: [string, string][] = [
+    ['High speed operation',     d.motorKw ? `${d.motorKw} kW variable frequency drive` : 'Variable frequency drive'],
+    ['Robust and reliable',      `${d.frame} frame with ${d.curtain} curtain`],
+    ['Enhanced safety',          'Soft safety edge and hazard lamp included'],
+    ['Flexible control options', controlsDesc],
+  ]
 
-  // Header row
-  const TH = 18
-  drawRect(page, ML, y - TH, CW, TH, BLACK)
-  t(page,      'NO',          cNo + 2,  y - 12, bold, 8, WHITE)
-  t(page,      'ITEM',        cItem,    y - 12, bold, 8, WHITE)
-  t(page,      'DESCRIPTION', cDesc,    y - 12, bold, 8, WHITE)
-  tCenter(page, 'QTY',        cQtyX, cQtyW, y - 12, bold, 8, WHITE)
-  tRight(page, 'UNIT PRICE',  cUpR,     y - 12, bold, 8, WHITE)
-  tRight(page, 'TOTAL',       cTotR,    y - 12, bold, 8, WHITE)
-  y -= TH
+  const FEAT_ROW_H = 34
+  const ICON_SZ    = 18
+  const ICON_GAP   = 10
 
-  // Sub-header
-  drawRect(page, ML, y - 13, CW, 13, rgb(0.93, 0.93, 0.93))
-  t(page,      '#',      cNo + 2,   y - 9, reg, 7, GREY)
-  t(page,      'WIDTH',  cDesc + 30, y - 9, reg, 7, GREY)
-  t(page,      'HEIGHT', cDesc + 140, y - 9, reg, 7, GREY)
-  tCenter(page, '#',     cQtyX, cQtyW, y - 9, reg, 7, GREY)
-  tRight(page,  '$',     cUpR,   y - 9, reg, 7, GREY)
-  tRight(page,  '$$',    cTotR,  y - 9, reg, 7, GREY)
-  y -= 13
-
-  // ── DOOR ROWS ─────────────────────────────────────────────────────────────
-  for (let di = 0; di < doors.length; di++) {
-    const d = doors[di]
-    if (di > 0) { drawHLine(page, ML, y, CW, 0.5, rgb(0.55, 0.55, 0.55)); y -= 4 }
-
-    // Category row: "Industrial Door   Rapid Roller Door (Performance | PE01)"
-    const shortName = d.doorTypeName.replace(/ Rapid Door$/, '').replace(/ Door$/, '')
-    const catDesc = `Rapid Roller Door (${shortName} | ${d.doorType})`
-    drawRect(page, ML, y - 17, CW, 17, rgb(0.97, 0.97, 0.97))
-    t(page, 'Industrial Door', cItem, y - 11, reg,  9,  DARK)
-    t(page, catDesc,           cDesc, y - 11, bold, 11, DARK)
-    y -= 17
-
-    // Row 1: Width × Height
-    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
-    const exW = d.externalW ?? ''
-    const exH = d.externalH ?? ''
-    t(page, '1.',             cNo + 2,  y - 11, reg, 8.5, DARK)
-    t(page, 'Width × Height', cItem,    y - 11, reg, 8.5, DARK)
-    t(page, 'Clear:',         cDesc,    y - 11, reg, 8.5, DARK)
-    t(page, d.openingW,       cDesc + 38, y - 11, reg, 8.5, DARK)
-    t(page, 'x',              cDesc + 88, y - 11, reg, 8.5, DARK)
-    t(page, d.openingH,       cDesc + 98, y - 11, reg, 8.5, DARK)
-    if (exW) {
-      t(page, 'External:',   cDesc,    y - 22, reg, 8, GREY)
-      t(page, exW,           cDesc + 38, y - 22, reg, 8, GREY)
-      t(page, 'x',           cDesc + 88, y - 22, reg, 8, GREY)
-      t(page, exH,           cDesc + 98, y - 22, reg, 8, GREY)
-    }
-    tCenter(page, String(d.qty),          cQtyX, cQtyW, y - 11, reg, 8.5, DARK)
-    tRight(page,  fmtAUD(d.unitPrice),    cUpR,          y - 11, reg, 8.5, DARK)
-    tRight(page,  fmtAUD(d.qty * d.unitPrice), cTotR,    y - 11, bold, 8.5, DARK)
-    y -= 32
-
-    // Row 2: Door Frame
-    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
-    t(page, '2.',          cNo + 2, y - 11, reg, 8.5, DARK)
-    t(page, 'Door Frame',  cItem,   y - 11, reg, 8.5, DARK)
-    const frameDisplay = d.frameRaw ?? d.frame
-    t(page, frameDisplay,  cDesc,   y - 11, reg, 8.5, DARK)
-    if (d.motorSide) t(page, `- ${d.motorSide}`, cDesc + reg.widthOfTextAtSize(frameDisplay, 8.5) + 6, y - 11, reg, 8.5, DARK)
-    y -= 18
-
-    // Row 3: Curtain
-    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
-    t(page, '3.',      cNo + 2, y - 11, reg, 8.5, DARK)
-    t(page, 'Curtain', cItem,   y - 11, reg, 8.5, DARK)
-    t(page, d.curtain, cDesc,   y - 11, reg, 8.5, DARK)
-    if (d.colour) t(page, `- ${d.colour}`, cDesc + reg.widthOfTextAtSize(d.curtain, 8.5) + 6, y - 11, reg, 8.5, DARK)
-    y -= 18
-
-    // Row 4: Safety Edge
-    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
-    t(page, '4.',           cNo + 2, y - 11, reg,  8.5, DARK)
-    t(page, 'Safety Edge',  cItem,   y - 11, reg,  8.5, DARK)
-    t(page, 'SOFT',         cDesc,   y - 11, bold, 8.5, DARK)
-    if (d.colour) t(page, `- ${d.colour}`, cDesc + bold.widthOfTextAtSize('SOFT', 8.5) + 6, y - 11, reg, 8.5, DARK)
-    y -= 18
-
-    // Row 5: Drive System
-    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
-    t(page, '5.',            cNo + 2, y - 11, reg,  8.5, DARK)
-    t(page, 'Drive System',  cItem,   y - 11, reg,  8.5, DARK)
-    t(page, 'VF Drive:',     cDesc,   y - 11, reg,  8.5, DARK)
-    if (d.motorKw) {
-      const vfW = reg.widthOfTextAtSize('VF Drive:', 8.5) + 6
-      t(page, d.motorKw,  cDesc + vfW,       y - 11, bold, 10, DARK)
-      t(page, ' up to',   cDesc + vfW + bold.widthOfTextAtSize(d.motorKw, 10) + 2, y - 11, reg, 8.5, DARK)
-    }
-    y -= 18
-
-    // Row 6: Safety Features
-    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
-    t(page, '6.',              cNo + 2, y - 11, reg, 8.5, DARK)
-    t(page, 'Safety Features', cItem,   y - 11, reg, 8.5, DARK)
-    const safetyVal = d.safetyByCategory?.safety ?? ''
-    if (safetyVal && safetyVal !== '-') {
-      t(page, safetyVal,     cDesc,    y - 11, bold, 10, DARK)
-      tCenter(page, '1',     cQtyX, cQtyW, y - 11, reg, 8, DARK)
-      tRight(page, '(incl.)', cUpR,   y - 11, reg,  8, GREY)
-    }
-    t(page, 'Hazard Lamp',   cDesc,    y - 22, reg, 8.5, DARK)
-    tCenter(page, '1',       cQtyX, cQtyW, y - 22, reg, 8, DARK)
-    tRight(page, '(incl.)',  cUpR,     y - 22, reg, 8, GREY)
-    y -= 30
-
-    // Row 7: Detection — always show all 5 items
-    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
-    t(page, '7.',        cNo + 2, y - 11, reg, 8.5, DARK)
-    t(page, 'Detection', cItem,   y - 11, reg, 8.5, DARK)
-    const allDetection: [string, string, string][] = [
-      ['a', 'Push Button',            d.safetyByCategory?.pushButton    ?? ''],
-      ['b', 'Radar (1set)',           d.safetyByCategory?.radar         ?? ''],
-      ['c', 'Remote Control',        d.safetyByCategory?.remoteControl  ?? ''],
-      ['d', 'Induction Loop',        d.safetyByCategory?.inductLoop     ?? ''],
-      ['e', 'Contactless Exit Button', d.safetyByCategory?.swipe        ?? ''],
-    ]
-    allDetection.forEach(([letter, label, val], i) => {
-      const selected = val && val !== '-'
-      t(page, `${letter}:`, cDesc,      y - 11 - i * 13, reg, 8.5, DARK)
-      t(page, label,        cDesc + 16, y - 11 - i * 13, reg, 8.5, DARK)
-      tCenter(page, selected ? '1' : '-', cQtyX, cQtyW, y - 11 - i * 13, reg, 8, DARK)
-      tRight(page, selected ? '(incl.)' : '(excl.)', cUpR, y - 11 - i * 13, reg, 8, selected ? GREY : rgb(0.6, 0.6, 0.6))
-    })
-    y -= allDetection.length * 13 + 8
-
-  }
-
-  // ── EMPTY PLACEHOLDER ROWS (matching reference) ───────────────────────────
-  const emptyRowH = 16
-  const emptyRowCount = 6
-  for (let i = 0; i < emptyRowCount; i++) {
-    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
-    y -= emptyRowH
-  }
-  drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
-  y -= 8
-
-  // ── TOTALS ────────────────────────────────────────────────────────────────
-  drawHLine(page, ML, y, CW, 0.5, DARK)
-  y -= 6
-
-  const totLR = ML + CW - 70
-  const totVR = ML + CW
-
-  tRight(page, 'Subtotal',               totLR, y,      bold, 10, DARK)
-  tRight(page, fmtAUD(grandTotal),       totVR, y,      reg,  10, DARK)
-  tRight(page, 'GST (10%)',              totLR, y - 18, bold, 10, DARK)
-  tRight(page, fmtAUD(grandTotal * 0.1), totVR, y - 18, reg,  10, DARK)
-
-  drawHLine(page, ML + CW - 170, y - 26, 170, 0.5)
-
-  const totBoxW = 170
-  const totBoxY = y - 48
-  drawRect(page, ML + CW - totBoxW, totBoxY, totBoxW, 22, BLACK)
-  t(page,      'TOTAL',                  ML + CW - totBoxW + 8, totBoxY + 6, bold, 11, WHITE)
-  tRight(page, fmtAUD(grandTotal * 1.1), ML + CW,               totBoxY + 6, bold, 11, WHITE)
-
-  y = totBoxY - 22
-
-  // ── CLIENT SIGNATURE BAR ──────────────────────────────────────────────────
-  const sigBarH = 20
-  const sigY = y - sigBarH
-  drawRect(page, ML, sigY, CW, sigBarH, BLACK)
-  const third = CW / 3
-  t(page, 'Client Signature', ML + 8,              sigY + 6, bold, 9, WHITE)
-  tCenter(page, 'Printed Name', ML + third, third, sigY + 6, bold, 9, WHITE)
-  tCenter(page, 'Date',  ML + third * 2, third,    sigY + 6, bold, 9, WHITE)
-  y = sigY - 14
-
-  // ── FOOTER TERMS ─────────────────────────────────────────────────────────
-  const terms = 'This quotation is based on the NBE Standard Door comprising a galvanized frame, PVC curtain (900 g/m²), and a zinc-coated control box (RAL 7035). Optional extras (e.g. powder coating, light curtain, remote control, radar, traffic light, induction loop, contactless exit button) are available at additional cost. All other matters shall be subject to our standard Terms and Conditions (T&C). The electrical scope is limited to the connection between the control panel and the doors only. Power supply and isolator shall be provided by others.'
-  const footerSize = 7.5
-  const footerLines = wrapText(terms, reg, footerSize, CW)
-  footerLines.forEach((ln, i) => {
-    page.drawText(ln, { x: ML, y: y - i * 10, size: footerSize, font: reg, color: GREY })
+  features.forEach(([title, desc], i) => {
+    const fY = ry - i * FEAT_ROW_H
+    // Icon: brand-purple square
+    page.drawRectangle({ x: rightColX, y: fY - ICON_SZ, width: ICON_SZ, height: ICON_SZ, color: BRAND })
+    // Simple white mark inside icon
+    const marks = ['>', '+', 'o', '=']
+    page.drawText(marks[i] ?? '-', { x: rightColX + 4, y: fY - ICON_SZ + 5, size: 9, font: bold, color: WHITE })
+    const tx = rightColX + ICON_SZ + ICON_GAP
+    t(page, title, tx, fY - 10, bold, 9, DARK)
+    t(page, desc,  tx, fY - 21, reg,  7.5, GREY)
   })
+
+  ry -= features.length * FEAT_ROW_H + 14
+
+  // ── PRICE BOX ─────────────────────────────────────────────────────────────
+  const priceH = 46
+  page.drawRectangle({ x: rightColX, y: ry - priceH, width: rightColW, height: priceH, color: rgb(0.95, 0.95, 0.97) })
+  page.drawLine({ start: { x: rightColX, y: ry },        end: { x: rightColX + rightColW, y: ry },        thickness: 0.5, color: rgb(0.78, 0.78, 0.85) })
+  page.drawLine({ start: { x: rightColX, y: ry - priceH }, end: { x: rightColX + rightColW, y: ry - priceH }, thickness: 0.5, color: rgb(0.78, 0.78, 0.85) })
+  t(page, `${doorRef} PRICE`, rightColX + 8, ry - 14, bold, 10, DARK)
+  tRight(page, fmtAUD(d.unitPrice), rightColX + rightColW - 8, ry - 12, bold, 14, DARK)
+  t(page, '(ex. GST)', rightColX + rightColW - 8 - reg.widthOfTextAtSize('(ex. GST)', 8), ry - 30, reg, 8, GREY)
+
+  // ── FOOTER ────────────────────────────────────────────────────────────────
+  const footerY = 48
+  page.drawLine({ start: { x: ML, y: footerY + 14 }, end: { x: PW - MR, y: footerY + 14 }, thickness: 0.5, color: rgb(0.75, 0.75, 0.75) })
+  t(page, 'NBE AUSTRALIA',       ML, footerY,      bold, 8,   DARK)
+  t(page, 'nbeaustralia.com.au', ML, footerY - 10, reg,  7.5, GREY)
+  const pageNum = totalDoors > 1 ? `${doorRef}  |  Page ${doorIndex + 1} of ${totalDoors + 1}` : `Page 1 of 2`
+  tRight(page, `Quote No. ${input.quoteNumber}  |  ${pageNum}`, PW - MR, footerY, reg, 8, GREY)
 }
 
 // ── Page 2: Summary (existing layout) ────────────────────────────────────────
