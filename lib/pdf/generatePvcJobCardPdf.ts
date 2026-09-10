@@ -168,7 +168,9 @@ export async function generatePvcJobCardPdf(input: PvcJobCardPdfInput): Promise<
 
   doors.forEach((door, index) => {
     const qty = Math.min(99, Math.max(1, Math.trunc(door.quantity ?? 1) || 1))
-    const scope = doorSupplyScope(door)
+    // Use explicit supplyScope from workflow panel when doors come from single-door input;
+    // fall back to headrail_type derivation only for multi-door quoteData.doors entries.
+    const scope = !input.quoteData.doors?.length ? input.supplyScope : doorSupplyScope(door)
     const headrailLabel = formatProposalHeadrailLabel(door.headrail_type)
     const profileLabel = door.strip_type_label?.trim() || formatProposalStripTypeLine(door.strip_type)
 
@@ -218,7 +220,7 @@ export async function generatePvcJobCardPdf(input: PvcJobCardPdfInput): Promise<
 
     // Row 1: Opening W × H | Headrail type
     page.drawText('Opening (W × H):', { x: leftX, y: y - 10, size: 9, font: boldFont, color: rgb(0.35, 0.35, 0.45) })
-    page.drawText(`${door.width_mm} mm × ${door.height_mm} mm`, { x: leftX + valOffL, y: y - 10, size: 9, font: regularFont, color: rgb(0.05, 0.05, 0.05) })
+    page.drawText(`${door.width_mm} mm Width × ${door.height_mm} mm Height`, { x: leftX + valOffL, y: y - 10, size: 9, font: regularFont, color: rgb(0.05, 0.05, 0.05) })
 
     page.drawText('Headrail type:', { x: midX, y: y - 10, size: 9, font: boldFont, color: rgb(0.35, 0.35, 0.45) })
     page.drawText(headrailLabel, { x: midX + valOffR, y: y - 10, size: 9, font: regularFont, color: rgb(0.05, 0.05, 0.05) })

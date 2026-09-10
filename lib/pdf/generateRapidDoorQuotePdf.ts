@@ -194,7 +194,8 @@ async function drawPage1(
 
   // ── CUSTOMER HEADER BAR ───────────────────────────────────────────────────
   const STRIP_H = 18
-  drawRect(page, ML, y - STRIP_H, CW, STRIP_H, BLACK)
+  const custColW = CW * 0.44   // header bar only covers the customer text column
+  drawRect(page, ML, y - STRIP_H, custColW, STRIP_H, BLACK)
   t(page, 'CUSTOMER', ML + 8, y - 12, bold, 9, WHITE)
   y -= STRIP_H
 
@@ -210,37 +211,48 @@ async function drawPage1(
     ['Phone',     input.customerPhone    || '—'],
     ['Email',     input.customerEmail    || '—'],
   ]
+  const ROW_H = 13  // keep text spacing compact
   custRows.forEach(([label, val], i) => {
-    t(page, label, custLabelX, y - 8 - i * 13, bold, 8, DARK)
-    t(page, val,   custValueX, y - 8 - i * 13, reg,  8, DARK)
+    t(page, label, custLabelX, y - 16 - i * ROW_H, bold, 8, DARK)  // 16px top gap under header
+    t(page, val,   custValueX, y - 16 - i * ROW_H, reg,  8, DARK)
   })
 
-  // Door image — right column
-  const imgColX = ML + CW * 0.48
-  const imgColW = CW * 0.52
-  const custSectionH = custRows.length * 13 + 16
+  // Door image — right column, matching reference position (~58% across content)
+  const imgColX = ML + CW * 0.58  // matches reference horizontal start
+  const imgColW = CW * 0.42       // ~220pt wide column
+  const custSectionH = custRows.length * ROW_H + 24
 
+  // Pre-compute image dimensions so we can size the section correctly
+  let imgDrawH = 0
+  let imgDrawW = 0
+  let loadedDoorImg: Awaited<ReturnType<typeof PDFDocument.prototype.embedPng>> | null = null
   if (firstDoor.doorImagePath) {
     try {
       const imgBytes = await readFile(firstDoor.doorImagePath)
-      const doorImg = await pdfDoc.embedPng(imgBytes)
-      const { width: dw, height: dh } = doorImg
-      const maxW = imgColW - 10
-      const maxH = custSectionH + 10
-      let drawW = maxW
-      let drawH = (dh / dw) * drawW
-      if (drawH > maxH) { drawH = maxH; drawW = (dw / dh) * drawH }
-      page.drawImage(doorImg, {
-        x: imgColX + (imgColW - drawW) / 2,
-        y: y - drawH + 10,
-        width: drawW,
-        height: drawH,
-      })
-    } catch { /* no image — skip silently */ }
+      loadedDoorImg = await pdfDoc.embedPng(imgBytes)
+      const { width: dw, height: dh } = loadedDoorImg
+      const maxW = imgColW - 4
+      const maxH = 190
+      imgDrawW = maxW
+      imgDrawH = (dh / dw) * imgDrawW
+      if (imgDrawH > maxH) { imgDrawH = maxH; imgDrawW = (dw / dh) * imgDrawH }
+    } catch { /* no image */ }
   }
 
-  y -= custSectionH
-  y -= 12
+  // Section height = whichever is taller: customer text or image
+  const sectionH = Math.max(custSectionH, imgDrawH + 8)
+
+  if (loadedDoorImg && imgDrawH > 0) {
+    // Top-align image within the section
+    page.drawImage(loadedDoorImg, {
+      x: imgColX + (imgColW - imgDrawW) / 2,
+      y: y - imgDrawH,
+      width: imgDrawW,
+      height: imgDrawH,
+    })
+  }
+
+  y -= sectionH + 8
 
   // ── TABLE ─────────────────────────────────────────────────────────────────
   // Columns
@@ -351,7 +363,7 @@ async function drawPage1(
     const safetyVal = d.safetyByCategory?.safety ?? ''
     if (safetyVal && safetyVal !== '-') {
       t(page, safetyVal,     cDesc,    y - 11, bold, 10, DARK)
-      tCenter(page, '2',     cQtyX, cQtyW, y - 11, reg, 8, DARK)
+      tCenter(page, '1',     cQtyX, cQtyW, y - 11, reg, 8, DARK)
       tRight(page, '(incl.)', cUpR,   y - 11, reg,  8, GREY)
     }
     t(page, 'Hazard Lamp',   cDesc,    y - 22, reg, 8.5, DARK)
@@ -379,18 +391,16 @@ async function drawPage1(
     })
     y -= allDetection.length * 13 + 8
 
-    // Row 8: Installation (only if > 0)
-    if (d.installation > 0) {
-      drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
-      t(page, '8.',           cNo + 2, y - 11, reg, 8.5, DARK)
-      t(page, 'Installation', cItem,   y - 11, reg, 8.5, DARK)
-      tCenter(page, '1',      cQtyX, cQtyW, y - 11, reg, 8.5, DARK)
-      tRight(page, fmtAUD(d.installation), cUpR,  y - 11, reg,  8.5, DARK)
-      tRight(page, fmtAUD(d.installation), cTotR, y - 11, bold, 8.5, DARK)
-      y -= 18
-    }
   }
 
+  // ── EMPTY PLACEHOLDER ROWS (matching reference) ───────────────────────────
+  const emptyRowH = 16
+  const emptyRowCount = 6
+  for (let i = 0; i < emptyRowCount; i++) {
+    drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
+    y -= emptyRowH
+  }
+  drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
   y -= 8
 
   // ── TOTALS ────────────────────────────────────────────────────────────────
