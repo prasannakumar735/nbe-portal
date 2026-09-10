@@ -37,9 +37,22 @@ function buildHtml(params: {
     ? `<img src="${logoSrc}" alt="NBE Australia" style="height:48px;max-width:180px;display:block">`
     : `<span style="font-size:18px;font-weight:700;color:#1e3a8a">NBE Australia</span>`
 
-  // sigHtml is already HTML (from contenteditable) — sanitise embedded images only
+  // Process sigHtml: constrain images, remove any script/style blocks
+  const processSig = (html: string) => html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    // Force block display on img so they never render mid-line next to text
+    .replace(/<img([^>]*?)>/gi, (_m, attrs) => {
+      const stripped = attrs.replace(/\bstyle="[^"]*"/gi, '').replace(/\bdisplay=\S+/gi, '')
+      return `<img${stripped} style="display:block;max-height:56px;max-width:200px;margin:4px 0">`
+    })
+
   const sigSection = params.sigHtml
-    ? `<tr><td style="padding:0 32px 24px">${params.sigHtml}</td></tr>`
+    ? `<tr>
+        <td style="padding:16px 32px 24px;border-top:1px solid #e5e7eb;font-size:13px;color:#374151;line-height:1.65">
+          ${processSig(params.sigHtml)}
+        </td>
+       </tr>`
     : ''
 
   return `<!DOCTYPE html><html lang="en">
