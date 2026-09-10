@@ -1128,8 +1128,8 @@ export default function NewQuotesPage() {
                 )}
               </div>
 
-              {/* Page 2 Summary Note */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              {/* Page 2 Summary Note — only shown when summary page is enabled */}
+              {includeSummary && <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Page 2 Summary Note</span>
                   {!editingPage2Note ? (
@@ -1158,7 +1158,7 @@ export default function NewQuotesPage() {
                     {page2SummaryNote || DEFAULT_PAGE2_SUMMARY_NOTE}
                   </p>
                 )}
-              </div>
+              </div>}
             </div>
 
             {/* Action buttons */}

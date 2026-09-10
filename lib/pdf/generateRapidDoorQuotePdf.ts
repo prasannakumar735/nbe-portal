@@ -194,11 +194,14 @@ async function drawPage1(
     ['DATE',        input.date],
     ['VALID UNTIL', input.validUntil],
   ]
+  if (!includeSummary) {
+    dateRows.push(['QUOTE', input.quoteNumber])
+  }
   dateRows.forEach(([label, val], i) => {
     t(page,      label, dateLabelX,  y - i * 14, bold, 8.5, DARK)
     tRight(page, val,   ML + CW,     y - i * 14, reg,  8.5, DARK)
   })
-  y -= 44
+  y -= (!includeSummary ? 58 : 44)
 
   // ── CUSTOMER DETAILS (left) + DOOR IMAGE (right) ──────────────────────────
   const custLabelX = ML + 8
