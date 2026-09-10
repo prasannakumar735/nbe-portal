@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { loadDoorImageStyle } from '@/app/(portal)/admin/settings/QuoteSettingsClient'
 import { createSupabaseClient } from '@/lib/supabase/client'
+import type { DoorLineItem } from '@/lib/pdf/generateRapidDoorQuotePdf'
 
 // ── Quote number helpers ──────────────────────────────────────────────────────
 async function fetchNextRapidDoorQuoteNumber(): Promise<string> {
@@ -248,10 +249,19 @@ export default function NewQuotesPage() {
   const [search, setSearch] = useState('')
 
   // Recent quotes (loaded from Supabase)
+  type DetailRow = {
+    customer_attn: string | null; customer_postcode: string | null
+    customer_phone: string | null; customer_email: string | null
+    doors: DoorLineItem[] | null
+    include_summary: boolean | null; individual_install: boolean | null
+    end_user_type: string | null; image_style: string | null
+    page1_disclaimer: string | null; page2_note: string | null
+  }
   type RecentQuoteRow = {
     id: string; quote_number: string; customer_name: string | null
+    site_address: string | null; valid_until: string | null
     service_date: string; total: number; workflow_status: string
-    rapid_door_quote_details: { doors: unknown[] | null } | null
+    rapid_door_quote_details: DetailRow | null
   }
   const [recentQuotes, setRecentQuotes]     = useState<RecentQuoteRow[]>([])
   const [recentLoading, setRecentLoading]   = useState(true)
@@ -335,9 +345,134 @@ Kind regards`
     resetDoorForm()
     setQuoteNumber(null)
     quoteNumberRef.current = null
+    quoteIdRef.current = null
     setSavedDoors([])
     setPreviewUrl(null)
     setShowPreview(false)
+    setPage1Disclaimer('')
+    setPage2SummaryNote('')
+    setCustName(''); setCustAttn(''); setCustAddress(''); setCustPostcode(''); setCustPhone(''); setCustEmail('')
+    setIncludeSummary(true); setIndividualInstall(false)
+  }
+
+  // ── Explicit save (without generating PDF) ───────────────────────────────────
+  const [saving, setSaving] = useState(false)
+  const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  async function handleSaveQuote() {
+    if (!quoteNumber && !quoteNumberRef.current) {
+      // Allocate a quote number if we don't have one yet
+      try {
+        const qn = await fetchNextRapidDoorQuoteNumber()
+        quoteNumberRef.current = qn
+        setQuoteNumber(qn)
+        loadNotesFromStorage(qn)
+      } catch {
+        setSaveMsg({ ok: false, text: 'Failed to allocate quote number. Try again.' })
+        return
+      }
+    }
+    const qn = quoteNumberRef.current!
+    setSaving(true)
+    setSaveMsg(null)
+    try {
+      const validDate = new Date(); validDate.setDate(validDate.getDate() + 30)
+      const validUntil = `${String(validDate.getDate()).padStart(2,'0')}/${String(validDate.getMonth()+1).padStart(2,'0')}/${validDate.getFullYear()}`
+      const res = await fetch('/api/quotes/rapid-door/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quoteNumber: qn,
+          quoteId: quoteIdRef.current ?? undefined,
+          date: todayDisplay(), validUntil,
+          customerName: custName, customerAttn: custAttn,
+          customerAddress: custAddress || '—',
+          customerPostcode: custPostcode, customerPhone: custPhone, customerEmail: custEmail,
+          grandTotal,
+          doors: savedDoors.map(d => ({ ...d })),
+          includeSummary, individualInstall: !includeSummary ? individualInstall : false,
+          endUser: endUser || undefined,
+          imageStyle: loadDoorImageStyle(),
+          page1Disclaimer: page1Disclaimer || undefined,
+          page2SummaryNote: page2SummaryNote || undefined,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Save failed')
+      if (json.quoteId && !quoteIdRef.current) quoteIdRef.current = json.quoteId
+      setSaveMsg({ ok: true, text: `Saved as ${qn}` })
+    } catch (e) {
+      setSaveMsg({ ok: false, text: e instanceof Error ? e.message : 'Save failed' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // ── Load a saved quote into the form ─────────────────────────────────────────
+  function loadQuoteFromRow(q: RecentQuoteRow) {
+    resetDoorForm()
+    setPreviewUrl(null); setShowPreview(false)
+    setQuoteNumber(q.quote_number)
+    quoteNumberRef.current = q.quote_number
+    quoteIdRef.current = q.id
+    // Customer
+    setCustName(q.customer_name ?? '')
+    setCustAddress(q.site_address ?? '')
+    const det = q.rapid_door_quote_details
+    if (det) {
+      setCustAttn(det.customer_attn ?? '')
+      setCustPostcode(det.customer_postcode ?? '')
+      setCustPhone(det.customer_phone ?? '')
+      setCustEmail(det.customer_email ?? '')
+      setIncludeSummary(det.include_summary !== false)
+      setIndividualInstall(det.individual_install ?? false)
+      const eu = det.end_user_type ?? ''
+      setEndUser((eu === 'CUSTOMER' || eu === 'DISTRIBUTOR' || eu === 'TENDER') ? eu : '')
+      if (det.page1_disclaimer) setPage1Disclaimer(det.page1_disclaimer)
+      if (det.page2_note) setPage2SummaryNote(det.page2_note)
+      // Load all doors except last into savedDoors; restore last door into form
+      const doors = Array.isArray(det.doors) ? det.doors as DoorLineItem[] : []
+      if (doors.length > 1) {
+        const saved: SavedDoor[] = doors.slice(0, -1).map(d => ({
+          id: crypto.randomUUID(),
+          doorType: d.doorType, doorModel: d.doorModel ?? '',
+          openingW: String(d.openingW ?? ''), openingH: String(d.openingH ?? ''),
+          frame: d.frameRaw ?? '', curtain: d.curtain ?? '', colour: d.colour ?? '',
+          motorKw: d.motorKw ?? '', motorSide: d.motorSide ?? '', cbSide: d.cbSide ?? '',
+          safetyLines: (d.safetyLines ?? []) as string[], safetyByCategory: (d.safetyByCategory ?? {}) as Record<string, string>,
+          qty: Number(d.qty ?? 1), unitPrice: Number(d.unitPrice ?? 0),
+          installation: Number(d.installation ?? 0), demolition: Number(d.demolition ?? 0),
+          equipHire: Number(d.equipHire ?? 0), accTravel: Number(d.accTravel ?? 0),
+          lineTotal: Number(d.lineTotal ?? 0), customDesc: d.customDesc ?? null,
+        }))
+        setSavedDoors(saved)
+      } else {
+        setSavedDoors([])
+      }
+      // Restore last door into active form
+      const last = doors[doors.length - 1]
+      if (last) {
+        setDoorType(last.doorType ?? '')
+        setDoorModel(last.doorModel ?? '')
+        setOpeningW(String(last.openingW ?? ''))
+        setOpeningH(String(last.openingH ?? ''))
+        setFrame(last.frameRaw ?? '')
+        setCurtain(last.curtain ?? '')
+        setColour(last.colour ?? '')
+        setMotorKw(last.motorKw ?? '')
+        setMotorSide(last.motorSide ?? '')
+        setCbSide(last.cbSide ?? '')
+        setQty(String(last.qty ?? 1))
+        setUnitPrice(String(last.unitPrice ?? ''))
+        setInstallation(String(last.installation || ''))
+        setDemolition(String(last.demolition || ''))
+        setEquipHire(String(last.equipHire || ''))
+        setAccTravel(String(last.accTravel || ''))
+        if (last.safetyByCategory) setSafetyValues(last.safetyByCategory as Record<string, string>)
+      }
+    }
+    setSaveMsg(null)
+    setView('form')
   }
 
   useEffect(() => {
@@ -670,6 +805,7 @@ Kind regards`
                       <th className="px-4 py-3">Date</th>
                       <th className="px-4 py-3">Total (inc. GST)</th>
                       <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -678,7 +814,7 @@ Kind regards`
                       const [y, m, d] = (q.service_date ?? '').split('-')
                       const dateStr = y ? `${d}/${m}/${y}` : '—'
                       return (
-                        <tr key={q.id} className="border-b border-slate-50 hover:bg-slate-50 transition cursor-pointer">
+                        <tr key={q.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition">
                           <td className="px-6 py-3.5 font-mono text-xs font-semibold text-indigo-700">{q.quote_number}</td>
                           <td className="px-4 py-3.5 font-medium text-slate-800">{q.customer_name || <span className="text-slate-400 italic font-normal">No customer</span>}</td>
                           <td className="px-4 py-3.5 text-slate-500">{doorCount}</td>
@@ -688,6 +824,14 @@ Kind regards`
                             <span className="inline-flex items-center rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
                               {(q.workflow_status ?? 'draft').replace(/_/g, ' ')}
                             </span>
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button type="button" onClick={() => loadQuoteFromRow(q)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 transition">
+                                <span className="material-symbols-outlined text-[13px]">edit</span>Open
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       )
@@ -708,6 +852,10 @@ Kind regards`
                         <p className="font-mono text-xs font-semibold text-indigo-700">{q.quote_number}</p>
                         <p className="mt-0.5 text-sm font-medium text-slate-800">{q.customer_name || <span className="text-slate-400 italic font-normal">No customer</span>}</p>
                         <p className="mt-0.5 text-xs text-slate-500">{doorCount} door{doorCount !== 1 ? 's' : ''} · {dateStr}</p>
+                        <button type="button" onClick={() => loadQuoteFromRow(q)}
+                          className="mt-2 inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 transition">
+                          <span className="material-symbols-outlined text-[13px]">edit</span>Open
+                        </button>
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="text-sm font-semibold text-slate-800">${Number(q.total ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
@@ -1427,6 +1575,23 @@ Kind regards`
                 }
               </button>
             </div>
+
+            {/* Save draft */}
+            <div className="flex items-center gap-3">
+              <button type="button" disabled={saving || generating} onClick={handleSaveQuote}
+                className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">
+                {saving
+                  ? <><span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>Saving…</>
+                  : <><span className="material-symbols-outlined text-[16px]">save</span>Save Quote</>
+                }
+              </button>
+            </div>
+            {saveMsg && (
+              <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs ${saveMsg.ok ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+                <span className="material-symbols-outlined text-[14px]">{saveMsg.ok ? 'check_circle' : 'error'}</span>
+                {saveMsg.text}
+              </div>
+            )}
 
             {/* Missing fields warning — shown when button is disabled */}
             {!canGenerate && !generating && missingFields.length > 0 && (
