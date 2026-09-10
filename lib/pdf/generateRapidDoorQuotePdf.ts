@@ -526,13 +526,16 @@ async function drawPage1(
 
   y = totBoxY - 22
 
-  // ── FOOTER TERMS ─────────────────────────────────────────────────────────
+  // ── FOOTER TERMS — anchored to page bottom so tall doors never clip it ───
   const DEFAULT_PAGE1_DISCLAIMER = 'This quotation is based on the NBE Standard Door comprising a galvanized frame, PVC curtain (900 g/m²), and a zinc-coated control box (RAL 7035). Optional extras (e.g. powder coating, light curtain, remote control, radar, traffic light, induction loop, contactless exit button) are available at additional cost. All other matters shall be subject to our standard Terms and Conditions (T&C). The electrical scope is limited to the connection between the control panel and the doors only. Power supply and isolator shall be provided by others.'
   const terms = input.page1Disclaimer?.trim() || DEFAULT_PAGE1_DISCLAIMER
   const footerSize = 7.5
+  const footerLineH = 10
   const footerLines = terms.split('\n').flatMap(para => wrapText(para, reg, footerSize, CW))
+  // Anchor to bottom of page: top of first line = footerStartY, lines go downward
+  const footerStartY = 26 + (footerLines.length - 1) * footerLineH
   footerLines.forEach((ln, i) => {
-    page.drawText(ln, { x: ML, y: y - i * 10, size: footerSize, font: reg, color: GREY })
+    page.drawText(ln, { x: ML, y: footerStartY - i * footerLineH, size: footerSize, font: reg, color: GREY })
   })
 }
 
