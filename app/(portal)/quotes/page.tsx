@@ -151,9 +151,25 @@ export default function NewQuotesPage() {
   const [cbSide,        setCbSide]       = useState('')
   const [qty,           setQty]          = useState('1')
   const [unitPrice,     setUnitPrice]    = useState('')
-  const [safetyEnabled, setSafetyEnabled]= useState(false)
+  const [safetyEnabled, setSafetyEnabled]= useState(true)
   const [safetyValues,  setSafetyValues] = useState<Record<string, string>>({})
-  const [motorEnabled,  setMotorEnabled] = useState(false)
+  const [motorEnabled,  setMotorEnabled] = useState(true)
+
+  // Custom door image upload
+  const [customDoorImage,     setCustomDoorImage]     = useState<string | null>(null)  // base64 data URL
+  const [customDoorImageName, setCustomDoorImageName] = useState<string | null>(null)
+  const customImageInputRef = useRef<HTMLInputElement>(null)
+
+  function handleCustomImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => {
+      setCustomDoorImage(ev.target?.result as string)
+      setCustomDoorImageName(file.name)
+    }
+    reader.readAsDataURL(file)
+  }
   const [endUser,        setEndUser]       = useState<'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER' | ''>('')
   const [includeSummary, setIncludeSummary] = useState(true)
   const [installation,  setInstallation] = useState('')
@@ -233,7 +249,8 @@ export default function NewQuotesPage() {
   function resetDoorForm() {
     setDoorType(''); setDoorModel(''); setOpeningW(''); setOpeningH(''); setFrame(''); setCurtain('')
     setColour(''); setMotorKw(''); setMotorSide(''); setCbSide(''); setQty('1')
-    setUnitPrice(''); setSafetyEnabled(false); setSafetyValues({}); setMotorEnabled(false); setEndUser('')
+    setUnitPrice(''); setSafetyEnabled(true); setSafetyValues({}); setMotorEnabled(true); setEndUser('')
+    setCustomDoorImage(null); setCustomDoorImageName(null)
     setInstallation(''); setDemolition(''); setEquipHire(''); setAccTravel('')
     setCustomDesc(null); setEditingDesc(false)
   }
@@ -415,6 +432,7 @@ export default function NewQuotesPage() {
           page2SummaryNote: page2SummaryNote || undefined,
           endUser:          endUser          || undefined,
           includeSummary,
+          customDoorImageBase64: customDoorImage || undefined,
         }),
       })
 
@@ -668,21 +686,47 @@ export default function NewQuotesPage() {
               </div>
 
               {/* Door image */}
-              {colour && getDoorImageUrl(doorType, colour) ? (
-                <div className="relative bg-slate-100 shrink-0">
-                  <img key={colour} src={getDoorImageUrl(doorType, colour)!} alt={`${doorType} in ${colour}`}
+              {(customDoorImage || (colour && getDoorImageUrl(doorType, colour))) ? (
+                <div className="relative bg-slate-100 shrink-0 group">
+                  <img
+                    key={customDoorImage ?? colour}
+                    src={customDoorImage ?? getDoorImageUrl(doorType, colour)!}
+                    alt={customDoorImageName ?? `${doorType} in ${colour}`}
                     className="w-full object-contain max-h-[280px]" />
                   <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/50 to-transparent px-4 py-3">
                     <p className="text-xs font-semibold text-white">{doorType} — {DOOR_TYPE_NAMES[doorType]}</p>
                     {curtain && <p className="text-[11px] text-white/70 mt-0.5">{curtain} · {colour}</p>}
                   </div>
+                  {/* Upload overlay — visible on hover */}
+                  <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button type="button" onClick={() => customImageInputRef.current?.click()}
+                      className="flex items-center gap-1 rounded-lg bg-white/90 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 shadow hover:bg-white transition">
+                      <span className="material-symbols-outlined text-[14px]">upload</span>
+                      {customDoorImage ? 'Replace' : 'Custom image'}
+                    </button>
+                    {customDoorImage && (
+                      <button type="button" onClick={() => { setCustomDoorImage(null); setCustomDoorImageName(null) }}
+                        className="flex items-center gap-1 rounded-lg bg-white/90 px-2.5 py-1.5 text-[11px] font-semibold text-red-600 shadow hover:bg-white transition">
+                        <span className="material-symbols-outlined text-[14px]">close</span>
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center gap-3 h-36 text-slate-400 shrink-0 bg-slate-50">
+                <div className="flex flex-col items-center justify-center gap-3 h-36 text-slate-400 shrink-0 bg-slate-50 relative group">
                   <span className="material-symbols-outlined text-5xl text-slate-300">garage</span>
                   <p className="text-sm">{colour ? 'No image for this colour' : 'Select a colour to preview'}</p>
+                  <button type="button" onClick={() => customImageInputRef.current?.click()}
+                    className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 shadow-sm hover:border-indigo-400 hover:text-indigo-600 transition">
+                    <span className="material-symbols-outlined text-[14px]">upload</span>
+                    Upload custom image
+                  </button>
                 </div>
               )}
+              {/* Hidden file input */}
+              <input ref={customImageInputRef} type="file" accept="image/*" className="hidden"
+                onChange={handleCustomImageUpload} />
 
               {/* ── Quotation Description — with edit pencil ────────────────── */}
               <div className="mt-6 border-t border-slate-100">

@@ -54,7 +54,8 @@ export type RapidDoorQuotePdfInput = {
   page1Disclaimer?:   string
   page2SummaryNote?:  string
   endUser?:           'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER'
-  includeSummary?:    boolean   // default true — set false to skip page 2 and show extras on page 1
+  includeSummary?:         boolean   // default true — set false to skip page 2 and show extras on page 1
+  customDoorImageBase64?:  string    // data URL (data:image/...;base64,...) — overrides doorImagePath on all doors
   // Legacy single-door fields
   doorType?:         string
   doorTypeName?:     string
@@ -220,18 +221,31 @@ async function drawPage1(
 
   // Pre-compute image dimensions so section height can expand if needed
   let imgDrawW = 0, imgDrawH = 0
-  let loadedDoorImg = null
-  if (firstDoor.doorImagePath) {
-    try {
-      const imgBytes = await readFile(firstDoor.doorImagePath)
-      loadedDoorImg = await pdfDoc.embedPng(imgBytes)
+  let loadedDoorImg: Awaited<ReturnType<typeof pdfDoc.embedPng>> | null = null
+  try {
+    let imgBytes: Uint8Array | null = null
+    let isJpeg = false
+    if (input.customDoorImageBase64) {
+      // Strip data URL prefix: "data:image/png;base64,..." or "data:image/jpeg;base64,..."
+      const match = input.customDoorImageBase64.match(/^data:image\/(png|jpe?g|webp);base64,(.+)$/i)
+      if (match) {
+        imgBytes = Buffer.from(match[2], 'base64')
+        isJpeg = /jpe?g/i.test(match[1])
+      }
+    } else if (firstDoor.doorImagePath) {
+      imgBytes = await readFile(firstDoor.doorImagePath)
+    }
+    if (imgBytes) {
+      loadedDoorImg = isJpeg
+        ? await pdfDoc.embedJpg(imgBytes)
+        : await pdfDoc.embedPng(imgBytes)
       const { width: dw, height: dh } = loadedDoorImg
       const maxW = imgColW - 8
       imgDrawW = maxW
       imgDrawH = (dh / dw) * imgDrawW
       if (imgDrawH > imgMaxH) { imgDrawH = imgMaxH; imgDrawW = (dw / dh) * imgDrawH }
-    } catch { /* no image */ }
-  }
+    }
+  } catch { /* no image */ }
 
   // sectionH must cover image bottom (image extends below bar by imgDrawH - STRIP_H - imgTopOffset)
   const imgOverhang = Math.max(0, imgDrawH - STRIP_H - imgTopOffset)
