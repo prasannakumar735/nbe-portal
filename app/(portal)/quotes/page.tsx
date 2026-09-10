@@ -571,8 +571,8 @@ export default function NewQuotesPage() {
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Rapid Door Quotes</h1>
-            <p className="mt-1 text-sm text-slate-500">Industrial rapid door quotations. Search by customer or quote number.</p>
+            <h1 className="text-2xl font-bold text-slate-900">New Quotes</h1>
+            <p className="mt-1 text-sm text-slate-500">Create and manage quotations — General, Rapid Door, PVC, Maintenance &amp; Parts.</p>
           </div>
           <button type="button" onClick={() => { resetAll(); setView('form') }}
             className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700">
@@ -613,7 +613,7 @@ export default function NewQuotesPage() {
                 <button type="button" onClick={() => { resetAll(); setView('form') }}
                   className="mt-1 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700">
                   <span className="material-symbols-outlined text-[16px]">add</span>
-                  Create your first quote
+                  Create first quote
                 </button>
               )}
             </div>
@@ -696,8 +696,8 @@ export default function NewQuotesPage() {
           All Quotes
         </button>
         <div>
-          <h1 className="text-xl font-bold text-slate-900">{quoteNumber ? `Quote ${quoteNumber}` : 'New Rapid Door Quote'}</h1>
-          <p className="mt-0.5 text-sm text-slate-500">Industrial rapid door quotation builder</p>
+          <h1 className="text-xl font-bold text-slate-900">{quoteNumber ? `Quote ${quoteNumber}` : 'New Quote'}</h1>
+          <p className="mt-0.5 text-sm text-slate-500">Fill in the details below to generate a quotation PDF</p>
         </div>
       </div>
 
