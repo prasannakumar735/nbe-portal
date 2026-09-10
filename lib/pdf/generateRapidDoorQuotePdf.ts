@@ -484,7 +484,8 @@ async function drawPage1(
   const totLR = ML + CW - 70
   const totVR = ML + CW
 
-  const subtotal = grandTotal + extrasTotal
+  // Per-door pages show only that door's total; only the last page with no summary shows the combined grand total
+  const subtotal = (!includeSummary && isLastDoor ? grandTotal : door.lineTotal) + extrasTotal
 
   // Bank details — left side, aligned with totals
   t(page, 'BANK DETAILS',                             ML, y,      bold, 8.5, DARK)
