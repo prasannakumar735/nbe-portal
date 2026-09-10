@@ -286,7 +286,6 @@ export default function NewQuotesPage() {
 
   const canGenerate = !generating && !!doorType && !!doorModel && !!openingW && !!openingH && !!frame &&
     !!curtain && !!colour && !!qty && !!unitPrice &&
-    safetyEnabled && safetySelected.length > 0 &&
     (custCanBeBlank || customerFilled)
 
   // ── Save current door to locked list ────────────────────────────────────────
@@ -762,7 +761,7 @@ export default function NewQuotesPage() {
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-[18px]">security</span>
                     Safety / Detection
-                    <span className="text-red-400">*</span>
+                    <span className="text-[11px] normal-case font-normal text-slate-400 ml-1">optional</span>
                   </div>
                   <span className="material-symbols-outlined text-[18px]">
                     {safetyEnabled ? 'check_box' : 'check_box_outline_blank'}
