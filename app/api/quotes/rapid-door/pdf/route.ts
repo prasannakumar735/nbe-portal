@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     const imageStyle = body.imageStyle ?? 'withOutText'
+    console.log('[rapid-door/pdf] customDoorImageBase64 present:', !!body.customDoorImageBase64, body.customDoorImageBase64?.slice(0, 40))
 
     // Resolve door image paths for every door in the array
     if (body.doors?.length) {

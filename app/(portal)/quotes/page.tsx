@@ -166,16 +166,20 @@ export default function NewQuotesPage() {
     const reader = new FileReader()
     reader.onload = ev => {
       const dataUrl = ev.target?.result as string
-      // Convert to PNG via canvas so pdf-lib (which only supports PNG/JPEG) can embed it
+      // Resize and convert to JPEG so pdf-lib can embed it and the payload stays small
       const img = new window.Image()
       img.onload = () => {
+        const MAX_W = 800
+        const scale = img.naturalWidth > MAX_W ? MAX_W / img.naturalWidth : 1
         const canvas = document.createElement('canvas')
-        canvas.width = img.naturalWidth
-        canvas.height = img.naturalHeight
+        canvas.width  = Math.round(img.naturalWidth  * scale)
+        canvas.height = Math.round(img.naturalHeight * scale)
         const ctx = canvas.getContext('2d')
         if (!ctx) return
-        ctx.drawImage(img, 0, 0)
-        setCustomDoorImage(canvas.toDataURL('image/png'))
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        setCustomDoorImage(canvas.toDataURL('image/jpeg', 0.88))
         setCustomDoorImageName(file.name)
       }
       img.src = dataUrl

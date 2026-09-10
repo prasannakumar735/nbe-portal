@@ -226,11 +226,12 @@ async function drawPage1(
     let imgBytes: Uint8Array | null = null
     let isJpeg = false
     if (input.customDoorImageBase64) {
-      // Strip data URL prefix: "data:image/png;base64,..." or "data:image/jpeg;base64,..."
-      const match = input.customDoorImageBase64.match(/^data:image\/(png|jpe?g|webp);base64,(.+)$/i)
-      if (match) {
-        imgBytes = Buffer.from(match[2], 'base64')
-        isJpeg = /jpe?g/i.test(match[1])
+      // Strip data URL prefix: "data:image/jpeg;base64,..." or "data:image/png;base64,..."
+      const commaIdx = input.customDoorImageBase64.indexOf(',')
+      if (commaIdx !== -1) {
+        const header = input.customDoorImageBase64.slice(0, commaIdx)
+        imgBytes = Buffer.from(input.customDoorImageBase64.slice(commaIdx + 1), 'base64')
+        isJpeg = header.includes('jpeg') || header.includes('jpg')
       }
     } else if (firstDoor.doorImagePath) {
       imgBytes = await readFile(firstDoor.doorImagePath)
