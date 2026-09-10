@@ -1810,47 +1810,78 @@ Kind regards`
                 className="w-full h-full min-h-[200px] text-[13.5px] text-slate-800 bg-transparent outline-none resize-none leading-relaxed font-[inherit] px-4 py-3 placeholder:text-slate-300"
                 placeholder="Compose your message…" />
 
-              {/* Signature inline divider */}
-              {includeSig && (sigText || sigImageB64) && !showSigEditor && (
+              {/* ── Signature (inline, below message — Outlook style) ── */}
+              {includeSig && (
                 <div className="border-t border-slate-200 mx-4 pt-3 pb-4">
-                  {sigText && <p className="text-[12px] text-slate-500 whitespace-pre-line leading-relaxed">{sigText}</p>}
-                  {sigImageB64 && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={sigImageB64} alt="sig" className="max-h-10 mt-1" />
-                  )}
-                </div>
-              )}
-
-              {/* Signature editor (expanded inline) */}
-              {showSigEditor && (
-                <div className="border-t border-slate-200 mx-4 mt-1 mb-4 pt-3 space-y-3">
-                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest">Edit Signature</p>
-                  <textarea rows={3} value={sigText}
-                    onChange={e => { setSigText(e.target.value); saveSig(e.target.value, sigImageB64, sigImageName, includeSig) }}
-                    placeholder="Your Name&#10;Job Title | NBE Australia&#10;+61 xxx xxx xxx"
-                    className="w-full border border-slate-200 rounded py-2 px-3 text-[13px] text-slate-800 outline-none focus:border-blue-500 resize-none font-[inherit]" />
-                  <div>
-                    {sigImageB64 ? (
-                      <div className="flex items-center gap-3 border border-slate-200 rounded px-3 py-2 bg-slate-50">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={sigImageB64} alt="sig" className="max-h-8 rounded" />
-                        <div>
-                          <p className="text-[11px] text-slate-500 truncate max-w-[160px]">{sigImageName}</p>
-                          <button type="button"
-                            onClick={() => { setSigImageB64(null); setSigImageName(null); saveSig(sigText, null, null, includeSig) }}
-                            className="text-[11px] text-red-500 hover:text-red-700">Remove image</button>
-                        </div>
+                  {showSigEditor ? (
+                    /* Editor mode */
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Signature</span>
+                        <span className="text-[10px] text-slate-400">You can paste your Outlook signature directly below</span>
+                      </div>
+                      {/* Image row — upload first (Outlook puts logo on top) */}
+                      <div className="flex items-center gap-3">
+                        {sigImageB64 ? (
+                          <div className="flex items-center gap-2 border border-slate-200 rounded px-2 py-1.5 bg-white">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={sigImageB64} alt="sig" className="max-h-8" />
+                            <div className="flex flex-col">
+                              <span className="text-[10px] text-slate-400 truncate max-w-[140px]">{sigImageName}</span>
+                              <button type="button"
+                                onClick={() => { setSigImageB64(null); setSigImageName(null); saveSig(sigText, null, null, includeSig) }}
+                                className="text-[10px] text-red-500 hover:text-red-700 text-left">Remove</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button type="button" onClick={() => sigFileRef.current?.click()}
+                            className="flex items-center gap-1.5 border border-dashed border-slate-300 rounded px-3 py-1.5 text-[12px] text-slate-500 hover:border-[#0f3d8c] hover:text-[#0f3d8c] transition bg-white">
+                            <span className="material-symbols-outlined text-[14px]">add_photo_alternate</span>
+                            Add logo / image
+                          </button>
+                        )}
+                        <input ref={sigFileRef} type="file" accept="image/png,image/jpeg,image/gif" className="hidden"
+                          onChange={e => { const f = e.target.files?.[0]; if (f) handleSigImageUpload(f) }} />
+                      </div>
+                      {/* Contenteditable text — supports pasting rich content */}
+                      <div
+                        contentEditable
+                        suppressContentEditableWarning
+                        onBlur={e => {
+                          const text = e.currentTarget.innerText
+                          setSigText(text)
+                          saveSig(text, sigImageB64, sigImageName, includeSig)
+                        }}
+                        onPaste={e => {
+                          // Capture any pasted image
+                          const items = Array.from(e.clipboardData.items)
+                          const imgItem = items.find(i => i.type.startsWith('image/'))
+                          if (imgItem) {
+                            const file = imgItem.getAsFile()
+                            if (file) { e.preventDefault(); handleSigImageUpload(file) }
+                          }
+                        }}
+                        dangerouslySetInnerHTML={{ __html: sigText.replace(/\n/g, '<br>') }}
+                        className="min-h-[56px] w-full border border-slate-200 rounded px-3 py-2 text-[13px] text-slate-800 outline-none focus:border-[#0f3d8c] bg-white leading-relaxed font-[inherit] empty:before:content-['Your_Name,_Title,_Phone…'] empty:before:text-slate-300"
+                        style={{ whiteSpace: 'pre-wrap' }}
+                      />
+                    </div>
+                  ) : (
+                    /* Preview mode — image first (Outlook convention), then text */
+                    (sigImageB64 || sigText) ? (
+                      <div className="space-y-1">
+                        {sigImageB64 && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={sigImageB64} alt="sig" className="max-h-10 block" />
+                        )}
+                        {sigText && (
+                          <p className="text-[12px] text-slate-500 whitespace-pre-line leading-relaxed">{sigText}</p>
+                        )}
                       </div>
                     ) : (
-                      <button type="button" onClick={() => sigFileRef.current?.click()}
-                        className="flex items-center gap-2 border border-dashed border-slate-300 rounded px-3 py-2 text-[12px] text-slate-500 hover:border-blue-400 hover:text-[#0f3d8c] transition">
-                        <span className="material-symbols-outlined text-[14px]">upload</span>
-                        Upload signature image (PNG / JPG)
-                      </button>
-                    )}
-                    <input ref={sigFileRef} type="file" accept="image/png,image/jpeg,image/gif" className="hidden"
-                      onChange={e => { const f = e.target.files?.[0]; if (f) handleSigImageUpload(f) }} />
-                  </div>
+                      <p className="text-[11px] text-slate-400 italic">No signature — click &quot;Edit sig&quot; to add one.</p>
+                    )
+                  )}
                 </div>
               )}
             </div>
@@ -1906,6 +1937,7 @@ Kind regards`
                     if (!res.ok) throw new Error(json.error || 'Send failed')
                     const sentCount = (json.sent_to as string[]).length
                     setEmailResult({ ok: true, msg: `Sent to ${sentCount} recipient${sentCount > 1 ? 's' : ''} successfully.` })
+                    setTimeout(() => setShowEmailModal(false), 2000)
                   } catch (e) {
                     setEmailResult({ ok: false, msg: e instanceof Error ? e.message : 'Failed to send. Please try again.' })
                   } finally {
