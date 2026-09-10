@@ -629,36 +629,6 @@ export default function NewQuotesPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className={LABEL_CLS}>Motor <span className="normal-case font-normal">(kW) <span className="text-slate-300">optional</span></span></label>
-                    <SelectWrapper>
-                      <select value={motorKw} onChange={e => setMotorKw(e.target.value)} className={SELECT_CLS}>
-                        <option value="">—</option>
-                        {MOTOR_KW_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    </SelectWrapper>
-                  </div>
-                  <div>
-                    <label className={LABEL_CLS}>Motor Side <span className="normal-case font-normal text-slate-300">optional</span></label>
-                    <SelectWrapper>
-                      <select value={motorSide} onChange={e => setMotorSide(e.target.value)} className={SELECT_CLS}>
-                        <option value="">—</option>
-                        {MOTOR_SIDE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    </SelectWrapper>
-                  </div>
-                  <div>
-                    <label className={LABEL_CLS}>Control Box Side <span className="normal-case font-normal text-slate-300">optional</span></label>
-                    <SelectWrapper>
-                      <select value={cbSide} onChange={e => setCbSide(e.target.value)} className={SELECT_CLS}>
-                        <option value="">—</option>
-                        {CONTROL_BOX_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    </SelectWrapper>
-                  </div>
-                </div>
-
               </>
             )}
 
@@ -782,11 +752,39 @@ export default function NewQuotesPage() {
                         </div>
                       </div>
                     ))}
-                    {safetySelected.length === 0 && (
-                      <p className="col-span-3 text-xs text-red-500">Select at least one safety / detection option</p>
-                    )}
                   </div>
                 )}
+              </div>
+
+              {/* Motor / Control Box — below safety */}
+              <div className="grid grid-cols-3 gap-4 px-4 pb-4">
+                <div>
+                  <label className={LABEL_CLS}>Motor <span className="normal-case font-normal">(kW) <span className="text-slate-300">optional</span></span></label>
+                  <SelectWrapper>
+                    <select value={motorKw} onChange={e => setMotorKw(e.target.value)} className={SELECT_CLS}>
+                      <option value="">—</option>
+                      {MOTOR_KW_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </SelectWrapper>
+                </div>
+                <div>
+                  <label className={LABEL_CLS}>Motor Side <span className="normal-case font-normal text-slate-300">optional</span></label>
+                  <SelectWrapper>
+                    <select value={motorSide} onChange={e => setMotorSide(e.target.value)} className={SELECT_CLS}>
+                      <option value="">—</option>
+                      {MOTOR_SIDE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </SelectWrapper>
+                </div>
+                <div>
+                  <label className={LABEL_CLS}>Control Box Side <span className="normal-case font-normal text-slate-300">optional</span></label>
+                  <SelectWrapper>
+                    <select value={cbSide} onChange={e => setCbSide(e.target.value)} className={SELECT_CLS}>
+                      <option value="">—</option>
+                      {CONTROL_BOX_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </SelectWrapper>
+                </div>
               </div>
             </div>
           </div>
