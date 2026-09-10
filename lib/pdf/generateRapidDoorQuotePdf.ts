@@ -444,12 +444,18 @@ async function drawPage1(
 
   }
 
-  // One blank ruled line after table
-  drawHLine(page, ML, y, CW, 0.4, rgb(0.82, 0.82, 0.82))
-  y -= 14
+  // Blank ruled lines after table:
+  // 4 rows when summary page is ON and individual install is OFF (standard layout)
+  // 1 row otherwise (no summary page, or per-door costs enabled — save space for extras/disclaimer)
+  const blankRowH = 14
+  const blankRowCount = (includeSummary && !individualInstall) ? 4 : 1
+  for (let i = 0; i < blankRowCount; i++) {
+    drawHLine(page, ML, y, CW, 0.4, rgb(0.82, 0.82, 0.82))
+    y -= blankRowH
+  }
   drawHLine(page, ML, y, CW, 0.4, rgb(0.82, 0.82, 0.82))
 
-  y -= 16
+  y -= 20
 
   // ── EXTRA COST ROWS (when summary page is excluded) ──────────────────────
   let extrasTotal = 0
