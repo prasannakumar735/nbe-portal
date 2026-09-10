@@ -42,11 +42,10 @@ function buildHtml(params: {
       </tr>
       <tr>
         <td style="padding:8px 28px 28px;color:#6b7280;font-size:13px;line-height:1.6;border-top:1px solid #f3f4f6">
-          <p style="margin:16px 0 4px"><strong style="color:#111827">${escapeHtml(params.senderName)}</strong></p>
           ${sigImg}
-          <p style="margin:12px 0 0">NBE Australia Pty Ltd | ABN 17 007 048 008</p>
+          <p style="margin:${sigImg ? '8px' : '16px'} 0 0">NBE Australia Pty Ltd | ABN 17 007 048 008</p>
           <p style="margin:0">22A Humeside Drive, Campbellfield VIC 3061</p>
-          <p style="margin:4px 0 0">Quote reference: <strong>${escapeHtml(params.quoteNumber)}</strong></p>
+          ${params.quoteNumber ? `<p style="margin:4px 0 0">Quote reference: <strong>${escapeHtml(params.quoteNumber)}</strong></p>` : ''}
         </td>
       </tr>
     </table>

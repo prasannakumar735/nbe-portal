@@ -349,9 +349,7 @@ export default function NewQuotesPage() {
 ${qnRef}
 Please find attached the industrial rapid door quotation${companyName}.
 
-The quote includes all relevant specifications and pricing as discussed. Please do not hesitate to contact us should you require any further information or clarification.
-
-Kind regards`
+The quote includes all relevant specifications and pricing as discussed. Please do not hesitate to contact us should you require any further information or clarification.`
   }
 
   function openEmailModal() {
