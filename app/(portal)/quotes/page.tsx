@@ -153,6 +153,7 @@ export default function NewQuotesPage() {
   const [unitPrice,     setUnitPrice]    = useState('')
   const [safetyEnabled, setSafetyEnabled]= useState(false)
   const [safetyValues,  setSafetyValues] = useState<Record<string, string>>({})
+  const [motorEnabled,  setMotorEnabled] = useState(false)
   const [installation,  setInstallation] = useState('')
   const [demolition,    setDemolition]   = useState('')
   const [equipHire,     setEquipHire]    = useState('')
@@ -230,7 +231,7 @@ export default function NewQuotesPage() {
   function resetDoorForm() {
     setDoorType(''); setDoorModel(''); setOpeningW(''); setOpeningH(''); setFrame(''); setCurtain('')
     setColour(''); setMotorKw(''); setMotorSide(''); setCbSide(''); setQty('1')
-    setUnitPrice(''); setSafetyEnabled(false); setSafetyValues({})
+    setUnitPrice(''); setSafetyEnabled(false); setSafetyValues({}); setMotorEnabled(false)
     setInstallation(''); setDemolition(''); setEquipHire(''); setAccTravel('')
     setCustomDesc(null); setEditingDesc(false)
   }
@@ -335,7 +336,7 @@ export default function NewQuotesPage() {
       d.safetyLines.forEach((v, i) => { if (keys[i]) vals[keys[i]] = v })
       setSafetyValues(vals)
     } else {
-      setSafetyEnabled(false); setSafetyValues({})
+      setSafetyEnabled(false); setSafetyValues({}); setMotorEnabled(false)
     }
     // Remove from saved list so it's back in the form
     setSavedDoors(prev => prev.filter(x => x.id !== id))
@@ -756,35 +757,57 @@ export default function NewQuotesPage() {
                 )}
               </div>
 
-              {/* Motor / Control Box — below safety */}
-              <div className="grid grid-cols-3 gap-4 px-4 pb-4">
-                <div>
-                  <label className={LABEL_CLS}>Motor <span className="normal-case font-normal">(kW) <span className="text-slate-300">optional</span></span></label>
-                  <SelectWrapper>
-                    <select value={motorKw} onChange={e => setMotorKw(e.target.value)} className={SELECT_CLS}>
-                      <option value="">—</option>
-                      {MOTOR_KW_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  </SelectWrapper>
-                </div>
-                <div>
-                  <label className={LABEL_CLS}>Motor Side <span className="normal-case font-normal text-slate-300">optional</span></label>
-                  <SelectWrapper>
-                    <select value={motorSide} onChange={e => setMotorSide(e.target.value)} className={SELECT_CLS}>
-                      <option value="">—</option>
-                      {MOTOR_SIDE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  </SelectWrapper>
-                </div>
-                <div>
-                  <label className={LABEL_CLS}>Control Box Side <span className="normal-case font-normal text-slate-300">optional</span></label>
-                  <SelectWrapper>
-                    <select value={cbSide} onChange={e => setCbSide(e.target.value)} className={SELECT_CLS}>
-                      <option value="">—</option>
-                      {CONTROL_BOX_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  </SelectWrapper>
-                </div>
+              {/* Motor & Control Box — collapsible */}
+              <div className="border-t border-slate-100">
+                <button type="button"
+                  onClick={() => { setMotorEnabled(v => !v); if (motorEnabled) { setMotorKw(''); setMotorSide(''); setCbSide('') } }}
+                  className={`flex w-full items-center justify-between px-4 py-3 text-sm font-semibold uppercase tracking-wide transition ${motorEnabled ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px]">settings</span>
+                    Motor &amp; Control Box
+                    <span className={`text-[11px] normal-case font-normal ml-1 ${motorEnabled ? 'text-indigo-200' : 'text-slate-400'}`}>optional</span>
+                  </div>
+                  <span className="material-symbols-outlined text-[18px]">
+                    {motorEnabled ? 'check_box' : 'check_box_outline_blank'}
+                  </span>
+                </button>
+                {motorEnabled && (
+                  <div className="grid grid-cols-3 gap-3 p-4">
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Motor (kW)</label>
+                      <div className="relative">
+                        <select value={motorKw} onChange={e => setMotorKw(e.target.value)}
+                          className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
+                          <option value="">—</option>
+                          {MOTOR_KW_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Motor Side</label>
+                      <div className="relative">
+                        <select value={motorSide} onChange={e => setMotorSide(e.target.value)}
+                          className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
+                          <option value="">—</option>
+                          {MOTOR_SIDE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Control Box Side</label>
+                      <div className="relative">
+                        <select value={cbSide} onChange={e => setCbSide(e.target.value)}
+                          className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
+                          <option value="">—</option>
+                          {CONTROL_BOX_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
