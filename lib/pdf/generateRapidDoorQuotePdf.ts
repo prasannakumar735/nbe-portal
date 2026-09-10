@@ -192,14 +192,7 @@ async function drawPage1(
   })
   y -= 56
 
-  // ── CUSTOMER HEADER BAR ───────────────────────────────────────────────────
-  const STRIP_H = 18
-  drawRect(page, ML, y - STRIP_H, CW, STRIP_H, BLACK)
-  t(page, 'CUSTOMER', ML + 8, y - 12, bold, 9, WHITE)
-  y -= STRIP_H
-
   // ── CUSTOMER DETAILS (left) + DOOR IMAGE (right) ──────────────────────────
-  const custStartY = y
   const custLabelX = ML + 8
   const custValueX = ML + 72
   const custRows: [string, string][] = [
@@ -210,36 +203,50 @@ async function drawPage1(
     ['Phone',     input.customerPhone    || '—'],
     ['Email',     input.customerEmail    || '—'],
   ]
+  const imgColX = ML + CW * 0.48
+  const imgColW = CW * 0.52
+  const custSectionH = custRows.length * 13 + 16
+
+  // Pre-compute image dimensions so section height can expand if needed
+  let imgDrawW = 0, imgDrawH = 0
+  let loadedDoorImg = null
+  if (firstDoor.doorImagePath) {
+    try {
+      const imgBytes = await readFile(firstDoor.doorImagePath)
+      loadedDoorImg = await pdfDoc.embedPng(imgBytes)
+      const { width: dw, height: dh } = loadedDoorImg
+      const maxW = imgColW - 4
+      const maxH = 190
+      imgDrawW = maxW
+      imgDrawH = (dh / dw) * imgDrawW
+      if (imgDrawH > maxH) { imgDrawH = maxH; imgDrawW = (dw / dh) * imgDrawH }
+    } catch { /* no image */ }
+  }
+
+  const sectionH = Math.max(custSectionH, imgDrawH + 8)
+
+  // ── CUSTOMER HEADER BAR (left column only) ────────────────────────────────
+  const STRIP_H = 18
+  const custColW = CW * 0.46
+  drawRect(page, ML, y - STRIP_H, custColW, STRIP_H, BLACK)
+  t(page, 'CUSTOMER', ML + 8, y - 12, bold, 9, WHITE)
+  y -= STRIP_H
+
   custRows.forEach(([label, val], i) => {
     t(page, label, custLabelX, y - 8 - i * 13, bold, 8, DARK)
     t(page, val,   custValueX, y - 8 - i * 13, reg,  8, DARK)
   })
 
-  // Door image — right column
-  const imgColX = ML + CW * 0.48
-  const imgColW = CW * 0.52
-  const custSectionH = custRows.length * 13 + 16
-
-  if (firstDoor.doorImagePath) {
-    try {
-      const imgBytes = await readFile(firstDoor.doorImagePath)
-      const doorImg = await pdfDoc.embedPng(imgBytes)
-      const { width: dw, height: dh } = doorImg
-      const maxW = imgColW - 10
-      const maxH = custSectionH + 10
-      let drawW = maxW
-      let drawH = (dh / dw) * drawW
-      if (drawH > maxH) { drawH = maxH; drawW = (dw / dh) * drawH }
-      page.drawImage(doorImg, {
-        x: imgColX + (imgColW - drawW) / 2,
-        y: y - drawH + 10,
-        width: drawW,
-        height: drawH,
-      })
-    } catch { /* no image — skip silently */ }
+  if (loadedDoorImg && imgDrawW > 0) {
+    page.drawImage(loadedDoorImg, {
+      x: imgColX + (imgColW - imgDrawW) / 2,
+      y: y - imgDrawH,
+      width: imgDrawW,
+      height: imgDrawH,
+    })
   }
 
-  y -= custSectionH
+  y -= sectionH
   y -= 12
 
   // ── TABLE ─────────────────────────────────────────────────────────────────
