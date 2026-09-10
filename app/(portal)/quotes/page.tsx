@@ -163,6 +163,35 @@ export default function NewQuotesPage() {
   const [customDesc,  setCustomDesc]    = useState<string | null>(null)
   const [tempDesc,    setTempDesc]      = useState('')
 
+  // Editable notes / disclaimers
+  const DEFAULT_PAGE1_DISCLAIMER = 'This quotation is based on the NBE Standard Door comprising a galvanized frame, PVC curtain (900 g/m²), and a zinc-coated control box (RAL 7035). Optional extras (e.g. powder coating, light curtain, remote control, radar, traffic light, induction loop, contactless exit button) are available at additional cost. All other matters shall be subject to our standard Terms and Conditions (T&C). The electrical scope is limited to the connection between the control panel and the doors only. Power supply and isolator shall be provided by others.'
+  const DEFAULT_PAGE2_SUMMARY_NOTE = "Subject to NBE Australia's standard Terms & Conditions. Final dimensions, site conditions and access must be confirmed prior to manufacture. Delivery, equipment hire and installation are excluded unless shown as priced line items. Electrical works are limited to connections between the control panel and door equipment. Power supply and isolator shall be provided by others."
+  const [page1Disclaimer,     setPage1Disclaimer]     = useState<string>('')
+  const [page2SummaryNote,    setPage2SummaryNote]    = useState<string>('')
+  const [editingPage1Note,    setEditingPage1Note]    = useState(false)
+  const [editingPage2Note,    setEditingPage2Note]    = useState(false)
+  const [tempPage1Note,       setTempPage1Note]       = useState('')
+  const [tempPage2Note,       setTempPage2Note]       = useState('')
+
+  function loadNotesFromStorage(qn: string) {
+    try {
+      const d = localStorage.getItem(`nbe_note1_${qn}`)
+      const s = localStorage.getItem(`nbe_note2_${qn}`)
+      if (d) setPage1Disclaimer(d)
+      if (s) setPage2SummaryNote(s)
+    } catch { /* ignore */ }
+  }
+  function saveNote1(qn: string | null, text: string) {
+    setPage1Disclaimer(text)
+    if (!qn) return
+    try { localStorage.setItem(`nbe_note1_${qn}`, text) } catch { /* ignore */ }
+  }
+  function saveNote2(qn: string | null, text: string) {
+    setPage2SummaryNote(text)
+    if (!qn) return
+    try { localStorage.setItem(`nbe_note2_${qn}`, text) } catch { /* ignore */ }
+  }
+
   // Multi-door
   const [savedDoors, setSavedDoors] = useState<SavedDoor[]>([])
 
@@ -320,7 +349,10 @@ export default function NewQuotesPage() {
     setGenerating(true)
     try {
       const qn = quoteNumber ?? buildRapidDoorQuoteNumber(nextRapidDoorSequence())
-      if (!quoteNumber) setQuoteNumber(qn)
+      if (!quoteNumber) {
+        setQuoteNumber(qn)
+        loadNotesFromStorage(qn)
+      }
 
       const validDate = new Date()
       validDate.setDate(validDate.getDate() + 30)
@@ -377,6 +409,8 @@ export default function NewQuotesPage() {
           customerName: custName, customerAttn: custAttn,
           customerAddress: custAddress, customerPostcode: custPostcode,
           customerPhone: custPhone, customerEmail: custEmail,
+          page1Disclaimer:  page1Disclaimer  || undefined,
+          page2SummaryNote: page2SummaryNote || undefined,
         }),
       })
 
@@ -900,6 +934,73 @@ export default function NewQuotesPage() {
                   <span className="text-sm font-bold text-white">${grandTotal.toLocaleString('en-AU', { minimumFractionDigits: 2 })}</span>
                 </div>
               )}
+            </div>
+
+            {/* Editable notes / disclaimers */}
+            <div className="space-y-3">
+              {/* Page 1 Disclaimer */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Page 1 Disclaimer</span>
+                  {!editingPage1Note ? (
+                    <button type="button" onClick={() => { setTempPage1Note(page1Disclaimer || DEFAULT_PAGE1_DISCLAIMER); setEditingPage1Note(true) }}
+                      className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition">
+                      <span className="material-symbols-outlined text-[14px]">edit</span>Edit
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <button type="button" onClick={() => setEditingPage1Note(false)}
+                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition">
+                        <span className="material-symbols-outlined text-[14px]">close</span>Cancel
+                      </button>
+                      <button type="button" onClick={() => { saveNote1(quoteNumber, tempPage1Note); setEditingPage1Note(false) }}
+                        className="flex items-center gap-1 rounded-lg bg-indigo-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-indigo-700 transition">
+                        <span className="material-symbols-outlined text-[14px]">check</span>Save
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {editingPage1Note ? (
+                  <textarea rows={4} value={tempPage1Note} onChange={e => setTempPage1Note(e.target.value)}
+                    className="w-full rounded-lg border border-indigo-300 bg-white px-3 py-2 text-[12px] text-slate-700 shadow-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 resize-y" />
+                ) : (
+                  <p className="text-[12px] text-slate-500 leading-relaxed whitespace-pre-wrap">
+                    {page1Disclaimer || DEFAULT_PAGE1_DISCLAIMER}
+                  </p>
+                )}
+              </div>
+
+              {/* Page 2 Summary Note */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Page 2 Summary Note</span>
+                  {!editingPage2Note ? (
+                    <button type="button" onClick={() => { setTempPage2Note(page2SummaryNote || DEFAULT_PAGE2_SUMMARY_NOTE); setEditingPage2Note(true) }}
+                      className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition">
+                      <span className="material-symbols-outlined text-[14px]">edit</span>Edit
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <button type="button" onClick={() => setEditingPage2Note(false)}
+                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition">
+                        <span className="material-symbols-outlined text-[14px]">close</span>Cancel
+                      </button>
+                      <button type="button" onClick={() => { saveNote2(quoteNumber, tempPage2Note); setEditingPage2Note(false) }}
+                        className="flex items-center gap-1 rounded-lg bg-indigo-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-indigo-700 transition">
+                        <span className="material-symbols-outlined text-[14px]">check</span>Save
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {editingPage2Note ? (
+                  <textarea rows={3} value={tempPage2Note} onChange={e => setTempPage2Note(e.target.value)}
+                    className="w-full rounded-lg border border-indigo-300 bg-white px-3 py-2 text-[12px] text-slate-700 shadow-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 resize-y" />
+                ) : (
+                  <p className="text-[12px] text-slate-500 leading-relaxed whitespace-pre-wrap">
+                    {page2SummaryNote || DEFAULT_PAGE2_SUMMARY_NOTE}
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Action buttons */}

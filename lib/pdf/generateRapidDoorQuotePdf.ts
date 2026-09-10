@@ -50,7 +50,9 @@ export type RapidDoorQuotePdfInput = {
   customerPostcode: string
   customerPhone:    string
   customerEmail:    string
-  imageStyle?:      string
+  imageStyle?:        string
+  page1Disclaimer?:   string
+  page2SummaryNote?:  string
   // Legacy single-door fields
   doorType?:         string
   doorTypeName?:     string
@@ -451,7 +453,8 @@ async function drawPage1(
   y = totBoxY - 22
 
   // ── FOOTER TERMS ─────────────────────────────────────────────────────────
-  const terms = 'This quotation is based on the NBE Standard Door comprising a galvanized frame, PVC curtain (900 g/m²), and a zinc-coated control box (RAL 7035). Optional extras (e.g. powder coating, light curtain, remote control, radar, traffic light, induction loop, contactless exit button) are available at additional cost. All other matters shall be subject to our standard Terms and Conditions (T&C). The electrical scope is limited to the connection between the control panel and the doors only. Power supply and isolator shall be provided by others.'
+  const DEFAULT_PAGE1_DISCLAIMER = 'This quotation is based on the NBE Standard Door comprising a galvanized frame, PVC curtain (900 g/m²), and a zinc-coated control box (RAL 7035). Optional extras (e.g. powder coating, light curtain, remote control, radar, traffic light, induction loop, contactless exit button) are available at additional cost. All other matters shall be subject to our standard Terms and Conditions (T&C). The electrical scope is limited to the connection between the control panel and the doors only. Power supply and isolator shall be provided by others.'
+  const terms = input.page1Disclaimer?.trim() || DEFAULT_PAGE1_DISCLAIMER
   const footerSize = 7.5
   const footerLines = wrapText(terms, reg, footerSize, CW)
   footerLines.forEach((ln, i) => {
@@ -652,7 +655,8 @@ async function drawPage2(
   tRight(page, fmtAUD(grandTotal * 1.1), ML + CW,               totBoxY + 6, bold, 11, WHITE)
 
   // ── FOOTER ───────────────────────────────────────────────────────────────
-  const terms = "Subject to NBE Australia's standard Terms & Conditions. Final dimensions, site conditions and access must be confirmed prior to manufacture. Delivery, equipment hire and installation are excluded unless shown as priced line items. Electrical works are limited to connections between the control panel and door equipment. Power supply and isolator shall be provided by others."
+  const DEFAULT_PAGE2_SUMMARY_NOTE = "Subject to NBE Australia's standard Terms & Conditions. Final dimensions, site conditions and access must be confirmed prior to manufacture. Delivery, equipment hire and installation are excluded unless shown as priced line items. Electrical works are limited to connections between the control panel and door equipment. Power supply and isolator shall be provided by others."
+  const terms = input.page2SummaryNote?.trim() || DEFAULT_PAGE2_SUMMARY_NOTE
   const footerSize = 8.5
   const footerLineH = 11
   const footerLines = wrapText(terms, reg, footerSize, CW)
