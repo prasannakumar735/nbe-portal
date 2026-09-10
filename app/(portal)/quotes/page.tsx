@@ -96,7 +96,8 @@ const QUOTE_TYPES = [
 ]
 
 const SELECT_CLS = 'w-full appearance-none rounded-xl border border-slate-200 bg-white py-3 pl-4 pr-10 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
-const LABEL_CLS  = 'mb-2 block text-xs font-semibold uppercase tracking-widest text-slate-400'
+const LABEL_CLS      = 'mb-2 block text-xs font-semibold uppercase tracking-widest text-slate-400'
+const LABEL_REQ_CLS  = 'mb-2 block text-xs font-semibold uppercase tracking-widest text-slate-400 after:content-["*"] after:ml-0.5 after:text-red-400'
 const INPUT_CLS  = 'w-full rounded-xl border border-slate-200 bg-white py-3 px-4 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
 
 function SelectWrapper({ children }: { children: React.ReactNode }) {
@@ -326,6 +327,18 @@ export default function NewQuotesPage() {
   const canGenerate = !generating && !!doorType && !!doorModel && !!openingW && !!openingH && !!frame &&
     !!curtain && !!colour && !!qty && !!unitPrice &&
     (custCanBeBlank || customerFilled)
+
+  const missingFields = [
+    !doorType                                   && 'Door Type',
+    !doorModel                                  && 'Door Model',
+    !openingW                                   && 'Clear Width',
+    !openingH                                   && 'Clear Height',
+    !frame                                      && 'Frame',
+    !curtain                                    && 'Curtain',
+    !colour                                     && 'Colour',
+    !unitPrice                                  && 'Unit Price',
+    (!custCanBeBlank && !customerFilled)        && 'Customer Name & Address',
+  ].filter(Boolean) as string[]
 
   // ── Save current door to locked list ────────────────────────────────────────
   function saveCurrentDoor() {
@@ -573,7 +586,7 @@ export default function NewQuotesPage() {
             {/* Door Type */}
             {isRapidDoor && (
               <div>
-                <label className={LABEL_CLS}>Door Type</label>
+                <label className={LABEL_REQ_CLS}>Door Type</label>
                 <SelectWrapper>
                   <select value={doorType} onChange={e => setDoorType(e.target.value)} className={SELECT_CLS}>
                     <option value="" disabled>— Select door type —</option>
@@ -588,7 +601,7 @@ export default function NewQuotesPage() {
               <>
                 {/* Door Model */}
                 <div>
-                  <label className={LABEL_CLS}>Door Model</label>
+                  <label className={LABEL_REQ_CLS}>Door Model</label>
                   <SelectWrapper>
                     <select value={doorModel} onChange={e => setDoorModel(e.target.value)} className={SELECT_CLS}>
                       <option value="" disabled>— Select model —</option>
@@ -600,11 +613,11 @@ export default function NewQuotesPage() {
                 {/* Opening dimensions + derived externals */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className={LABEL_CLS}>Clear Width <span className="normal-case font-normal">(mm)</span></label>
+                    <label className={LABEL_REQ_CLS}>Clear Width <span className="normal-case font-normal after:content-none">(mm)</span></label>
                     <input type="number" min={0} placeholder="e.g. 2500" value={openingW} onChange={e => setOpeningW(e.target.value)} className={INPUT_CLS} />
                   </div>
                   <div>
-                    <label className={LABEL_CLS}>Clear Height <span className="normal-case font-normal">(mm)</span></label>
+                    <label className={LABEL_REQ_CLS}>Clear Height <span className="normal-case font-normal after:content-none">(mm)</span></label>
                     <input type="number" min={0} placeholder="e.g. 3000" value={openingH} onChange={e => setOpeningH(e.target.value)} className={INPUT_CLS} />
                   </div>
                 </div>
@@ -630,7 +643,7 @@ export default function NewQuotesPage() {
                 )}
 
                 <div>
-                  <label className={LABEL_CLS}>Frame</label>
+                  <label className={LABEL_REQ_CLS}>Frame</label>
                   <SelectWrapper>
                     <select value={frame} onChange={e => setFrame(e.target.value)} className={SELECT_CLS}>
                       <option value="" disabled>— Select frame —</option>
@@ -640,7 +653,7 @@ export default function NewQuotesPage() {
                 </div>
 
                 <div>
-                  <label className={LABEL_CLS}>Curtain</label>
+                  <label className={LABEL_REQ_CLS}>Curtain</label>
                   <SelectWrapper>
                     <select value={curtain} onChange={e => setCurtain(e.target.value)} className={SELECT_CLS}>
                       <option value="" disabled>— Select curtain —</option>
@@ -650,7 +663,7 @@ export default function NewQuotesPage() {
                 </div>
 
                 <div>
-                  <label className={LABEL_CLS}>Colour</label>
+                  <label className={LABEL_REQ_CLS}>Colour</label>
                   <div className="relative" ref={colourRef}>
                     <button type="button" onClick={() => setColourOpen(o => !o)}
                       className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white py-3 pl-4 pr-10 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
@@ -962,8 +975,8 @@ export default function NewQuotesPage() {
                   className={INPUT_CLS} />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">
-                  Unit Price <span className="normal-case font-normal">(ex GST)</span>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400 after:content-['*'] after:ml-0.5 after:text-red-400">
+                  Unit Price <span className="normal-case font-normal after:content-none">(ex GST)</span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
@@ -992,16 +1005,20 @@ export default function NewQuotesPage() {
                 {!includeSummary && savedDoors.length > 0 && (
                   <>
                     <span className="text-slate-300 text-xs">·</span>
-                    <span
-                      className="material-symbols-outlined text-[13px] text-slate-400 cursor-help"
-                      title="When ON, each door page shows its own installation cost. When OFF, all costs are combined and shown only on the last door's page."
-                    >info</span>
+                    <div className="relative group/tip flex items-center">
+                      <span className="material-symbols-outlined text-[13px] text-slate-400 cursor-help">info</span>
+                      <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tip:flex w-56 flex-col items-center z-50">
+                        <div className="rounded-lg bg-slate-800 px-3 py-2 text-[11px] text-white leading-relaxed shadow-lg text-center">
+                          When ON, each door page shows its own installation cost. When OFF, all costs are combined on the last door&apos;s page only.
+                        </div>
+                        <div className="h-2 w-2 rotate-45 bg-slate-800 -mt-1" />
+                      </div>
+                    </div>
                     <span className="text-[11px] text-slate-500 font-medium">Individual per-door costs</span>
                     <button
                       type="button"
                       onClick={() => setIndividualInstall(v => !v)}
                       className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${individualInstall ? 'bg-indigo-500' : 'bg-slate-300'}`}
-                      title="Toggle to show installation costs on each door page individually, or combined on the last door page only."
                     >
                       <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ${individualInstall ? 'translate-x-4' : 'translate-x-0'}`} />
                     </button>
@@ -1177,11 +1194,21 @@ export default function NewQuotesPage() {
               </button>
             </div>
 
-            {!custCanBeBlank && !customerFilled && (
-              <p className="text-[11px] text-amber-600 flex items-center gap-1">
-                <span className="material-symbols-outlined text-[13px]">info</span>
-                Customer name &amp; address required — fill in Customer Details above, or check "can be blank"
-              </p>
+            {/* Missing fields warning — shown when button is disabled */}
+            {!canGenerate && !generating && missingFields.length > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 space-y-1">
+                <p className="text-[11px] font-semibold text-amber-700 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[13px]">warning</span>
+                  Required fields missing — complete these to generate:
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {missingFields.map(f => (
+                    <span key={f} className="inline-flex items-center rounded-full bg-amber-100 border border-amber-200 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                      <span className="mr-1 text-red-400">*</span>{f}
+                    </span>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         </div>
