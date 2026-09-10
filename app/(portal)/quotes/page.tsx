@@ -3,19 +3,11 @@ import { useEffect, useRef, useState } from 'react'
 import { loadDoorImageStyle } from '@/app/(portal)/admin/settings/QuoteSettingsClient'
 
 // ── Quote number helpers ──────────────────────────────────────────────────────
-function todayKey(): string {
-  const d = new Date()
-  return `${String(d.getFullYear()).slice(2)}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
-}
-function nextRapidDoorSequence(): number {
-  const key = `nbe_qrrd_seq_${todayKey()}`
-  const prev = parseInt(localStorage.getItem(key) ?? '0', 10) || 0
-  const next = prev + 1
-  localStorage.setItem(key, String(next))
-  return next
-}
-function buildRapidDoorQuoteNumber(seq: number): string {
-  return `QRRD${todayKey()}${String(seq).padStart(2, '0')}`
+async function fetchNextRapidDoorQuoteNumber(): Promise<string> {
+  const res = await fetch('/api/quotes/next-number?prefix=QRRD')
+  if (!res.ok) throw new Error('Failed to allocate quote number')
+  const { quoteNumber } = await res.json()
+  return quoteNumber as string
 }
 function todayDisplay(): string {
   const d = new Date()
@@ -244,10 +236,29 @@ export default function NewQuotesPage() {
   // Generation / preview
   const [quoteNumber,  setQuoteNumber]  = useState<string | null>(null)
   const quoteNumberRef = useRef<string | null>(null)  // stable ref — avoids stale closure in handleGenerateQuote
+  const quoteIdRef     = useRef<string | null>(null)  // Supabase quotes.id — set after first save
   const [generating,   setGenerating]   = useState(false)
   const [previewUrl,   setPreviewUrl]   = useState<string | null>(null)
   const [showPreview,  setShowPreview]  = useState(false)
   const previewRef = useRef<HTMLDivElement>(null)
+
+  // Recent quotes (loaded from Supabase)
+  type RecentQuoteRow = {
+    id: string; quote_number: string; customer_name: string | null
+    service_date: string; total: number; workflow_status: string
+    rapid_door_quote_details: { doors: unknown[] | null } | null
+  }
+  const [recentQuotes, setRecentQuotes]     = useState<RecentQuoteRow[]>([])
+  const [recentLoading, setRecentLoading]   = useState(false)
+
+  useEffect(() => {
+    setRecentLoading(true)
+    fetch('/api/quotes/rapid-door/list?limit=10')
+      .then(r => r.json())
+      .then(j => { if (j.ok) setRecentQuotes(j.data ?? []) })
+      .catch(() => {/* non-fatal */})
+      .finally(() => setRecentLoading(false))
+  }, [])
 
   // Email modal
   const [showEmailModal, setShowEmailModal] = useState(false)
@@ -399,7 +410,7 @@ export default function NewQuotesPage() {
   async function handleGenerateQuote() {
     setGenerating(true)
     try {
-      const qn = quoteNumberRef.current ?? buildRapidDoorQuoteNumber(nextRapidDoorSequence())
+      const qn = quoteNumberRef.current ?? await fetchNextRapidDoorQuoteNumber()
       if (!quoteNumberRef.current) {
         quoteNumberRef.current = qn
         setQuoteNumber(qn)
@@ -481,6 +492,33 @@ export default function NewQuotesPage() {
       const url = URL.createObjectURL(blob)
       setPreviewUrl(url)
       setShowPreview(true)
+
+      // Save to Supabase (non-fatal — PDF already generated)
+      try {
+        const saveRes = await fetch('/api/quotes/rapid-door/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            quoteNumber: qn,
+            quoteId: quoteIdRef.current ?? undefined,
+            date: todayDisplay(), validUntil,
+            customerName: custName, customerAttn: custAttn,
+            customerAddress: custAddress, customerPostcode: custPostcode,
+            customerPhone: custPhone, customerEmail: custEmail,
+            grandTotal, doors: allDoors,
+            includeSummary,
+            individualInstall: !includeSummary ? individualInstall : false,
+            endUser: endUser || undefined,
+            imageStyle: loadDoorImageStyle(),
+            page1Disclaimer: page1Disclaimer || undefined,
+            page2SummaryNote: page2SummaryNote || undefined,
+          }),
+        })
+        const saveJson = await saveRes.json()
+        if (saveJson.ok && saveJson.quoteId && !quoteIdRef.current) {
+          quoteIdRef.current = saveJson.quoteId
+        }
+      } catch { /* non-fatal */ }
 
       // Scroll to preview
       setTimeout(() => previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
@@ -1254,18 +1292,67 @@ export default function NewQuotesPage() {
         </div>
       )}
 
-      {/* ── Recent Quotes placeholder ──────────────────────────────────────── */}
+      {/* ── Recent Quotes ──────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <div>
-            <h2 className="text-base font-semibold text-slate-800">Recent Quotes</h2>
-            <p className="mt-0.5 text-xs text-slate-400">All quotes across types</p>
+            <h2 className="text-base font-semibold text-slate-800">Recent Rapid Door Quotes</h2>
+            <p className="mt-0.5 text-xs text-slate-400">Last 10 quotes saved to the system</p>
           </div>
+          <button type="button" onClick={() => {
+            setRecentLoading(true)
+            fetch('/api/quotes/rapid-door/list?limit=10')
+              .then(r => r.json()).then(j => { if (j.ok) setRecentQuotes(j.data ?? []) })
+              .catch(() => {}).finally(() => setRecentLoading(false))
+          }} className="text-xs text-indigo-600 hover:underline">Refresh</button>
         </div>
-        <div className="flex flex-col items-center justify-center gap-2 py-16 text-slate-400">
-          <span className="material-symbols-outlined text-4xl text-slate-300">receipt_long</span>
-          <p className="text-sm">Quote list will appear here</p>
-        </div>
+        {recentLoading ? (
+          <div className="flex items-center justify-center gap-2 py-10 text-slate-400">
+            <span className="material-symbols-outlined animate-spin text-2xl">progress_activity</span>
+            <span className="text-sm">Loading…</span>
+          </div>
+        ) : recentQuotes.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-16 text-slate-400">
+            <span className="material-symbols-outlined text-4xl text-slate-300">receipt_long</span>
+            <p className="text-sm">No quotes saved yet</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
+                  <th className="px-6 py-3">Quote #</th>
+                  <th className="px-4 py-3">Customer</th>
+                  <th className="px-4 py-3">Doors</th>
+                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Total</th>
+                  <th className="px-4 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentQuotes.map(q => {
+                  const doorCount = Array.isArray(q.rapid_door_quote_details?.doors) ? q.rapid_door_quote_details!.doors.length : '—'
+                  const [y, m, d] = (q.service_date ?? '').split('-')
+                  const dateStr = y ? `${d}/${m}/${y}` : '—'
+                  return (
+                    <tr key={q.id} className="border-b border-slate-50 hover:bg-slate-50 transition">
+                      <td className="px-6 py-3 font-mono text-xs text-indigo-700">{q.quote_number}</td>
+                      <td className="px-4 py-3 text-slate-700">{q.customer_name || <span className="text-slate-400 italic">No customer</span>}</td>
+                      <td className="px-4 py-3 text-slate-500">{doorCount}</td>
+                      <td className="px-4 py-3 text-slate-500">{dateStr}</td>
+                      <td className="px-4 py-3 font-medium text-slate-700">${Number(q.total ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                          {(q.workflow_status ?? 'draft').replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* ── Email Modal ────────────────────────────────────────────────────── */}
