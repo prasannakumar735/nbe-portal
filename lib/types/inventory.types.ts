@@ -10,6 +10,10 @@ export interface ComponentRow {
   stock_quantity: number
   min_stock: number
   is_active: boolean
+  category?: string | null
+  mpn?: string | null
+  conv_factor?: number | null
+  source_sheet?: string | null
 }
 
 export interface BomRow {

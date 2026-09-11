@@ -40,7 +40,7 @@ export class InventoryService {
 
     const { data, error } = await supabase
       .from('components')
-      .select('id, sku, name, unit, stock_quantity, min_stock, is_active')
+      .select('id, sku, name, unit, stock_quantity, min_stock, is_active, category, mpn, conv_factor, source_sheet')
       .order('name', { ascending: true })
 
     if (error) throw new Error(error.message)
@@ -53,6 +53,10 @@ export class InventoryService {
       stock_quantity: toNumber(row.stock_quantity),
       min_stock: toNumber(row.min_stock),
       is_active: Boolean(row.is_active),
+      category: row.category ? String(row.category) : null,
+      mpn: row.mpn ? String(row.mpn) : null,
+      conv_factor: row.conv_factor != null ? toNumber(row.conv_factor) : null,
+      source_sheet: row.source_sheet ? String(row.source_sheet) : null,
     }))
   }
 
@@ -170,7 +174,7 @@ export class InventoryService {
     // and filter in application code so the comparison is correct.
     const { data, error } = await supabase
       .from('components')
-      .select('id, sku, name, unit, stock_quantity, min_stock, is_active')
+      .select('id, sku, name, unit, stock_quantity, min_stock, is_active, category, mpn, conv_factor, source_sheet')
       .eq('is_active', true)
       .order('stock_quantity', { ascending: true })
 
@@ -186,6 +190,10 @@ export class InventoryService {
         stock_quantity: toNumber(row.stock_quantity),
         min_stock: toNumber(row.min_stock),
         is_active: Boolean(row.is_active),
+        category: row.category ? String(row.category) : null,
+        mpn: row.mpn ? String(row.mpn) : null,
+        conv_factor: row.conv_factor != null ? toNumber(row.conv_factor) : null,
+        source_sheet: row.source_sheet ? String(row.source_sheet) : null,
       }))
   }
 
