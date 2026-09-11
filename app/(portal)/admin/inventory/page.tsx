@@ -193,12 +193,30 @@ export default function InventoryDashboardPage() {
           </div>
         </div>
 
-        {/* Low stock */}
+        {/* Low stock — redesigned */}
         <div className="md:col-span-3 rounded-xl border overflow-hidden" style={{ borderColor: '#DDE3F0', background: '#fff' }}>
-          <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: '#EEF2FF' }}>
-            <h2 className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#64748B', fontFamily: "'IBM Plex Sans', sans-serif", letterSpacing: '0.1em' }}>
-              Low Stock Alerts
-            </h2>
+
+          {/* Header with severity summary badges */}
+          <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: '#F1F5FB' }}>
+            <div className="flex items-center gap-3">
+              <h2 className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#64748B', fontFamily: "'IBM Plex Sans', sans-serif", letterSpacing: '0.1em' }}>
+                Low Stock Alerts
+              </h2>
+              {alerts.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold"
+                    style={{ fontFamily: "'IBM Plex Sans', sans-serif", background: '#FEE2E2', color: '#DC2626' }}>
+                    <span className="h-1.5 w-1.5 rounded-full bg-red-500 inline-block" />
+                    {sortedAlerts.filter(a => Number(a.stock_quantity) === 0).length} out
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold"
+                    style={{ fontFamily: "'IBM Plex Sans', sans-serif", background: '#FEF3C7', color: '#B45309' }}>
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500 inline-block" />
+                    {sortedAlerts.filter(a => Number(a.stock_quantity) > 0).length} low
+                  </span>
+                </div>
+              )}
+            </div>
             {alerts.length > 0 && (
               <Link href="/admin/inventory/alerts"
                 className="text-xs font-medium hover:underline"
@@ -219,30 +237,76 @@ export default function InventoryDashboardPage() {
               </span>
             </div>
           ) : (
-            <ul className="divide-y" style={{ divideColor: '#F8FAFF' }}>
-              {sortedAlerts.map((a) => {
-                const gap = Number(a.min_stock) - Number(a.stock_quantity)
+            <ul>
+              {sortedAlerts.map((a, idx) => {
                 const isZero = Number(a.stock_quantity) === 0
+                const stripeColor = isZero ? '#DC2626' : '#D97706'
+                const stockNum = Number(a.stock_quantity)
+                const minNum = Number(a.min_stock)
+                // Fill bar: how full relative to a reasonable max (min * 3 or 100, whichever is sensible)
+                const barMax = Math.max(minNum * 3, stockNum, 1)
+                const barPct = Math.min((stockNum / barMax) * 100, 100)
+
                 return (
-                  <li key={a.id} className="flex items-center gap-3 pl-0 pr-5 py-3"
-                    style={{ borderBottom: '1px solid #F1F5FB' }}>
-                    {/* Left severity stripe */}
-                    <div className="w-1 self-stretch rounded-r shrink-0"
-                      style={{ background: isZero ? '#DC2626' : '#D97706', minHeight: 36 }} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate" style={{ color: '#1E293B', fontFamily: "'IBM Plex Sans', sans-serif" }}>
-                        {a.name}
-                      </p>
-                      <p className="text-xs mt-0.5 font-mono" style={{ color: '#94A3B8' }}>{a.sku}</p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-bold tabular-nums" style={{ color: isZero ? '#DC2626' : '#B45309', fontFamily: "'IBM Plex Mono', monospace" }}>
-                        {Number(a.stock_quantity).toFixed(0)}
-                        <span className="text-xs font-normal ml-1" style={{ color: '#94A3B8' }}>{a.unit}</span>
-                      </p>
-                      <p className="text-xs tabular-nums" style={{ color: '#CBD5E1', fontFamily: "'IBM Plex Mono', monospace" }}>
-                        min {Number(a.min_stock).toFixed(0)} · gap {gap > 0 ? gap.toFixed(0) : '0'}
-                      </p>
+                  <li key={a.id}
+                    className="flex items-stretch"
+                    style={{ borderBottom: idx < sortedAlerts.length - 1 ? '1px solid #F8FAFF' : undefined }}>
+
+                    {/* Severity stripe */}
+                    <div className="w-[3px] shrink-0" style={{ background: stripeColor }} />
+
+                    <div className="flex flex-1 items-center gap-3 px-4 py-3">
+                      {/* Icon */}
+                      <div className="shrink-0 h-8 w-8 rounded-lg flex items-center justify-center"
+                        style={{ background: isZero ? '#FEF2F2' : '#FFFBEB' }}>
+                        {isZero ? (
+                          <svg className="h-4 w-4" fill="none" stroke="#DC2626" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                          </svg>
+                        ) : (
+                          <svg className="h-4 w-4" fill="none" stroke="#D97706" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                          </svg>
+                        )}
+                      </div>
+
+                      {/* Name + meta */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium leading-snug truncate"
+                          style={{ color: '#1E293B', fontFamily: "'IBM Plex Sans', sans-serif" }}>
+                          {a.name}
+                        </p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs rounded px-1.5 py-px"
+                            style={{ fontFamily: "'IBM Plex Mono', monospace", background: '#EEF2FF', color: '#3730A3', border: '1px solid #C7D2FE' }}>
+                            {a.sku}
+                          </span>
+                          {a.category && (
+                            <span className="text-xs" style={{ color: '#94A3B8', fontFamily: "'IBM Plex Sans', sans-serif" }}>
+                              {a.category}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Stock reading + bar */}
+                      <div className="shrink-0 text-right w-24">
+                        <p className="text-sm font-bold tabular-nums"
+                          style={{ color: isZero ? '#DC2626' : '#B45309', fontFamily: "'IBM Plex Mono', monospace" }}>
+                          {stockNum.toLocaleString()}
+                          <span className="text-xs font-normal ml-1" style={{ color: '#94A3B8' }}>{a.unit}</span>
+                        </p>
+                        {/* Mini fill bar */}
+                        <div className="mt-1.5 h-1 rounded-full overflow-hidden" style={{ background: '#F1F5F9' }}>
+                          <div className="h-full rounded-full transition-all"
+                            style={{ width: `${barPct}%`, background: isZero ? '#FCA5A5' : '#FCD34D' }} />
+                        </div>
+                        {minNum > 0 && (
+                          <p className="text-xs mt-0.5 tabular-nums" style={{ color: '#CBD5E1', fontFamily: "'IBM Plex Mono', monospace" }}>
+                            min {minNum.toLocaleString()}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </li>
                 )
