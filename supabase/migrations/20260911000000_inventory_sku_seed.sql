@@ -1,5 +1,5 @@
--- NBE Inventory SKU seed data - deduped from NBE_INVENTORY_SKU.xlsx
--- Adds category, mpn, conv_factor, source_sheet columns to components table
+-- NBE Inventory SKU seed data - generated from NBE_INVENTORY_SKU.xlsx
+-- Duplicate SKUs disambiguated with _RD / _PVC / _UF suffix
 
 ALTER TABLE components ADD COLUMN IF NOT EXISTS category text;
 ALTER TABLE components ADD COLUMN IF NOT EXISTS mpn text;
@@ -34,10 +34,10 @@ VALUES
   ('DN10017', 'Motor Cover - Front (PE/FR)', 'DN10017', 'Frame', 'ea', 1.0, 33.0, 0, true, 'INVENTORY_RD'),
   ('DN10017-SS', 'Motor Cover - Front (PE/FR) - SS', 'DN10017-SS', 'Frame', 'ea', 1.0, 10.0, 0, true, 'INVENTORY_RD'),
   ('DN10032', 'Encoder BKT', 'DN10032', 'D-Control', 'ea', 1.0, 40.0, 0, true, 'INVENTORY_RD'),
-  ('DN10033', 'Fixing BKT - Curtain Strap', 'DN10033', 'Frame', 'ea', 1.0, 1000.0, 0, true, 'INVENTORY_RD'),
+  ('DN10033_RD', 'Fixing BKT - Curtain Strap', 'DN10033', 'Frame', 'ea', 1.0, 500.0, 0, true, 'INVENTORY_RD'),
   ('DN10034a', 'Shaft Spacer (Motor Side)', 'DN10034a', 'Frame', 'ea', 1.0, 15.0, 0, true, 'INVENTORY_RD'),
   ('DN10034b', 'Shaft Spacer (Motor Side)', 'DN10034b', 'Frame', 'ea', 1.0, 15.0, 0, true, 'INVENTORY_RD'),
-  ('DN10035', 'Drive Shaft Baring Side (∅30mm)', 'DN10035', 'Frame', 'ea', 1.0, 1550.0, 0, true, 'INVENTORY_RD'),
+  ('DN10035_RD', 'Drive Shaft Baring Side (∅30mm)', 'DN10035', 'Frame', 'ea', 1.0, 50.0, 0, true, 'INVENTORY_RD'),
   ('DN10036', 'Drive Shaft Baring Side (∅1 1/2 inch)', 'DN10036', 'Frame', 'ea', 1.0, 15.0, 0, true, 'INVENTORY_RD'),
   ('STRAP', 'CAD Lifting Strap', 'STRAP', 'Curtain', 'ea', 1.0, 750.0, 0, true, 'INVENTORY_RD'),
   ('D50193', 'Curtain Buckle (D50193)', 'D50193', 'Curtain', 'ea', 1.0, 0.0, 0, true, 'INVENTORY_RD'),
@@ -60,7 +60,7 @@ VALUES
   ('PVC900G-INSUL', 'PVC Curtain Mehler Quality - Insulated', 'PVC900G-INSUL', 'Curtain', 'm2', 1.0, 10.0, 0, true, 'INVENTORY_RD'),
   ('PVC900G-FRZ', 'PVC Curtain Mehler Quality - Freezer', 'PVC900G-FRZ', 'Curtain', 'm2', 1.0, 5.0, 0, true, 'INVENTORY_RD'),
   ('WEB50', 'Webbing 100mm (50m roll )', 'WEBBING 50mm', 'Curtain', 'm', 100.0, 2.0, 0, true, 'INVENTORY_RD'),
-  ('WEB100', 'Webbing 100mm (100m roll )', 'WEBBING 100mm', 'Frame', 'm', 100.0, 3.0, 0, true, 'INVENTORY_RD'),
+  ('WEB100_RD', 'Webbing 100mm (100m roll )', 'WEBBING 100mm', 'Frame', 'm', 100.0, 2.0, 0, true, 'INVENTORY_RD'),
   ('LS', 'Worm Gear Limit Switches | Ratio 21:1 | 2 contacts quick with 60°C', 'PF2C/21-7141', 'D-Control', 'ea', 1.0, 20.0, 0, true, 'INVENTORY_RD'),
   ('DW40', 'Pressure Wave Switch, 6.3mm terminals & clip-on mounting bracket-Bircher', 'DW40', 'Curtain', 'ea', 1.0, 3.0, 0, true, 'INVENTORY_RD'),
   ('CC', 'Curly Cords', 'CC', 'Curtain', 'ea', 1.0, 20.0, 0, true, 'INVENTORY_RD'),
@@ -116,7 +116,8 @@ VALUES
   ('C25019', 'Purlin C25019 (CAD Top & Uprights, SP Uprights)', 'C25019', 'Frame', 'm', 1.0, 1.0, 0, true, 'INVENTORY_RD'),
   ('SLC', 'Safety light curtain 1.5mH, 16-beams', 'CL15-16L', 'Safety', 'ea', 1.0, 20.0, 0, true, 'INVENTORY_RD'),
   ('HT8R', '8mm Hydrolic tube red 500m roll', '40000-019716', 'Curtain', 'm', 500.0, 3.0, 0, true, 'INVENTORY_RD'),
-  ('CP-100-XL', 'CP⌀100mmNB*9.0mXL (Commercial Pipe | Extra Light | AllGal)', 'CP-100-XL-C350-AGAL', 'R-Drum', 'm', 9.0, 24.0, 0, true, 'INVENTORY_RD'),
+  ('CP-100-XL_RD', 'CP⌀100mmNB*9.0mXL (Commercial Pipe | Extra Light | AllGal)', 'CP-100-XL-C350-AGAL', 'R-Drum', 'm', 9.0, 19.0, 0, true, 'INVENTORY_RD'),
+  ('CP-100-XL_RD_2', 'CP⌀100mmNB*6.5mXL (Commercial Pipe | Extra Light | HDGal)', 'CP-100-XL-G250-HDGAL', 'R-Drum', 'm', 6.5, 5.0, 0, true, 'INVENTORY_RD'),
   ('CP-100-L', 'CP⌀100mmNB*6.5mL (Commercial Pipe | Light | Black)', 'CP-100-L-C350-BLK', 'R-Drum', 'm', 6.5, 5.0, 0, true, 'INVENTORY_RD'),
   ('CP-125-L', 'CP⌀125mmNB*6.5mL (Commercial Pipe | Light | Black)', 'CP-125-L-C350-BLK', 'R-Drum', 'm', 6.5, 5.0, 0, true, 'INVENTORY_RD'),
   ('CP-20-M', 'CP⌀20mmNB*6.5mM (Commercial Pipe | Medium | Black)', 'CP-20-M-C250-BLK', 'Curtain', 'm', 6.5, 5.0, 0, true, 'INVENTORY_RD'),
@@ -124,8 +125,9 @@ VALUES
   ('CP-25-H', 'CP⌀25mmNB*6.5mH (Commercial Pipe | Heavy | Black)', 'CP-25-H-C250-BLK-PE', 'Curtain', 'm', 6.5, 5.0, 0, true, 'INVENTORY_RD'),
   ('PTC-38-MS', 'PTC⌀38mm@1.2mmMSGB*7.42mL (Precision Tube Mild Steel Galvabond)', 'PTC-38-1.2-MSGB-7420', 'Curtain', 'm', 7.42, 5.0, 0, true, 'INVENTORY_RD'),
   ('CP-32-XL', 'CP⌀32mmNB*6.5mXL (Commercial Pipe | Extra Light | Gal)', 'CP-32-XL-C350-GAL', 'Curtain', 'm', 6.5, 5.0, 0, true, 'INVENTORY_RD'),
-  ('CP-32-L', 'CP⌀32mmNB*6.5mL (Commercial Pipe | Light | HDGal)', 'CP-32-L-IP-G250-HDGAL', 'Curtain', 'm', 6.5, 10.0, 0, true, 'INVENTORY_RD'),
+  ('CP-32-L_RD', 'CP⌀32mmNB*6.5mL (Commercial Pipe | Light | HDGal)', 'CP-32-L-IP-G250-HDGAL', 'Curtain', 'm', 6.5, 5.0, 0, true, 'INVENTORY_RD'),
   ('CP-32-M', 'CP⌀32mmNB*6.5mM (Commercial Pipe | Medium | Black)', 'CP-32-M-C250-BLK', 'Curtain', 'm', 6.5, 5.0, 0, true, 'INVENTORY_RD'),
+  ('CP-32-L_RD_2', 'CP⌀32mmNB*6.88mL (Commercial Pipe | Light | AllGal)', 'CP-32-L-C350-AGAL', 'Curtain', 'm', 6.88, 5.0, 0, true, 'INVENTORY_RD'),
   ('CP-40-XL', 'CP⌀40mmNB*6.5mXL (Commercial Pipe | Extra Light | Gal)', 'CP-40-XL-C350-GAL', 'Curtain', 'm', 6.5, 5.0, 0, true, 'INVENTORY_RD'),
   ('CP-40-L', 'CP⌀40mmNB*6.5mL (Commercial Pipe | Light | Hot Dipped Gal)', 'CP-40-L-IP-G250-HDGAL', 'Curtain', 'm', 6.5, 5.0, 0, true, 'INVENTORY_RD'),
   ('CP-50-MED', 'CP⌀50mmNB*6.5mM (Commercial Pipe | Medium | Hot Dipped Gal)', 'CP-50-M-C250-HDGAL', 'Curtain', 'm', 6.5, 5.0, 0, true, 'INVENTORY_RD'),
@@ -175,6 +177,7 @@ VALUES
   ('DN10021', 'Upright Fixing BKT (PE/FR)', 'DN10021', 'Frame', 'ea', 1.0, 100.0, 0, true, 'INVENTORY_RD'),
   ('DN10021-SS', 'Upright Fixing BKT (PE/FR) - SS', 'DN10021-SS', 'Frame', 'ea', 1.0, 20.0, 0, true, 'INVENTORY_RD'),
   ('DN10018', 'Motor Cover - Front (SP/CAD)', 'DN10018', 'Frame', 'ea', 1.0, 15.0, 0, true, 'INVENTORY_RD'),
+  ('DN10035_RD_2', 'Curtain Clamp', 'DN10035', 'Curtain', 'ea', 1.0, 1500.0, 0, true, 'INVENTORY_RD'),
   ('DN10045', 'Webbing Clamp', 'DN10045', 'Curtain', 'ea', 1.0, 120.0, 0, true, 'INVENTORY_RD'),
   ('I-400400200', 'Metal enclosure, RAL7035,zinc-coated mounting plate, K2 lock', 'I-400400200', 'C-Box', 'ea', 1.0, 55.0, 0, true, 'INVENTORY_RD'),
   ('T35 RAILS', '35mmW*7.5mmH*1.0m L', 'T35 RAILS', 'C-Box', 'm', 1.0, 35.0, 0, true, 'INVENTORY_RD'),
@@ -219,15 +222,17 @@ VALUES
   ('TRK-BKT-JOIN', 'Sliding Door Track - Joining BKT  (200KG)', 'EDJB', 'Track', 'ea', 1.0, 0.0, 0, true, 'INVENTORY_PVC'),
   ('RHS-100-50-2.5', 'RHS100m*50m*8.0mL @2.5mm (Galvanized)', 'RHS-100-50-2.5-C350-GAL', 'Frame', 'm', 8.0, 1.0, 0, true, 'INVENTORY_PVC'),
   ('RHS-150-50-2.5', 'RHS150m*50m*8.0mL @2.5mm (Galvanized)', 'RHS-150-50-2.5-C350-GAL', 'Frame', 'm', 8.0, 1.0, 0, true, 'INVENTORY_PVC'),
+  ('DN10033_PVC', 'Fixing BKT - Curtain Strap', 'DN10033', 'Frame', 'ea', 1.0, 500.0, 0, true, 'INVENTORY_PVC'),
+  ('WEB100_PVC', 'Webbing 100mm (100m roll )', 'WEBBING 100mm', 'Frame', 'm', 100.0, 1.0, 0, true, 'INVENTORY_PVC'),
   ('DN10037', 'PVC Strip Curtain Headrail Beam End BKT (M)', 'DN10037', 'Frame', 'ea', 1.0, 50.0, 0, true, 'INVENTORY_PVC'),
   ('DN10038', 'PVC Strip Curtain Headrail Beam End BKT (L)', 'DN10038', 'Frame', 'ea', 1.0, 20.0, 0, true, 'INVENTORY_PVC'),
   ('DN10039', 'PVC Strip Joining BKT - Curtain Headrail Beam (M)', 'DN10039', 'Frame', 'ea', 1.0, 50.0, 0, true, 'INVENTORY_PVC'),
   ('DN10040', 'PVC Strip Joining BKT - Curtain Headrail Beam (L)', 'DN10040', 'Frame', 'ea', 1.0, 20.0, 0, true, 'INVENTORY_PVC'),
   ('DN10042-GAL', 'PVC Strip Curtain Headrail (GAL - 3mL)', 'DN10042-GAL', 'Frame', 'm', 3.0, 250.0, 0, true, 'INVENTORY_PVC'),
   ('DN10042-SS', 'PVC Strip Curtain Headrail (S/S - 3mL)', 'DN10042-SS', 'Frame', 'm', 3.0, 150.0, 0, true, 'INVENTORY_PVC'),
-  ('HDW-RIV-DOME-AS-5-6', '5-6 Alum/Steel Dome Rivet (Hanger)', '73AS5-6', 'Fitting', 'ea', 1000.0, 1500.0, 0, true, 'INVENTORY_PVC'),
-  ('HDW-SCR-T17-HEX-12X25', '12 X 25 CL3 Hex T17 (Hex Head Timber Screw)', '12X25CL3T17', 'Fitting', 'ea', 1000.0, 1500.0, 0, true, 'INVENTORY_PVC'),
-  ('HDW-ANC-SLV-M10X50', 'M10 X 50 Zinc Hex Sleeve Anchor', 'HS1050', 'Fitting', 'ea', 100.0, 800.0, 0, true, 'INVENTORY_PVC'),
+  ('HDW-RIV-DOME-AS-5-6_PVC', '5-6 Alum/Steel Dome Rivet (Hanger)', '73AS5-6', 'Fitting', 'ea', 1000.0, 500.0, 0, true, 'INVENTORY_PVC'),
+  ('HDW-SCR-T17-HEX-12X25_PVC', '12 X 25 CL3 Hex T17 (Hex Head Timber Screw)', '12X25CL3T17', 'Fitting', 'ea', 1000.0, 500.0, 0, true, 'INVENTORY_PVC'),
+  ('HDW-ANC-SLV-M10X50_PVC', 'M10 X 50 Zinc Hex Sleeve Anchor', 'HS1050', 'Fitting', 'ea', 100.0, 200.0, 0, true, 'INVENTORY_PVC'),
   ('DN10043-150-GAL', 'PVC Strip Curtain Hangers (GAL - 150mmW)', 'DN10043-150-GAL', 'Hanger', 'ea', 1.0, 750.0, 0, true, 'INVENTORY_PVC'),
   ('DN10043-150-SS', 'PVC Strip Curtain Hangers (S/S - 150mmW)', 'DN10043-150-SS', 'Hanger', 'ea', 1.0, 250.0, 0, true, 'INVENTORY_PVC'),
   ('DN10043-200-GAL', 'PVC Strip Curtain Hangers (GAL - 200mmW)', 'DN10043-200-GAL', 'Hanger', 'ea', 1.0, 750.0, 0, true, 'INVENTORY_PVC'),
@@ -265,10 +270,12 @@ VALUES
   ('HDW-SCR-GRUB-M5X5', 'M5 x 5 Grab Screw', '', 'Hardware', 'ea', 1.0, 200.0, 0, true, 'INVENTORY_UF'),
   ('HDW-SCR-GRUB-M5X10', 'M5 x 10 Grab Screw', '', 'Hardware', 'ea', 1.0, 200.0, 0, true, 'INVENTORY_UF'),
   ('HDW-SCR-GRUB-M6X10', 'M6 X 10 PC14.9 Plain Cup Point Socket Set (Grub) Screw', '6X10MSSS', 'Hardware', 'ea', 1.0, 200.0, 0, true, 'INVENTORY_UF'),
+  ('HDW-SCR-T17-HEX-12X25_UF', '12 X 25 CL4 Hex T17', '12X25CL4T17', 'Hardware', 'ea', 1.0, 1000.0, 0, true, 'INVENTORY_UF'),
   ('HDW-SCR-SDS-HEX-14-20X22', '14-20 X 22 CL4 Hex Fine SDS', '1420X22CL4T', 'Hardware', 'ea', 1.0, 1000.0, 0, true, 'INVENTORY_UF'),
   ('HDW-SCR-SDS-HEX-10-16X16', '10-16 X 16 CL4 Hex SDS', '1016X16CL4T', 'Hardware', 'ea', 1.0, 1000.0, 0, true, 'INVENTORY_UF'),
   ('HDW-SCR-SDS-HEX-12-14X20', '12-14 X 20 CL4 Hex SDS', '1214X20CL4T', 'Hardware', 'ea', 1.0, 1000.0, 0, true, 'INVENTORY_UF'),
   ('HDW-WAS-FLT-3/8X1-1/2', '3/8 X 1-1/2 X 16g Zinc Flat Washer', '38X1.12X16ZPBRTW', 'Hardware', 'ea', 1.0, 200.0, 0, true, 'INVENTORY_UF'),
+  ('HDW-RIV-DOME-AS-5-6_UF', '5-6 Alum/Steel Dome Rivet', '73AS5-6', 'Hardware', 'ea', 1.0, 1000.0, 0, true, 'INVENTORY_UF'),
   ('HDW-SCR-BPHNP-8X15', '8 X 15 ZY Fine Button Phillips Needle Point Screw', '8X16BSS', 'Hardware', 'ea', 1.0, 500.0, 0, true, 'INVENTORY_UF'),
   ('HDW-SCR-BPHNP-8X20', '8 X 20 ZY Fine Button Phillips Needle Point Screw', '8X20BSS', 'Hardware', 'ea', 1.0, 500.0, 0, true, 'INVENTORY_UF'),
   ('HDW-SCR-SDS-PAN-8-18X16', '8-18 X 16 ZY Pan SDS', '818X16PT', 'Hardware', 'ea', 1.0, 500.0, 0, true, 'INVENTORY_UF'),
@@ -280,6 +287,8 @@ VALUES
   ('HDW-B&N-HEX-M10X20', 'M10 X 20 PC4.6 Zinc Hex Bolt & Nut', '10X20MZPBN', 'Hardware', 'ea', 1.0, 1000.0, 0, true, 'INVENTORY_UF'),
   ('HDW-WAS-SPR-M10', 'M10 X 3.5 X 2.2 Zinc Spring Washer', '10X3.5X2.2MZPSW', 'Hardware', 'ea', 1.0, 400.0, 0, true, 'INVENTORY_UF'),
   ('HDW-B&N-HEX-M10X30', 'M10 X 30 PC4.6 Zinc Hex Bolt & Nut', '10X30MZPBN', 'Hardware', 'ea', 1.0, 200.0, 0, true, 'INVENTORY_UF'),
+  ('HDW-ANC-SLV-M10X50_UF', 'M10 X 50 Zinc Hex Sleeve Anchor', 'HS1050', 'Hardware', 'ea', 1.0, 500.0, 0, true, 'INVENTORY_UF'),
+  ('HDW-ANC-SLV-M10X50_UF_2', 'M10 X 50 Zinc Hex Sleeve Anchor', 'UN070010050', 'Hardware', 'ea', 1.0, 100.0, 0, true, 'INVENTORY_UF'),
   ('HDW-WAS-FLT-M10', 'M10 Zinc Commercial Flat Washer AS1237:1973', '10MZPW', 'Hardware', 'ea', 1.0, 600.0, 0, true, 'INVENTORY_UF'),
   ('HDW-B&N-HEX-M12X30', 'M12 X 30 PC4.6 Zinc Hex Bolt & Nut', '12X30MZPBN', 'Hardware', 'ea', 1.0, 200.0, 0, true, 'INVENTORY_UF'),
   ('HDW-SCR-PANPH-M4X8', 'M4 X 8 Zinc Pan Phillips Metal Thread', '4X8MZPPCRMT', 'Hardware', 'ea', 1.0, 200.0, 0, true, 'INVENTORY_UF'),
@@ -310,4 +319,4 @@ ON CONFLICT (sku) DO UPDATE SET
   source_sheet = EXCLUDED.source_sheet,
   is_active = true;
 
--- Total: 292 unique SKUs
+-- Total: 301 rows
