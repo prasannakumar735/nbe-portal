@@ -1,6 +1,6 @@
 'use client'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import type { ComponentRow } from '@/lib/types/inventory.types'
@@ -10,11 +10,32 @@ type SortKey = 'name' | 'sku' | 'stock_quantity' | 'category'
 type SortDir = 'asc' | 'desc'
 
 const SHEET_TABS = [
-  { key: '', label: 'All' },
-  { key: 'INVENTORY_RD', label: 'Rapid Door' },
-  { key: 'INVENTORY_PVC', label: 'PVC Strip' },
-  { key: 'INVENTORY_UF', label: 'Hardware' },
+  { key: '',             label: 'All'      },
+  { key: 'INVENTORY_RD',  label: 'Rapid Door' },
+  { key: 'INVENTORY_PVC', label: 'PVC Strip'  },
+  { key: 'INVENTORY_UF',  label: 'Hardware'   },
 ]
+
+const CAT_COLORS: Record<string, string> = {
+  'G-Motor':      '#2563EB',
+  'Frame':        '#0891B2',
+  'Curtain':      '#7C3AED',
+  'C-Box':        '#D97706',
+  'D-Control':    '#059669',
+  'Safety':       '#DC2626',
+  'Cable':        '#64748B',
+  'R-Drum':       '#9333EA',
+  'Detec':        '#0F766E',
+  'Hardware':     '#B45309',
+  'Tools':        '#4F46E5',
+  'Track':        '#0284C7',
+  'Fitting':      '#7C3AED',
+  'Hanger':       '#0891B2',
+  'PVC Strip':    '#2563EB',
+  'PVC Sheet':    '#7C3AED',
+  'PVC Swing':    '#0F766E',
+  'Frame/Curtain':'#D97706',
+}
 
 const PAGE_SIZE = 50
 
@@ -33,21 +54,15 @@ export default function InventoryComponentsPage() {
   const [activeCategory, setActiveCategory] = useState('')
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'name', dir: 'asc' })
   const [page, setPage] = useState(0)
-  const adjustRef = useRef<HTMLTableRowElement | null>(null)
 
   const load = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
+    setIsLoading(true); setError(null)
     try {
       const res = await fetch('/api/inventory/components', { cache: 'no-store' })
-      if (!res.ok) {
-        const payload = await res.json().catch(() => ({}))
-        throw new Error(payload.error || 'Failed to load components')
-      }
-      const payload = await res.json()
-      setComponents(payload.components ?? [])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load components')
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Load failed')
+      setComponents((await res.json()).components ?? [])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Load failed')
     } finally {
       setIsLoading(false)
     }
@@ -56,55 +71,44 @@ export default function InventoryComponentsPage() {
   useEffect(() => { void load() }, [load])
 
   const categories = useMemo(() => {
-    const sheetItems = activeSheet ? components.filter((c) => c.source_sheet === activeSheet) : components
-    const cats = Array.from(new Set(sheetItems.map((c) => c.category ?? '').filter(Boolean))).sort()
-    return cats
+    const base = activeSheet ? components.filter(c => c.source_sheet === activeSheet) : components
+    return Array.from(new Set(base.map(c => c.category ?? '').filter(Boolean))).sort()
   }, [components, activeSheet])
 
   const filtered = useMemo(() => {
     let list = components
-    if (activeSheet) list = list.filter((c) => c.source_sheet === activeSheet)
-    if (activeCategory) list = list.filter((c) => c.category === activeCategory)
+    if (activeSheet) list = list.filter(c => c.source_sheet === activeSheet)
+    if (activeCategory) list = list.filter(c => c.category === activeCategory)
     if (search.trim()) {
       const q = search.toLowerCase()
-      list = list.filter(
-        (c) =>
-          c.sku.toLowerCase().includes(q) ||
-          c.name.toLowerCase().includes(q) ||
-          (c.mpn ?? '').toLowerCase().includes(q) ||
-          (c.category ?? '').toLowerCase().includes(q),
+      list = list.filter(c =>
+        c.sku.toLowerCase().includes(q) ||
+        c.name.toLowerCase().includes(q) ||
+        (c.mpn ?? '').toLowerCase().includes(q) ||
+        (c.category ?? '').toLowerCase().includes(q),
       )
     }
-    list = [...list].sort((a, b) => {
-      let va: string | number = ''
-      let vb: string | number = ''
+    return [...list].sort((a, b) => {
       if (sort.key === 'stock_quantity') {
-        va = Number(a.stock_quantity)
-        vb = Number(b.stock_quantity)
-        return sort.dir === 'asc' ? va - vb : vb - va
+        const d = Number(a.stock_quantity) - Number(b.stock_quantity)
+        return sort.dir === 'asc' ? d : -d
       }
-      va = String(a[sort.key] ?? '').toLowerCase()
-      vb = String(b[sort.key] ?? '').toLowerCase()
+      const va = String(a[sort.key] ?? '').toLowerCase()
+      const vb = String(b[sort.key] ?? '').toLowerCase()
       return sort.dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va)
     })
-    return list
   }, [components, activeSheet, activeCategory, search, sort])
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  const lowCount = filtered.filter(c => c.stock_quantity <= c.min_stock).length
 
   function toggleSort(key: SortKey) {
-    setSort((s) => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' })
+    setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' })
     setPage(0)
   }
 
-  function handleSheetTab(key: string) {
-    setActiveSheet(key)
-    setActiveCategory('')
-    setPage(0)
-  }
-
-  async function handleAdjust(componentId: string) {
+  async function handleAdjust(id: string) {
     const qty = parseFloat(form.quantity)
     if (!qty || qty <= 0) { toast.error('Enter a positive quantity'); return }
     setSubmitting(true)
@@ -112,66 +116,76 @@ export default function InventoryComponentsPage() {
       const res = await fetch('/api/inventory/movements', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ component_id: componentId, movement_type: form.type, quantity: qty, note: form.note || undefined }),
+        body: JSON.stringify({ component_id: id, movement_type: form.type, quantity: qty, note: form.note || undefined }),
       })
-      if (!res.ok) {
-        const payload = await res.json().catch(() => ({}))
-        throw new Error(payload.error || 'Failed to record movement')
-      }
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed')
       toast.success('Stock updated')
       setAdjusting(null)
       setForm({ type: 'in', quantity: '', note: '' })
       await load()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to record movement')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed')
     } finally {
       setSubmitting(false)
     }
   }
 
-  const lowCount = filtered.filter((c) => c.stock_quantity <= c.min_stock).length
+  const mono: React.CSSProperties = { fontFamily: "'IBM Plex Mono', monospace" }
+  const sans: React.CSSProperties = { fontFamily: "'IBM Plex Sans', sans-serif" }
 
   return (
     <div className="space-y-5">
-      {/* Breadcrumb + title */}
-      <div className="flex items-center gap-2 text-sm text-slate-500">
-        <Link href="/admin/inventory" className="hover:text-indigo-600 transition-colors">Inventory</Link>
-        <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-        <span className="text-slate-800 font-medium">Components</span>
+
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2 text-xs" style={{ ...sans, color: '#94A3B8' }}>
+        <Link href="/admin/inventory" className="hover:text-blue-600 transition-colors" style={{ color: '#64748B' }}>
+          Inventory
+        </Link>
+        <span>/</span>
+        <span style={{ color: '#1E293B', fontWeight: 600 }}>Components</span>
       </div>
 
+      {/* Title + search row */}
       <div className="flex flex-wrap items-end gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Components</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <p className="text-xs font-semibold uppercase tracking-widest" style={{ ...mono, color: '#2563EB', letterSpacing: '0.12em' }}>
+            SKU Catalogue
+          </p>
+          <h1 className="mt-0.5 text-2xl font-bold tracking-tight" style={{ ...sans, color: '#0D1526' }}>
+            Components
+          </h1>
+          <p className="text-xs mt-1" style={{ ...sans, color: '#94A3B8' }}>
             {filtered.length} of {components.length} SKUs
             {lowCount > 0 && (
-              <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+              <span className="ml-2 rounded px-1.5 py-0.5 text-xs font-medium"
+                style={{ background: '#FEF3C7', color: '#92400E' }}>
                 {lowCount} low stock
               </span>
             )}
           </p>
         </div>
-        {/* Search */}
         <div className="flex-1 min-w-[220px]">
           <div className="relative">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 pointer-events-none" fill="none" stroke="#94A3B8" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
             </svg>
             <input
               type="text"
-              placeholder="Search SKU, name, MPN…"
+              placeholder="Search SKU, description, MPN…"
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(0) }}
-              className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              onChange={e => { setSearch(e.target.value); setPage(0) }}
+              className="w-full rounded-lg py-2 pl-9 pr-8 text-sm outline-none transition-all"
+              style={{ ...sans, border: '1px solid #DDE3F0', color: '#1E293B', background: '#fff',
+                boxShadow: 'none' }}
+              onFocus={e => e.currentTarget.style.borderColor = '#2563EB'}
+              onBlur={e => e.currentTarget.style.borderColor = '#DDE3F0'}
             />
             {search && (
               <button type="button" onClick={() => setSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 transition-colors"
+                style={{ color: '#CBD5E1' }}>
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
                 </svg>
               </button>
             )}
@@ -179,213 +193,272 @@ export default function InventoryComponentsPage() {
         </div>
       </div>
 
-      {/* Sheet Tabs */}
-      <div className="flex gap-1 border-b border-slate-200">
-        {SHEET_TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => handleSheetTab(tab.key)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeSheet === tab.key
-                ? 'border-indigo-600 text-indigo-700'
-                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-            }`}
-          >
-            {tab.label}
-            {tab.key && (
-              <span className="ml-1.5 text-xs text-slate-400">
-                ({components.filter((c) => c.source_sheet === tab.key).length})
-              </span>
-            )}
-          </button>
-        ))}
+      {/* Sheet tabs */}
+      <div style={{ borderBottom: '1px solid #DDE3F0' }}>
+        <div className="flex gap-0">
+          {SHEET_TABS.map(tab => {
+            const count = tab.key ? components.filter(c => c.source_sheet === tab.key).length : components.length
+            const active = activeSheet === tab.key
+            return (
+              <button key={tab.key} type="button"
+                onClick={() => { setActiveSheet(tab.key); setActiveCategory(''); setPage(0) }}
+                className="relative px-4 py-2.5 text-sm font-medium transition-colors"
+                style={{
+                  ...sans,
+                  color: active ? '#2563EB' : '#64748B',
+                  borderBottom: active ? '2px solid #2563EB' : '2px solid transparent',
+                  marginBottom: -1,
+                }}>
+                {tab.label}
+                <span className="ml-1.5 text-xs rounded px-1.5 py-0.5"
+                  style={{
+                    ...mono,
+                    background: active ? '#EFF6FF' : '#F1F5F9',
+                    color: active ? '#1D4ED8' : '#94A3B8',
+                  }}>
+                  {count}
+                </span>
+              </button>
+            )
+          })}
+        </div>
       </div>
 
-      {/* Category chips */}
+      {/* Category filter pills */}
       {categories.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
+        <div className="flex flex-wrap gap-1.5">
+          <button type="button"
             onClick={() => { setActiveCategory(''); setPage(0) }}
-            className={`rounded-full px-3 py-1 text-xs font-medium border transition-colors ${
-              !activeCategory ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
-            }`}
-          >
-            All categories
+            className="rounded-full px-3 py-1 text-xs font-medium border transition-all"
+            style={{
+              ...sans,
+              background: !activeCategory ? '#1E293B' : '#fff',
+              color: !activeCategory ? '#F8FAFC' : '#64748B',
+              borderColor: !activeCategory ? '#1E293B' : '#DDE3F0',
+            }}>
+            All
           </button>
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => { setActiveCategory(cat); setPage(0) }}
-              className={`rounded-full px-3 py-1 text-xs font-medium border transition-colors ${
-                activeCategory === cat ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-400 hover:text-indigo-700'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
+          {categories.map(cat => {
+            const active = activeCategory === cat
+            const color = CAT_COLORS[cat] ?? '#64748B'
+            return (
+              <button key={cat} type="button"
+                onClick={() => { setActiveCategory(cat); setPage(0) }}
+                className="rounded-full px-3 py-1 text-xs font-medium border transition-all"
+                style={{
+                  ...sans,
+                  background: active ? color : '#fff',
+                  color: active ? '#fff' : '#64748B',
+                  borderColor: active ? color : '#DDE3F0',
+                }}>
+                {cat}
+              </button>
+            )
+          })}
         </div>
       )}
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-red-700 text-sm">{error}</div>
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" style={sans}>{error}</div>
       )}
 
       {/* Table */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: '#DDE3F0', background: '#fff' }}>
         {isLoading ? (
-          <div className="flex items-center justify-center py-16 text-slate-400 text-sm gap-2">
+          <div className="flex items-center justify-center py-16 gap-2 text-sm" style={{ ...sans, color: '#94A3B8' }}>
             <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
             </svg>
             Loading…
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
-                  <Th label="SKU" sortKey="sku" sort={sort} onSort={toggleSort} className="w-36" />
-                  <Th label="Description" sortKey="name" sort={sort} onSort={toggleSort} />
-                  <Th label="Category" sortKey="category" sort={sort} onSort={toggleSort} className="w-32" />
-                  <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide w-24">MPN</th>
-                  <Th label="Stock" sortKey="stock_quantity" sort={sort} onSort={toggleSort} className="w-24 text-right" />
-                  <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide w-20 text-right">Min</th>
-                  <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide w-16">Unit</th>
-                  <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide w-20">Status</th>
-                  <th className="px-4 py-3 w-28" />
+                <tr style={{ background: '#FAFBFF', borderBottom: '1px solid #EEF2FF' }}>
+                  {/* status stripe col */}
+                  <th className="w-1" />
+                  <SortTh label="SKU"         sortKey="sku"           sort={sort} onSort={toggleSort} className="w-36 pl-4" />
+                  <SortTh label="Description" sortKey="name"          sort={sort} onSort={toggleSort} />
+                  <SortTh label="Category"    sortKey="category"      sort={sort} onSort={toggleSort} className="w-32" />
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider w-32"
+                    style={{ ...sans, color: '#94A3B8', letterSpacing: '0.07em' }}>MPN</th>
+                  <SortTh label="Stock" sortKey="stock_quantity" sort={sort} onSort={toggleSort} className="w-28 text-right pr-4" />
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider w-16"
+                    style={{ ...sans, color: '#94A3B8', letterSpacing: '0.07em' }}>Min</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider w-14"
+                    style={{ ...sans, color: '#94A3B8', letterSpacing: '0.07em' }}>Unit</th>
+                  <th className="w-12" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {paginated.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-400">
+                    <td colSpan={9} className="px-5 py-12 text-center text-sm" style={{ ...sans, color: '#94A3B8' }}>
                       No components match your filters.
                     </td>
                   </tr>
                 )}
-                {paginated.map((component) => {
-                  const isLow = component.stock_quantity <= component.min_stock
-                  const isAdj = adjusting === component.id
+                {paginated.map((c) => {
+                  const isLow = c.stock_quantity <= c.min_stock
+                  const isZero = Number(c.stock_quantity) === 0
+                  const isAdj = adjusting === c.id
+                  const catColor = CAT_COLORS[c.category ?? ''] ?? '#CBD5E1'
+                  const stripeColor = isZero ? '#DC2626' : isLow ? '#D97706' : '#10B981'
+
                   return (
-                    <>
+                    <React.Fragment key={c.id}>
                       <tr
-                        key={component.id}
-                        className={`group transition-colors ${isAdj ? 'bg-indigo-50' : 'hover:bg-slate-50/60'}`}
+                        className="transition-colors"
+                        style={{
+                          borderBottom: '1px solid #F1F5FB',
+                          background: isAdj ? '#F8FAFF' : undefined,
+                        }}
+                        onMouseEnter={e => { if (!isAdj) (e.currentTarget as HTMLElement).style.background = '#FAFBFF' }}
+                        onMouseLeave={e => { if (!isAdj) (e.currentTarget as HTMLElement).style.background = '' }}
                       >
-                        <td className="px-4 py-3">
-                          <span className="inline-block rounded-md bg-slate-100 px-2 py-0.5 font-mono text-xs font-medium text-slate-700">
-                            {component.sku}
+                        {/* Severity stripe */}
+                        <td className="p-0 w-1">
+                          <div className="w-[3px] min-h-[44px] h-full" style={{ background: stripeColor }} />
+                        </td>
+
+                        {/* SKU */}
+                        <td className="pl-4 pr-2 py-3">
+                          <span className="inline-block rounded px-2 py-0.5 text-xs"
+                            style={{ ...mono, background: '#1E2B3C', color: '#93C5FD', letterSpacing: '0.02em' }}>
+                            {c.sku}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-slate-800 max-w-[260px]">
-                          <span className="line-clamp-2 leading-snug">{component.name}</span>
+
+                        {/* Name */}
+                        <td className="px-4 py-3 max-w-[260px]">
+                          <span className="line-clamp-2 leading-snug text-sm" style={{ ...sans, color: '#334155' }}>
+                            {c.name}
+                          </span>
                         </td>
+
+                        {/* Category */}
                         <td className="px-4 py-3">
-                          {component.category && (
-                            <span className="inline-block rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
-                              {component.category}
+                          {c.category && (
+                            <span className="inline-flex items-center gap-1.5 text-xs rounded-full px-2.5 py-0.5"
+                              style={{ ...sans, background: `${catColor}14`, color: catColor, border: `1px solid ${catColor}30` }}>
+                              <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: catColor }} />
+                              {c.category}
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-3 font-mono text-xs text-slate-500">
-                          {component.mpn ?? '—'}
+
+                        {/* MPN */}
+                        <td className="px-4 py-3 text-xs" style={{ ...mono, color: '#94A3B8' }}>
+                          {c.mpn || '—'}
                         </td>
-                        <td className={`px-4 py-3 text-right font-semibold tabular-nums ${isLow ? 'text-amber-700' : 'text-slate-800'}`}>
-                          {Number(component.stock_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+
+                        {/* Stock */}
+                        <td className="px-4 py-3 text-right pr-4">
+                          <span className="text-sm font-bold tabular-nums"
+                            style={{ ...mono, color: isZero ? '#DC2626' : isLow ? '#D97706' : '#0D1526' }}>
+                            {Number(c.stock_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          </span>
                         </td>
-                        <td className="px-4 py-3 text-right text-xs text-slate-500 tabular-nums">
-                          {Number(component.min_stock).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+
+                        {/* Min */}
+                        <td className="px-4 py-3 text-right text-xs tabular-nums" style={{ ...mono, color: '#CBD5E1' }}>
+                          {Number(c.min_stock).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                         </td>
-                        <td className="px-4 py-3 text-xs text-slate-500">{component.unit}</td>
-                        <td className="px-4 py-3">
-                          {isLow ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                              Low
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
-                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                              OK
-                            </span>
-                          )}
+
+                        {/* Unit */}
+                        <td className="px-4 py-3 text-xs" style={{ ...sans, color: '#94A3B8' }}>
+                          {c.unit}
                         </td>
-                        <td className="px-4 py-3">
+
+                        {/* Adjust toggle */}
+                        <td className="px-3 py-3">
                           <button
                             type="button"
+                            title={isAdj ? 'Cancel' : 'Adjust stock'}
                             onClick={() => {
-                              setAdjusting(isAdj ? null : component.id)
+                              setAdjusting(isAdj ? null : c.id)
                               setForm({ type: 'in', quantity: '', note: '' })
                             }}
-                            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                              isAdj
-                                ? 'bg-indigo-200 text-indigo-800'
-                                : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 group-hover:bg-indigo-100'
-                            }`}
-                          >
-                            {isAdj ? 'Cancel' : 'Adjust'}
+                            className="rounded-lg p-1.5 transition-colors"
+                            style={{
+                              color: isAdj ? '#2563EB' : '#94A3B8',
+                              background: isAdj ? '#EFF6FF' : undefined,
+                            }}>
+                            {isAdj ? (
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                              </svg>
+                            ) : (
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
+                              </svg>
+                            )}
                           </button>
                         </td>
                       </tr>
+
+                      {/* Adjust form row */}
                       {isAdj && (
-                        <tr
-                          key={`${component.id}-form`}
-                          ref={adjustRef}
-                          className="border-b border-indigo-200 bg-indigo-50/60"
-                        >
-                          <td colSpan={9} className="px-4 py-4">
+                        <tr style={{ background: '#F0F6FF', borderBottom: '1px solid #BFDBFE' }}>
+                          <td className="p-0 w-1">
+                            <div className="w-[3px] min-h-full" style={{ background: '#2563EB' }} />
+                          </td>
+                          <td colSpan={8} className="px-5 py-4">
                             <div className="flex flex-wrap items-end gap-3">
                               <div>
-                                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Movement Type</label>
+                                <label className="block text-xs font-semibold mb-1.5" style={{ ...sans, color: '#475569' }}>
+                                  Type
+                                </label>
                                 <select
                                   value={form.type}
-                                  onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as MovementType }))}
-                                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                >
-                                  <option value="in">📦 Stock In</option>
-                                  <option value="out">📤 Stock Out</option>
-                                  <option value="adjustment">🔧 Adjustment</option>
+                                  onChange={e => setForm(f => ({ ...f, type: e.target.value as MovementType }))}
+                                  className="rounded-lg py-2 px-3 text-sm outline-none"
+                                  style={{ ...sans, border: '1px solid #CBD5E1', color: '#1E293B', background: '#fff' }}>
+                                  <option value="in">Stock In</option>
+                                  <option value="out">Stock Out</option>
+                                  <option value="adjustment">Adjustment</option>
                                 </select>
                               </div>
                               <div>
-                                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Quantity</label>
+                                <label className="block text-xs font-semibold mb-1.5" style={{ ...sans, color: '#475569' }}>
+                                  Quantity
+                                </label>
                                 <input
-                                  type="number"
-                                  min="0.001"
-                                  step="0.001"
+                                  type="number" min="0.001" step="0.001"
                                   value={form.quantity}
-                                  onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
+                                  onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))}
                                   placeholder="0.00"
-                                  className="w-32 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                  className="w-28 rounded-lg py-2 px-3 text-sm outline-none"
+                                  style={{ ...mono, border: '1px solid #CBD5E1', color: '#1E293B', background: '#fff' }}
                                 />
                               </div>
                               <div className="flex-1 min-w-[180px]">
-                                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Note</label>
+                                <label className="block text-xs font-semibold mb-1.5" style={{ ...sans, color: '#475569' }}>
+                                  Note
+                                </label>
                                 <input
                                   type="text"
                                   value={form.note}
-                                  onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
-                                  placeholder="e.g. PO #1234, batch delivery"
-                                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                  onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
+                                  placeholder="e.g. PO #1234, batch received"
+                                  className="w-full rounded-lg py-2 px-3 text-sm outline-none"
+                                  style={{ ...sans, border: '1px solid #CBD5E1', color: '#1E293B', background: '#fff' }}
                                 />
                               </div>
                               <button
-                                type="button"
-                                disabled={submitting}
-                                onClick={() => void handleAdjust(component.id)}
-                                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-                              >
-                                {submitting ? 'Saving…' : 'Save Movement'}
+                                type="button" disabled={submitting}
+                                onClick={() => void handleAdjust(c.id)}
+                                className="rounded-lg px-4 py-2 text-sm font-semibold text-white transition-opacity disabled:opacity-50"
+                                style={{ ...sans, background: '#2563EB' }}>
+                                {submitting ? 'Saving…' : 'Save'}
                               </button>
                             </div>
                           </td>
                         </tr>
                       )}
-                    </>
+                    </React.Fragment>
                   )
                 })}
               </tbody>
@@ -396,70 +469,61 @@ export default function InventoryComponentsPage() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-slate-500 text-xs">
-            Page {page + 1} of {totalPages} · {filtered.length} results
+        <div className="flex items-center justify-between">
+          <span className="text-xs" style={{ ...mono, color: '#94A3B8' }}>
+            {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}
           </span>
           <div className="flex items-center gap-1">
-            <button
-              type="button"
-              disabled={page === 0}
-              onClick={() => setPage((p) => p - 1)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-colors"
-            >
-              ← Prev
-            </button>
+            <PageBtn label="←" disabled={page === 0} onClick={() => setPage(p => p - 1)} mono={mono} sans={sans} />
             {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-              const pageIdx = totalPages <= 7 ? i : page < 4 ? i : page > totalPages - 4 ? totalPages - 7 + i : page - 3 + i
+              const idx = totalPages <= 7 ? i : page < 4 ? i : page > totalPages - 4 ? totalPages - 7 + i : page - 3 + i
               return (
-                <button
-                  key={pageIdx}
-                  type="button"
-                  onClick={() => setPage(pageIdx)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                    pageIdx === page
-                      ? 'bg-indigo-600 text-white'
-                      : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  {pageIdx + 1}
-                </button>
+                <PageBtn key={idx} label={String(idx + 1)} active={idx === page}
+                  onClick={() => setPage(idx)} mono={mono} sans={sans} />
               )
             })}
-            <button
-              type="button"
-              disabled={page >= totalPages - 1}
-              onClick={() => setPage((p) => p + 1)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-colors"
-            >
-              Next →
-            </button>
+            <PageBtn label="→" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} mono={mono} sans={sans} />
           </div>
         </div>
       )}
+
     </div>
   )
 }
 
-function Th({ label, sortKey, sort, onSort, className }: {
-  label: string
-  sortKey: SortKey
-  sort: { key: SortKey; dir: SortDir }
-  onSort: (k: SortKey) => void
-  className?: string
+function SortTh({ label, sortKey, sort, onSort, className }: {
+  label: string; sortKey: SortKey
+  sort: { key: SortKey; dir: SortDir }; onSort: (k: SortKey) => void; className?: string
 }) {
   const active = sort.key === sortKey
   return (
     <th
-      className={`px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide cursor-pointer select-none hover:text-slate-700 transition-colors ${className ?? ''}`}
-      onClick={() => onSort(sortKey)}
-    >
+      className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer select-none transition-colors hover:text-slate-700 ${className ?? ''}`}
+      style={{ fontFamily: "'IBM Plex Sans', sans-serif", color: active ? '#2563EB' : '#94A3B8', letterSpacing: '0.07em' }}
+      onClick={() => onSort(sortKey)}>
       <span className="inline-flex items-center gap-1">
         {label}
-        <span className={`transition-opacity ${active ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'}`}>
-          {active && sort.dir === 'asc' ? '↑' : '↓'}
-        </span>
+        {active && <span style={{ opacity: 0.7 }}>{sort.dir === 'asc' ? '↑' : '↓'}</span>}
       </span>
     </th>
+  )
+}
+
+function PageBtn({ label, active, disabled, onClick, mono, sans }: {
+  label: string; active?: boolean; disabled?: boolean
+  onClick: () => void
+  mono: React.CSSProperties; sans: React.CSSProperties
+}) {
+  return (
+    <button type="button" disabled={disabled} onClick={onClick}
+      className="rounded px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-40"
+      style={{
+        ...mono,
+        background: active ? '#2563EB' : '#fff',
+        color: active ? '#fff' : '#64748B',
+        border: active ? '1px solid #2563EB' : '1px solid #DDE3F0',
+      }}>
+      {label}
+    </button>
   )
 }
