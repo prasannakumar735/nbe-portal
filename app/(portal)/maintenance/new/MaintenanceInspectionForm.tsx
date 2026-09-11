@@ -126,6 +126,8 @@ function getDefaultFormValues(): MaintenanceFormValues {
     signature_data_url: '',
     signature_storage_url: '',
     repair_summary_overrides: [],
+    health_score_override: null,
+    health_score_color: null,
     doors: [createDoor(0)],
   }
 }
@@ -2461,7 +2463,115 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">9. Save / Submit</h2>
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-700">9. Summary Override (optional)</h2>
+          <p className="mb-4 text-xs text-slate-500">
+            Auto-computed from checklist results. Override any value here to change what appears on the PDF sign-off page.
+          </p>
+          {/* Read-only auto-computed summary */}
+          {(() => {
+            const doors = watchedDoors
+            let good = 0, caution = 0, fault = 0, naCount = 0, totalChecks = 0
+            for (const door of doors) {
+              for (const item of MAINTENANCE_CHECKLIST_ITEMS) {
+                const s = door.checklist?.[item.code] ?? null
+                if (s === null) continue
+                if (s === 'na') { naCount += 1; continue }
+                totalChecks += 1
+                if (s === 'good') good += 1
+                else if (s === 'caution') caution += 1
+                else if (s === 'fault') fault += 1
+              }
+            }
+            const autoScore = totalChecks > 0 ? Math.round((good / totalChecks) * 100) : 0
+            const autoColor = autoScore >= 70 ? 'text-emerald-700' : autoScore >= 40 ? 'text-amber-600' : 'text-red-600'
+            return (
+              <div className="mb-4 rounded-lg border border-slate-100 bg-slate-50 p-3">
+                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">Auto-computed</p>
+                <div className="grid grid-cols-3 gap-2 text-xs sm:grid-cols-6">
+                  {[
+                    ['Total Doors', String(doors.length)],
+                    ['Total Checks', String(totalChecks)],
+                    ['Good', String(good)],
+                    ['Caution', String(caution)],
+                    ['Fault', String(fault)],
+                  ].map(([label, val]) => (
+                    <div key={label} className="flex flex-col">
+                      <span className="text-slate-400">{label}</span>
+                      <span className="font-semibold text-slate-700">{val}</span>
+                    </div>
+                  ))}
+                  <div className="flex flex-col">
+                    <span className="text-slate-400">Health Score</span>
+                    <span className={`font-semibold ${autoColor}`}>{autoScore}%</span>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">
+                Override Health Score %
+              </label>
+              <Controller
+                control={control}
+                name="health_score_override"
+                render={({ field }) => (
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    placeholder="e.g. 85"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                    value={field.value ?? ''}
+                    onChange={e => field.onChange(e.target.value === '' ? null : Number(e.target.value))}
+                  />
+                )}
+              />
+              <p className="mt-1 text-xs text-slate-400">Leave blank to use auto-computed value</p>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">
+                Override Health Score Colour
+              </label>
+              <Controller
+                control={control}
+                name="health_score_color"
+                render={({ field }) => (
+                  <div className="flex gap-2">
+                    {([
+                      { value: null, label: 'Auto' },
+                      { value: 'green', label: 'Green' },
+                      { value: 'amber', label: 'Amber' },
+                      { value: 'red', label: 'Red' },
+                    ] as { value: 'green' | 'amber' | 'red' | null; label: string }[]).map(opt => {
+                      const selected = field.value === opt.value
+                      const colorClass =
+                        opt.value === 'green' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' :
+                        opt.value === 'amber' ? 'border-amber-500 bg-amber-50 text-amber-700' :
+                        opt.value === 'red'   ? 'border-red-500 bg-red-50 text-red-700' :
+                        'border-slate-300 bg-white text-slate-600'
+                      return (
+                        <button
+                          key={String(opt.value)}
+                          type="button"
+                          onClick={() => field.onChange(opt.value)}
+                          className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${selected ? `${colorClass} ring-2 ring-offset-1` : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'}`}
+                        >
+                          {opt.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              />
+              <p className="mt-1 text-xs text-slate-400">Auto picks green/amber/red by score threshold</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">10. Save / Submit</h2>
           {isAdminMode ? (
             <p className="mt-2 text-xs text-slate-500">
               Flow: save draft → submit report → review / edit doors if needed → save changes → approve or download.

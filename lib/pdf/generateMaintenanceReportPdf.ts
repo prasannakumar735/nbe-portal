@@ -1545,6 +1545,8 @@ export async function generateMaintenanceReportPdf(options: MaintenancePdfOption
       metrics: aggregateSignOffDisplayMetrics(form),
       findingGroups: buildSignOffFindingGroups(form),
     },
+    healthScoreOverride: form.health_score_override ?? null,
+    healthScoreColor: form.health_score_color ?? null,
   })
 
   const sigDoc = await PDFDocument.load(mergedSignOffBytes)

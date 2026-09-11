@@ -100,6 +100,11 @@ const formHeaderDraft = {
   notes: z.string().optional().default(''),
   signature_data_url: z.string().optional().default(''),
   signature_storage_url: z.string().optional().default(''),
+  health_score_override: z.preprocess(
+    v => (v === '' || v == null ? null : Number(v)),
+    z.number().int().min(0).max(100).nullable().optional(),
+  ),
+  health_score_color: z.enum(['green', 'amber', 'red']).nullable().optional(),
 }
 
 const repairSummaryItemDraftSchema = z.object({
@@ -189,6 +194,11 @@ export const maintenanceFormSubmitSchema = z
     signature_storage_url: z.string().optional().default(''),
     repair_summary_text: z.string().optional().default(''),
     repair_summary_overrides: z.array(repairSummaryItemSubmitSchema).optional(),
+    health_score_override: z.preprocess(
+      v => (v === '' || v == null ? null : Number(v)),
+      z.number().int().min(0).max(100).nullable().optional(),
+    ),
+    health_score_color: z.enum(['green', 'amber', 'red']).nullable().optional(),
     doors: z.array(doorSchema),
   })
   .superRefine(submitFormRefinements)

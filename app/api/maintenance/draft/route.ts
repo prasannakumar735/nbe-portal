@@ -379,6 +379,14 @@ export async function POST(request: NextRequest) {
       const t = String((payload.form as { repair_summary_text?: unknown }).repair_summary_text ?? '').trim()
       reportInsert.repair_summary_text = t || null
     }
+    if (Object.prototype.hasOwnProperty.call(payload.form, 'health_score_override')) {
+      const raw = (payload.form as { health_score_override?: unknown }).health_score_override
+      reportInsert.health_score_override = raw != null && raw !== '' ? Number(raw) : null
+    }
+    if (Object.prototype.hasOwnProperty.call(payload.form, 'health_score_color')) {
+      const raw = (payload.form as { health_score_color?: unknown }).health_score_color
+      reportInsert.health_score_color = raw != null ? String(raw) : null
+    }
     const rawIncomingSchema = (payload.form as { report_schema_version?: unknown }).report_schema_version
     const incomingSchemaNum = Number(rawIncomingSchema)
     const incomingSchema = Number.isFinite(incomingSchemaNum) && incomingSchemaNum > 0 ? Math.trunc(incomingSchemaNum) : null

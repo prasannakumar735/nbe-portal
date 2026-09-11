@@ -13,7 +13,9 @@ ALTER TABLE maintenance_reports
   ADD COLUMN IF NOT EXISTS technician_email          text,
   ADD COLUMN IF NOT EXISTS technician_contact        text,
   ADD COLUMN IF NOT EXISTS submitter_email           text,
-  ADD COLUMN IF NOT EXISTS submitter_contact         text;
+  ADD COLUMN IF NOT EXISTS submitter_contact         text,
+  ADD COLUMN IF NOT EXISTS health_score_override     integer        CHECK (health_score_override >= 0 AND health_score_override <= 100),
+  ADD COLUMN IF NOT EXISTS health_score_color        text           CHECK (health_score_color IN ('green', 'amber', 'red'));
 
 ALTER TABLE maintenance_doors
   ADD COLUMN IF NOT EXISTS technician_door_details   text,

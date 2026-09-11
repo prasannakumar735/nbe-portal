@@ -275,6 +275,16 @@ export type MaintenanceFormValues = {
    * Optional technician-edited list. When present and non-empty, it overrides the auto-generated repair summary.
    */
   repair_summary_overrides?: RepairSummaryItem[]
+  /**
+   * Manager/technician override for the health score displayed on the sign-off page.
+   * When set (0–100), this value replaces the auto-computed score in the PDF.
+   */
+  health_score_override?: number | null
+  /**
+   * Override for the health score colour on the sign-off page.
+   * null → auto-colour based on score (≥70% green, ≥40% amber, otherwise red).
+   */
+  health_score_color?: 'green' | 'amber' | 'red' | null
   doors: MaintenanceDoorForm[]
 }
 

@@ -11,6 +11,8 @@ const BORDER = rgb(0.85, 0.87, 0.9)
 const LABEL_MUTED = rgb(0.45, 0.48, 0.52)
 const TEXT_BODY = rgb(0.15, 0.17, 0.2)
 const HEALTH_GREEN = rgb(0.05, 0.45, 0.28)
+const HEALTH_AMBER = rgb(0.72, 0.42, 0.05)
+const HEALTH_RED = rgb(0.73, 0.1, 0.1)
 const TITLE_NAVY = rgb(0.1, 0.2, 0.45)
 
 const LOGO_MAX_W = 100
@@ -94,6 +96,15 @@ function formatFindingGroupLine(g: SignOffFindingGroup): string {
   return `- ${g.section} -> ${parts.join(', ')}`
 }
 
+function resolveHealthColor(score: number, colorOverride?: 'green' | 'amber' | 'red' | null) {
+  if (colorOverride === 'green') return HEALTH_GREEN
+  if (colorOverride === 'amber') return HEALTH_AMBER
+  if (colorOverride === 'red') return HEALTH_RED
+  if (score >= 70) return HEALTH_GREEN
+  if (score >= 40) return HEALTH_AMBER
+  return HEALTH_RED
+}
+
 function drawSummaryAndFindings(
   page: import('pdf-lib').PDFPage,
   startY: number,
@@ -101,6 +112,8 @@ function drawSummaryAndFindings(
   findingGroups: SignOffFindingGroup[],
   font: PDFFontType,
   bold: PDFFontType,
+  healthScoreOverride?: number | null,
+  healthScoreColor?: 'green' | 'amber' | 'red' | null,
 ): number {
   let y = startY
   const labelSize = 9
@@ -120,8 +133,8 @@ function drawSummaryAndFindings(
   y -= 20
 
   const validChecks = metrics.totalChecks - metrics.na
-  const healthScore =
-    validChecks > 0 ? Math.round((metrics.good / validChecks) * 100) : 0
+  const computedScore = validChecks > 0 ? Math.round((metrics.good / validChecks) * 100) : 0
+  const healthScore = healthScoreOverride != null ? healthScoreOverride : computedScore
 
   const summaryRows: [string, string][] = [
     ['Total doors', String(metrics.totalDoors)],
@@ -155,7 +168,7 @@ function drawSummaryAndFindings(
     y,
     size: 11,
     font: bold,
-    color: HEALTH_GREEN,
+    color: resolveHealthColor(healthScore, healthScoreColor),
   })
   y -= 24
 
@@ -227,6 +240,8 @@ export type MergedReportSignaturePdfInput = {
     metrics: SignOffDisplayMetrics
     findingGroups: SignOffFindingGroup[]
   }
+  healthScoreOverride?: number | null
+  healthScoreColor?: 'green' | 'amber' | 'red' | null
 }
 
 /** Final page: summary, findings, technician / manager, date / client acknowledgement */
@@ -273,6 +288,8 @@ export async function generateMergedReportSignaturePdf(
     input.signOff.findingGroups,
     font,
     bold,
+    input.healthScoreOverride,
+    input.healthScoreColor,
   )
 
   const colGap = 32
