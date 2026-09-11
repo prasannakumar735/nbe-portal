@@ -254,10 +254,14 @@ export async function runMaintenanceSubmit(request: NextRequest): Promise<NextRe
         { status: 400 },
       )
     }
+    const message = error instanceof Error ? error.message : String(error)
     console.error('[Maintenance Submit API] Failed to submit report', {
+      message,
       error,
       hasBody: Boolean(body),
     })
-    return jsonError500(error, 'maintenance-submit')
+    // Return the actual message in all environments so portal users can see what failed
+    // (this is an operational error, not a security-sensitive detail).
+    return NextResponse.json({ error: message || 'Maintenance submit failed' }, { status: 500 })
   }
 }
