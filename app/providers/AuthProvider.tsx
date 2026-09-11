@@ -248,11 +248,15 @@ function SessionLifecycle() {
     window.addEventListener('click', onPointer, { capture: true, passive: true })
     window.addEventListener('keydown', onKey, { capture: true, passive: true })
     window.addEventListener('mousemove', onMouseMove, { capture: true, passive: true })
+    window.addEventListener('touchstart', onPointer, { capture: true, passive: true })
+    window.addEventListener('touchmove', onMouseMove, { capture: true, passive: true })
 
     return () => {
       window.removeEventListener('click', onPointer, true)
       window.removeEventListener('keydown', onKey, true)
       window.removeEventListener('mousemove', onMouseMove, true)
+      window.removeEventListener('touchstart', onPointer, true)
+      window.removeEventListener('touchmove', onMouseMove, true)
     }
   }, [isLoading, session, bumpActivity])
 
@@ -445,6 +449,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return () => {
       cancelled = true
     }
+  }, [])
+
+  // When the device comes back online, refresh the Supabase session.
+  // If the access token expired while offline (1-hour TTL), the refresh token
+  // (7-day TTL) is still valid and this restores the session silently.
+  useEffect(() => {
+    const supabase = createSupabaseClient()
+    const onOnline = () => {
+      void supabase.auth.refreshSession()
+    }
+    window.addEventListener('online', onOnline)
+    return () => window.removeEventListener('online', onOnline)
   }, [])
 
   // Subscribe to auth state changes

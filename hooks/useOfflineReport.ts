@@ -95,6 +95,8 @@ export type UseOfflineReportResult = {
   resolveConflictRefresh: () => Promise<void>
   /** True while unsynced queue rows exist for this report. */
   hasPendingSync: boolean
+  /** Last sync error message (e.g. session expired), or null if no error. */
+  syncError: string | null
 }
 
 export function formatOfflineSaveStatus(saveStatus: OfflineSaveUiStatus): string {
@@ -125,6 +127,7 @@ export function useOfflineReport(reportId: string | null): UseOfflineReportResul
   const [reportAuxFields, setReportAuxFields] = useState<Record<string, unknown>>({})
   const [conflict, setConflict] = useState<OfflineConflictInfo | null>(null)
   const [hasPendingSync, setHasPendingSync] = useState(false)
+  const [syncError, setSyncError] = useState<string | null>(null)
   const hasPendingSyncRef = useRef(false)
 
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -151,6 +154,7 @@ export function useOfflineReport(reportId: string | null): UseOfflineReportResul
       onSynced: rid => {
         if (rid === reportId) {
           setSaveStatus('synced')
+          setSyncError(null)
           void refreshPending(rid)
         }
       },
@@ -164,9 +168,10 @@ export function useOfflineReport(reportId: string | null): UseOfflineReportResul
           setSaveStatus('error')
         }
       },
-      onError: rid => {
+      onError: (rid, message) => {
         if (rid === reportId) {
           setSaveStatus('error')
+          setSyncError(message || null)
         }
       },
     })
@@ -429,5 +434,6 @@ export function useOfflineReport(reportId: string | null): UseOfflineReportResul
     syncNow,
     resolveConflictRefresh,
     hasPendingSync,
+    syncError,
   }
 }

@@ -58,6 +58,14 @@ export async function uploadMaintenancePhotos(params: {
 
   if (files.length === 0) return []
 
+  // Refresh the session before uploading — maintenance forms can be open for
+  // 30–60 minutes and the access token expires after 1 hour. A stale token
+  // causes a storage RLS violation instead of a clear auth error.
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) {
+    throw new Error('Your session has expired. Please sign in again to upload photos.')
+  }
+
   // Sanitise path segments so they don't break storage URLs
   const safeReportId = reportId.replace(/[^a-zA-Z0-9_-]/g, '_')
   const safeDoorId = doorId.replace(/[^a-zA-Z0-9_-]/g, '_')

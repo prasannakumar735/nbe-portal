@@ -94,6 +94,13 @@ export default function MaintenanceReportEditPage() {
           </button>
         </div>) : null}
 
+      {offline.syncError && offline.syncError.toLowerCase().includes('session') ? (
+        <div className="mx-auto mb-4 w-full max-w-screen-md rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+          <p className="font-semibold">Session expired</p>
+          <p className="mt-1">Your session has timed out. Please <a href="/login" className="underline font-medium">sign in again</a> — your data is saved locally and will sync automatically after you sign back in.</p>
+        </div>
+      ) : null}
+
       <MaintenanceInspectionForm reportIdFromRoute={reportId} initialReport={initialReportMerged} isAdminMode={isManagerView} serverReportStatus={offline.reportStatus} onApproved={() => router.push('/maintenance')} hydrateOnlyFromInitialReport offlineMirror={offlineMirrorStable} offlineSaveStatusLabel={formatOfflineSaveStatus(offline.saveStatus)}/>
     </div>);
 }

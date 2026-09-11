@@ -65,6 +65,9 @@ export async function processSyncQueueItem(row: SyncQueueRow): Promise<{ ok: tru
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '')
+    if (res.status === 401) {
+      return { ok: false, retryable: false, message: 'Session expired — please sign in again to sync.' }
+    }
     const retryable = res.status >= 500 || res.status === 429
     return { ok: false, retryable, message: errText || `HTTP ${res.status}` }
   }
