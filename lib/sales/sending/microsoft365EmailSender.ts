@@ -16,6 +16,13 @@ export async function sendOutboundEmailViaMicrosoft365(
       contentId: att.contentId,
     })) ?? []
 
+  // Use a dedicated outreach mailbox when configured — keeps cold email
+  // reputation separate from the main company domain.
+  const sendAsUserId =
+    process.env.SALES_GRAPH_MAIL_USER_ID?.trim() ||
+    process.env.MS_GRAPH_MAIL_USER_ID?.trim() ||
+    undefined
+
   const result = await sendMailViaGraphWithResult({
     to: input.recipient,
     subject: input.subject,
@@ -23,6 +30,7 @@ export async function sendOutboundEmailViaMicrosoft365(
     bodyText: looksLikeHtml(body) ? undefined : body,
     attachments: graphAttachments.length > 0 ? graphAttachments : undefined,
     listUnsubscribeUrl: input.unsubscribeUrl,
+    sendAsUserId,
     timeoutMs:
       graphAttachments.length > 0
         ? Number(process.env.SALES_EMAIL_SEND_GRAPH_ATTACHMENTS_TIMEOUT_MS ?? 60_000)
