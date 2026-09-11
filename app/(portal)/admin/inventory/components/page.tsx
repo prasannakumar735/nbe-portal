@@ -326,7 +326,7 @@ export default function InventoryComponentsPage() {
                         {/* SKU */}
                         <td className="pl-4 pr-2 py-3">
                           <span className="inline-block rounded px-2 py-0.5 text-xs"
-                            style={{ ...mono, background: '#1E2B3C', color: '#93C5FD', letterSpacing: '0.02em' }}>
+                            style={{ ...mono, background: '#EEF2FF', color: '#3730A3', border: '1px solid #C7D2FE', letterSpacing: '0.02em' }}>
                             {c.sku}
                           </span>
                         </td>
