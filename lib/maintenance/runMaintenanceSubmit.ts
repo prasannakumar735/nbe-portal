@@ -52,7 +52,10 @@ export async function runMaintenanceSubmit(request: NextRequest): Promise<NextRe
 
     const saveResponse = await fetch(new URL('/api/maintenance/draft', request.url), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        cookie: request.headers.get('cookie') ?? '',
+      },
       body: JSON.stringify({
         report_id: form.report_id,
         status: 'submitted',
