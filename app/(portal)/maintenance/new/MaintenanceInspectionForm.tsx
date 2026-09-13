@@ -2603,6 +2603,11 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                   type="button"
                   onClick={async () => {
                     try {
+                      const saved = await persistDraft('draft', { silent: true })
+                      if (!saved) {
+                        showStatus('Unable to save latest changes before generating PDF. Please try Save Draft first.', 'error')
+                        return
+                      }
                       setActiveDownloadLabel('pdf')
                       setDownloadProgress({ loaded: 0 })
                       await downloadFile(`/api/maintenance/pdf/${reportIdFromRoute}`, {
