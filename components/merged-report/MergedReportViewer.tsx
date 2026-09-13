@@ -69,8 +69,9 @@ export function MergedReportViewer({
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="relative min-h-[31.25rem] h-[min(85vh,56rem)] overflow-hidden rounded-xl bg-slate-100">
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          {/* On mobile: height is content-driven (iframe + buttons). On desktop: fixed viewport slot. */}
+          <div className="relative md:min-h-[31.25rem] md:h-[min(85vh,56rem)] overflow-hidden rounded-xl bg-slate-100">
             {mounted ? (
               <PdfViewer fileUrl={pdfSrc} title={title} />
             ) : (

@@ -15,9 +15,9 @@ type PdfViewerProps = {
 /**
  * Client-only PDF embed. Do not import this from Server Components without `dynamic({ ssr: false })`.
  *
- * Mobile note: iOS Safari and some Android browsers do not fire onLoad for PDF
- * iframes and cannot render PDFs inline. We hide the spinner after 3 s regardless,
- * and on narrow viewports we show a full-screen open/download prompt instead.
+ * Mobile: iOS Safari can render PDFs inside an <iframe> using its native viewer.
+ * We show the iframe with a download button below it as a universal fallback.
+ * Desktop: full-screen iframe embed with a loading spinner.
  */
 export default function PdfViewer({ fileUrl, title }: PdfViewerProps) {
   const iframeSrc = useMemo(() => embedPdfUrl(fileUrl), [fileUrl])
@@ -26,30 +26,25 @@ export default function PdfViewer({ fileUrl, title }: PdfViewerProps) {
 
   useEffect(() => {
     setIsMobile(window.innerWidth < 768)
-    // Fallback: mobile browsers often never fire onLoad for PDF iframes
-    const t = setTimeout(() => setLoaded(true), 3000)
+    // Mobile browsers may not fire onLoad for PDF iframes — hide spinner after 4 s
+    const t = setTimeout(() => setLoaded(true), 4000)
     return () => clearTimeout(t)
   }, [])
 
   if (isMobile) {
-    // iOS Safari and most mobile browsers cannot render PDF iframes inline.
-    // Show a clear open/download prompt instead.
+    // iOS Safari renders PDF iframes natively via its built-in viewer.
+    // Show the iframe at a fixed viewport height + a download button below as fallback.
     return (
-      <div className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-6 bg-white px-6 py-10">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100">
-          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="text-slate-500">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-            <line x1="16" y1="13" x2="8" y2="13"/>
-            <line x1="16" y1="17" x2="8" y2="17"/>
-            <polyline points="10 9 9 9 8 9"/>
-          </svg>
-        </div>
-        <div className="text-center">
-          <p className="text-base font-medium text-slate-800">PDF report ready</p>
-          <p className="mt-1 text-sm text-slate-500">Tap below to open or download your report.</p>
-        </div>
-        <div className="flex flex-col gap-3 w-full max-w-xs">
+      <div className="flex w-full flex-col bg-white">
+        <iframe
+          title={title}
+          src={fileUrl}
+          className="w-full border-0"
+          style={{ height: '70vh', minHeight: '400px' }}
+          allow="fullscreen"
+        />
+        <div className="flex flex-col gap-3 border-t border-slate-100 px-6 py-5">
+          <p className="text-center text-xs text-slate-400">If the PDF does not display above, use the buttons below.</p>
           <a
             href={fileUrl}
             target="_blank"
