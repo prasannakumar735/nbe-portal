@@ -2598,6 +2598,31 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                   {isSubmitting ? 'Submitting...' : 'Submit Report'}
                 </button>
               </div>
+              {reportIdFromRoute ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      setActiveDownloadLabel('pdf')
+                      setDownloadProgress({ loaded: 0 })
+                      await downloadFile(`/api/maintenance/pdf/${reportIdFromRoute}`, {
+                        filenameFallback: `maintenance-report-${reportIdFromRoute.slice(0, 8)}.pdf`,
+                        onProgress: p => setDownloadProgress(p),
+                      })
+                      showStatus('PDF downloaded.', 'success')
+                    } catch (e) {
+                      showStatus(e instanceof Error ? e.message : 'Download failed', 'error')
+                    } finally {
+                      setActiveDownloadLabel(null)
+                      setDownloadProgress(null)
+                    }
+                  }}
+                  disabled={activeDownloadLabel === 'pdf'}
+                  className="h-12 w-full rounded-xl border border-slate-300 bg-white px-5 text-base font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-50 md:w-auto"
+                >
+                  {activeDownloadLabel === 'pdf' ? `Downloading ${downloadProgressText}` : 'Download PDF'}
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => {
