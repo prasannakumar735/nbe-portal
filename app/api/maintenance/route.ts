@@ -167,6 +167,20 @@ function normalisePayload(body: unknown): NormalizedEnvelope {
       notes: String(rawForm.notes ?? ''),
       signature_data_url: String(rawForm.signature_data_url ?? ''),
       signature_storage_url: String(rawForm.signature_storage_url ?? ''),
+      repair_summary_text: String(rawForm.repair_summary_text ?? ''),
+      repair_summary_overrides: Array.isArray(rawForm.repair_summary_overrides)
+        ? rawForm.repair_summary_overrides
+        : undefined,
+      health_score_override: (() => {
+        const v = rawForm.health_score_override
+        if (v == null || v === '') return null
+        const n = Number(v)
+        return Number.isFinite(n) ? n : null
+      })(),
+      health_score_color: (() => {
+        const v = String(rawForm.health_score_color ?? '').trim()
+        return (v === 'green' || v === 'amber' || v === 'red') ? v : null
+      })(),
       doors: normaliseDoors(rawForm.doors),
     },
   }
