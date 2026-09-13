@@ -78,6 +78,16 @@ export async function GET(
       repair_summary_overrides: Array.isArray((report as { repair_summary_overrides?: unknown }).repair_summary_overrides)
         ? ((report as { repair_summary_overrides: unknown[] }).repair_summary_overrides as MaintenanceFormValues['repair_summary_overrides'])
         : [],
+      health_score_override: (() => {
+        const v = (report as { health_score_override?: unknown }).health_score_override
+        if (v == null || v === '') return null
+        const n = Number(v)
+        return Number.isFinite(n) ? n : null
+      })(),
+      health_score_color: (() => {
+        const v = String((report as { health_score_color?: unknown }).health_score_color ?? '').trim()
+        return (v === 'green' || v === 'amber' || v === 'red') ? v : null
+      })(),
       doors: Array.isArray(report.doors)
         ? (report.doors as MaintenanceFormValues['doors'])
         : [],

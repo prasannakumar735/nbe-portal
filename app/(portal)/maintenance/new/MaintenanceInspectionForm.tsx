@@ -2758,9 +2758,36 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
           ) : null}
 
           {!showDraftSubmitSection && !showManagerReviewSection && isLocked && !isAdminMode ? (
-            <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
-              Editing is locked for this submitted report.
-            </p>
+            <div className="mt-3 flex flex-col gap-3">
+              <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
+                Editing is locked for this submitted report.
+              </p>
+              {reportIdFromRoute ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      setActiveDownloadLabel('pdf')
+                      setDownloadProgress({ loaded: 0 })
+                      await downloadFile(`/api/maintenance/pdf/${reportIdFromRoute}`, {
+                        filenameFallback: `maintenance-report-${reportIdFromRoute.slice(0, 8)}.pdf`,
+                        onProgress: p => setDownloadProgress(p),
+                      })
+                      showStatus('PDF downloaded.', 'success')
+                    } catch (e) {
+                      showStatus(e instanceof Error ? e.message : 'Download failed', 'error')
+                    } finally {
+                      setActiveDownloadLabel(null)
+                      setDownloadProgress(null)
+                    }
+                  }}
+                  disabled={activeDownloadLabel === 'pdf'}
+                  className="h-12 self-start rounded-xl border border-slate-300 bg-white px-5 text-base font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  {activeDownloadLabel === 'pdf' ? `Downloading ${downloadProgressText}` : 'Download PDF'}
+                </button>
+              ) : null}
+            </div>
           ) : null}
 
           {pendingSyncCount > 0 && (
