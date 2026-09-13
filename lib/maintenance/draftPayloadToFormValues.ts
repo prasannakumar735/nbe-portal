@@ -28,6 +28,20 @@ export function draftPayloadToFormValues(report: Record<string, unknown>): Maint
     notes: String(report.notes ?? ''),
     signature_data_url: String(report.signature_data_url ?? ''),
     signature_storage_url: String(report.signature_storage_url ?? ''),
+    repair_summary_text: String(report.repair_summary_text ?? ''),
+    repair_summary_overrides: Array.isArray(report.repair_summary_overrides)
+      ? (report.repair_summary_overrides as MaintenanceFormValues['repair_summary_overrides'])
+      : undefined,
+    health_score_override: (() => {
+      const v = report.health_score_override
+      if (v == null || v === '') return null
+      const n = Number(v)
+      return Number.isFinite(n) ? n : null
+    })(),
+    health_score_color: (() => {
+      const v = String(report.health_score_color ?? '').trim()
+      return (v === 'green' || v === 'amber' || v === 'red') ? v : null
+    })(),
     doors: Array.isArray(report.doors) ? (report.doors as MaintenanceFormValues['doors']) : [],
   }
 }

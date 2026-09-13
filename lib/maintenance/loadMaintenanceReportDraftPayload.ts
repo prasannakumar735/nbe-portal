@@ -214,6 +214,16 @@ export async function loadMaintenanceReportDraftPayload(
     const repair_summary_overrides = Array.isArray(rawOverrides) ? rawOverrides : undefined
     const repair_summary_text = String((report as { repair_summary_text?: unknown }).repair_summary_text ?? '').trim()
 
+    const rawHealthOverride = (report as { health_score_override?: unknown }).health_score_override
+    const health_score_override = rawHealthOverride != null && rawHealthOverride !== ''
+      ? Number(rawHealthOverride)
+      : null
+
+    const rawHealthColor = String((report as { health_score_color?: unknown }).health_score_color ?? '').trim()
+    const health_score_color = (rawHealthColor === 'green' || rawHealthColor === 'amber' || rawHealthColor === 'red')
+      ? rawHealthColor
+      : null
+
     return {
       report_id: report.id,
       report_schema_version: reportSchemaVersion,
@@ -238,6 +248,8 @@ export async function loadMaintenanceReportDraftPayload(
       signature_storage_url: report.signature_url ?? '',
       repair_summary_text,
       repair_summary_overrides,
+      health_score_override,
+      health_score_color,
       doors: hydratedDoors,
     }
   } catch {
