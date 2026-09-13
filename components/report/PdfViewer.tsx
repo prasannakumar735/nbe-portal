@@ -1,11 +1,22 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useEffect, useMemo, useState } from 'react'
 
 function embedPdfUrl(href: string): string {
   const base = href.includes('#') ? href.slice(0, href.indexOf('#')) : href
   return `${base}#toolbar=1&navpanes=1&scrollbar=1`
 }
+
+const MobilePdfViewer = dynamic(() => import('./MobilePdfViewer'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-64 flex-col items-center justify-center gap-3 bg-white">
+      <div className="h-7 w-7 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
+      <p className="text-sm text-slate-500">Loading report…</p>
+    </div>
+  ),
+})
 
 type PdfViewerProps = {
   fileUrl: string
@@ -15,8 +26,8 @@ type PdfViewerProps = {
 /**
  * Client-only PDF embed. Do not import this from Server Components without `dynamic({ ssr: false })`.
  *
- * Mobile: iOS Safari can render PDFs inside an <iframe> using its native viewer.
- * We show the iframe with a download button below it as a universal fallback.
+ * Mobile: PDF.js renders each page as a canvas scaled to screen width — fully
+ *   scrollable and readable on iOS Safari and Android Chrome.
  * Desktop: full-screen iframe embed with a loading spinner.
  */
 export default function PdfViewer({ fileUrl, title }: PdfViewerProps) {
@@ -26,44 +37,12 @@ export default function PdfViewer({ fileUrl, title }: PdfViewerProps) {
 
   useEffect(() => {
     setIsMobile(window.innerWidth < 768)
-    // Mobile browsers may not fire onLoad for PDF iframes — hide spinner after 4 s
     const t = setTimeout(() => setLoaded(true), 4000)
     return () => clearTimeout(t)
   }, [])
 
   if (isMobile) {
-    // iOS Safari renders PDF iframes natively via its built-in viewer.
-    // Show the iframe at a fixed viewport height + a download button below as fallback.
-    return (
-      <div className="flex w-full flex-col bg-white">
-        <iframe
-          title={title}
-          src={fileUrl}
-          className="w-full border-0"
-          style={{ height: '70vh', minHeight: '400px' }}
-          allow="fullscreen"
-        />
-        <div className="flex flex-col gap-3 border-t border-slate-100 px-6 py-5">
-          <p className="text-center text-xs text-slate-400">If the PDF does not display above, use the buttons below.</p>
-          <a
-            href={fileUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
-          >
-            Open PDF
-          </a>
-          <a
-            href={fileUrl}
-            download="maintenance-inspection-report.pdf"
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            <span aria-hidden>⬇</span>
-            Download PDF
-          </a>
-        </div>
-      </div>
-    )
+    return <MobilePdfViewer fileUrl={fileUrl} title={title} />
   }
 
   return (
