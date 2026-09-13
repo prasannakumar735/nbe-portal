@@ -81,7 +81,7 @@ export default function MobilePdfViewer({ fileUrl, title }: Props) {
           const ctx = canvas.getContext('2d')
           if (!ctx) continue
 
-          await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise
+          await page.render({ canvasContext: ctx, viewport: scaledViewport, canvas }).promise
         } catch {
           // skip failed page
         }
