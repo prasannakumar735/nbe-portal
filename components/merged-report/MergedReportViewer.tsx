@@ -50,14 +50,32 @@ export function MergedReportViewer({
     <ClientReportChrome>
       <div className="mx-auto w-full max-w-6xl space-y-6 px-0 py-6">
         <div className="rounded-xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>
-          <p className="mt-1 text-sm leading-relaxed text-slate-600">
-            This document summarises the inspection findings for your facility.
-          </p>
-          <div className="mt-3 text-sm text-slate-600">
-            Prepared for <span className="font-medium text-slate-900">{preparedFor}</span>
+          {/* Header: NBE logo + title */}
+          <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/NBE_LOGO_BK_PL.png"
+              alt="NBE Australia"
+              className="h-10 w-auto object-contain"
+            />
+            <div>
+              <h1 className="text-lg font-semibold tracking-tight text-slate-900">{title}</h1>
+              <p className="text-xs text-slate-500">Maintenance Inspection System</p>
+            </div>
           </div>
-          <div className="mt-4">
+
+          {/* Body */}
+          <div className="mt-4 space-y-1">
+            <p className="text-sm text-slate-600">
+              This report summarises the inspection findings for your facility.
+            </p>
+            <p className="text-sm text-slate-600">
+              Prepared for{' '}
+              <span className="font-semibold text-slate-900">{preparedFor}</span>
+            </p>
+          </div>
+
+          <div className="mt-5">
             <a
               href={pdfSrc}
               download="maintenance-inspection-report.pdf"

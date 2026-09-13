@@ -9,6 +9,7 @@ export type MaintenanceReportClientAccessRow = {
   pdf_url: string | null
   client_id: string | null
   client_name: string | null
+  location_name: string | null
   /** Site row on the maintenance report (for location-scoped portal users). */
   client_location_id: string | null
 }
@@ -45,14 +46,26 @@ export async function fetchMaintenanceReportByShareToken(
   let clientName: string | null = null
 
   const locId = r.client_location_id ? String(r.client_location_id).trim() : ''
+  let locationName: string | null = null
+
   if (locId) {
     const { data: loc } = await supabase
       .from('client_locations')
-      .select('client_id')
+      .select('client_id, location_name, name, site_name, suburb')
       .eq('id', locId)
       .maybeSingle()
 
-    const cid = String((loc as { client_id?: string } | null)?.client_id ?? '').trim()
+    const l = loc as {
+      client_id?: string | null
+      location_name?: string | null
+      name?: string | null
+      site_name?: string | null
+      suburb?: string | null
+    } | null
+
+    locationName = String(l?.location_name ?? l?.name ?? l?.site_name ?? l?.suburb ?? '').trim() || null
+
+    const cid = String(l?.client_id ?? '').trim()
     if (cid) {
       clientId = cid
       const { data: clientRow } = await supabase
@@ -77,6 +90,7 @@ export async function fetchMaintenanceReportByShareToken(
     pdf_url: r.pdf_url,
     client_id: clientId,
     client_name: clientName,
+    location_name: locationName,
     client_location_id: resolvedLocId,
   }
 }

@@ -20,6 +20,13 @@ function isNbeStaff(role: string | null | undefined): boolean {
     return isManagerOrAdminRole(role) || isTechnicianRole(role);
 }
 
+function buildPreparedFor(clientName: string | null | undefined, locationName: string | null | undefined): string {
+    const client = String(clientName ?? '').trim()
+    const location = String(locationName ?? '').trim()
+    if (client && location) return `${client} — ${location}`
+    return client || location || 'your facility'
+}
+
 export default async function ReportViewPage({ params }: PageProps) {
     const { token } = await params;
     const accessToken = decodeURIComponent(String(token ?? '').trim());
@@ -40,7 +47,7 @@ export default async function ReportViewPage({ params }: PageProps) {
         if (!singleRow.pdf_url) {
             return (<ClientReportMessage title="Report not ready" description="Unable to load report PDF. Please contact support." />);
         }
-        const preparedName = (singleRow.client_name && singleRow.client_name.trim()) || 'your facility';
+        const preparedName = buildPreparedFor(singleRow.client_name, singleRow.location_name);
         return (<MergedReportViewer pdfSrc={singleRow.pdf_url} preparedFor={preparedName} title="Maintenance Inspection Report" />);
     }
 
@@ -78,7 +85,7 @@ export default async function ReportViewPage({ params }: PageProps) {
         if (!singleRow.pdf_url) {
             return (<ClientReportMessage title="Report not ready" description="Unable to load report PDF. Please contact support."/>);
         }
-        const preparedName = (singleRow.client_name && singleRow.client_name.trim()) || 'your facility';
+        const preparedName = buildPreparedFor(singleRow.client_name, singleRow.location_name);
         return (<MergedReportViewer pdfSrc={singleRow.pdf_url} preparedFor={preparedName} title="Maintenance Inspection Report"/>);
     }
 
@@ -130,6 +137,6 @@ export default async function ReportViewPage({ params }: PageProps) {
         return (<ClientReportMessage title="Access denied" description="You do not have access to this report. If you believe this is an error, contact NBE support."/>);
     }
     const pdfSrc = `/api/client/maintenance-report/${encodeURIComponent(accessToken)}/file`;
-    const preparedName = (singleRow.client_name && singleRow.client_name.trim()) || 'your facility';
+    const preparedName = buildPreparedFor(singleRow.client_name, singleRow.location_name);
     return (<MergedReportViewer pdfSrc={pdfSrc} preparedFor={preparedName} title="Maintenance Inspection Report"/>);
 }
