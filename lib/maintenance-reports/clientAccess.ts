@@ -25,18 +25,9 @@ export async function fetchMaintenanceReportByShareToken(
   if (!t) return null
 
   const supabase = createServiceRoleClient()
-
-  // Use PostgREST join to fetch location + client in one query
   const { data: report, error } = await supabase
     .from('maintenance_reports')
-    .select(`
-      id, status, approved, share_token, pdf_url, client_location_id,
-      client_locations (
-        client_id,
-        location_name, name, site_name, suburb,
-        clients ( client_name, name, company_name )
-      )
-    `)
+    .select('id, status, approved, share_token, pdf_url, client_location_id')
     .eq('share_token', t)
     .maybeSingle()
 
@@ -49,27 +40,45 @@ export async function fetchMaintenanceReportByShareToken(
     share_token: string | null
     pdf_url: string | null
     client_location_id: string | null
-    client_locations?: {
+  }
+
+  let clientId: string | null = null
+  let clientName: string | null = null
+  let locationName: string | null = null
+
+  const locId = r.client_location_id ? String(r.client_location_id).trim() : ''
+
+  if (locId) {
+    const { data: loc } = await supabase
+      .from('client_locations')
+      .select('client_id, location_name, name, site_name, suburb')
+      .eq('id', locId)
+      .maybeSingle()
+
+    const l = loc as {
       client_id?: string | null
       location_name?: string | null
       name?: string | null
       site_name?: string | null
       suburb?: string | null
-      clients?: { client_name?: string | null; name?: string | null; company_name?: string | null } | null
     } | null
+
+    if (l) {
+      locationName = String(l.location_name ?? l.name ?? l.site_name ?? l.suburb ?? '').trim() || null
+      clientId = String(l.client_id ?? '').trim() || null
+    }
   }
 
-  const loc = r.client_locations
-  const locationName = loc
-    ? String(loc.location_name ?? loc.name ?? loc.site_name ?? loc.suburb ?? '').trim() || null
-    : null
+  if (clientId) {
+    const { data: clientRow } = await supabase
+      .from('clients')
+      .select('client_name, name, company_name')
+      .eq('id', clientId)
+      .maybeSingle()
 
-  const clientId = loc?.client_id ? String(loc.client_id).trim() || null : null
-
-  const c = loc?.clients
-  const clientName = c
-    ? String(c.client_name ?? c.name ?? c.company_name ?? '').trim() || null
-    : null
+    const c = clientRow as { client_name?: string | null; name?: string | null; company_name?: string | null } | null
+    clientName = c ? String(c.client_name ?? c.name ?? c.company_name ?? '').trim() || null : null
+  }
 
   return {
     id: r.id,
@@ -80,7 +89,7 @@ export async function fetchMaintenanceReportByShareToken(
     client_id: clientId,
     client_name: clientName,
     location_name: locationName,
-    client_location_id: r.client_location_id,
+    client_location_id: locId || null,
   }
 }
 
