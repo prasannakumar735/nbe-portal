@@ -111,7 +111,7 @@ export default function InventoryDashboardPage() {
 
       {/* Metrics rail — single surface, dividers between stats */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: '#DDE3F0', background: '#fff' }}>
-        <div className="grid grid-cols-2 divide-x md:grid-cols-4" style={{ divideColor: '#DDE3F0' }}>
+        <div className="grid grid-cols-2 divide-x md:grid-cols-4">
           {[
             { label: 'Total SKUs',       value: components.length.toLocaleString(),                                 sub: '3 product lines',          accent: '#0D1526' },
             { label: 'Low Stock',        value: alerts.length.toLocaleString(),                                      sub: alerts.length > 0 ? 'need reorder' : 'all adequate', accent: alerts.length > 0 ? '#B45309' : '#16A34A' },
