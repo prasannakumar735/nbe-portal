@@ -51,20 +51,18 @@ export async function fetchMaintenanceReportByShareToken(
   if (locId) {
     const { data: loc } = await supabase
       .from('client_locations')
-      .select('client_id, location_name, name, site_name, suburb')
+      .select('client_id, location_name, suburb')
       .eq('id', locId)
       .maybeSingle()
 
     const l = loc as {
       client_id?: string | null
       location_name?: string | null
-      name?: string | null
-      site_name?: string | null
       suburb?: string | null
     } | null
 
     if (l) {
-      locationName = String(l.location_name ?? l.name ?? l.site_name ?? l.suburb ?? '').trim() || null
+      locationName = String(l.location_name ?? l.suburb ?? '').trim() || null
       clientId = String(l.client_id ?? '').trim() || null
     }
   }
