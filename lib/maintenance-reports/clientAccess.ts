@@ -27,7 +27,7 @@ export async function fetchMaintenanceReportByShareToken(
   const supabase = createServiceRoleClient()
   const { data: report, error } = await supabase
     .from('maintenance_reports')
-    .select('id, status, approved, share_token, pdf_url, client_location_id, client_id')
+    .select('id, status, approved, share_token, pdf_url, client_location_id')
     .eq('share_token', t)
     .maybeSingle()
 
@@ -40,7 +40,6 @@ export async function fetchMaintenanceReportByShareToken(
     share_token: string | null
     pdf_url: string | null
     client_location_id: string | null
-    client_id: string | null
   }
 
   let clientId: string | null = null
@@ -68,11 +67,6 @@ export async function fetchMaintenanceReportByShareToken(
 
     const cid = String(l?.client_id ?? '').trim()
     if (cid) clientId = cid
-  }
-
-  // Fall back to direct client_id on the report if location lookup didn't yield one
-  if (!clientId && r.client_id) {
-    clientId = String(r.client_id).trim() || null
   }
 
   if (clientId) {
