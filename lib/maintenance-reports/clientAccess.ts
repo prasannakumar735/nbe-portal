@@ -70,12 +70,12 @@ export async function fetchMaintenanceReportByShareToken(
   if (clientId) {
     const { data: clientRow } = await supabase
       .from('clients')
-      .select('client_name, name, company_name')
+      .select('name')
       .eq('id', clientId)
       .maybeSingle()
 
-    const c = clientRow as { client_name?: string | null; name?: string | null; company_name?: string | null } | null
-    clientName = c ? String(c.client_name ?? c.name ?? c.company_name ?? '').trim() || null : null
+    const c = clientRow as { name?: string | null } | null
+    clientName = c ? String(c.name ?? '').trim() || null : null
   }
 
   return {
