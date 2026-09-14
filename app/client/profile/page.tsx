@@ -9,7 +9,7 @@ export default async function ClientProfilePage() {
     }
     const { data: profile } = await supabase
         .from('profiles')
-        .select('role, full_name, phone, is_active')
+        .select('role, full_name, phone, is_active, notification_email')
         .eq('id', user.id)
         .maybeSingle();
     if (!profile || profile.role !== 'client') {
@@ -26,6 +26,6 @@ export default async function ClientProfilePage() {
         <p className="text-xs text-slate-500">Manage your account details.</p>
       </div>
 
-      <EditProfileForm email={email} initialFullName={profile.full_name ?? ''} initialPhone={profile.phone ?? ''}/>
+      <EditProfileForm email={email} initialFullName={profile.full_name ?? ''} initialPhone={profile.phone ?? ''} initialNotificationEmail={profile.notification_email ?? ''}/>
     </div>);
 }
