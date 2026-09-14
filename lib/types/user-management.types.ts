@@ -10,6 +10,7 @@ export type ManagedUserRow = {
   created_at: string
   updated_at: string
   notification_email: string | null
+  notifications_enabled: boolean
 }
 
 export type UserManagementActionResult =

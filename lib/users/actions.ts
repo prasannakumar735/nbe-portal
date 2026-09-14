@@ -38,7 +38,7 @@ export async function getUsers(): Promise<{ users: ManagedUserRow[]; error?: str
     const service = createServiceRoleClient()
     const { data: rows, error } = await service
       .from('profiles')
-      .select('id, full_name, role, phone, is_active, created_at, updated_at, notification_email')
+      .select('id, full_name, role, phone, is_active, created_at, updated_at, notification_email, notifications_enabled')
       .neq('role', 'client')
       .order('created_at', { ascending: false })
 
@@ -58,6 +58,7 @@ export async function getUsers(): Promise<{ users: ManagedUserRow[]; error?: str
       created_at: r.created_at ?? new Date().toISOString(),
       updated_at: r.updated_at ?? new Date().toISOString(),
       notification_email: r.notification_email ?? null,
+      notifications_enabled: r.notifications_enabled ?? true,
     }))
 
     return { users }
@@ -131,6 +132,7 @@ export async function updateUser(input: {
   fullName: string
   role: 'admin' | 'manager' | 'technician'
   notificationEmail?: string
+  notificationsEnabled?: boolean
 }): Promise<UserManagementActionResult> {
   const gate = await requireManagerOrAdmin()
   if (!gate.ok) {
@@ -173,6 +175,7 @@ export async function updateUser(input: {
       full_name: fullName,
       role: input.role,
       notification_email: notificationEmail,
+      notifications_enabled: input.notificationsEnabled ?? true,
     })
     .eq('id', input.userId)
 

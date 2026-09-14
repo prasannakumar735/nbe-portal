@@ -330,7 +330,7 @@ type AuthProviderProps = {
 async function fetchProfile(supabase: ReturnType<typeof createSupabaseClient>, userId: string): Promise<AuthProfile | null> {
   const { data } = await supabase
     .from('profiles')
-    .select('role, full_name, first_name, last_name, client_id, phone, is_active, notification_email')
+    .select('role, full_name, first_name, last_name, client_id, phone, is_active, notification_email, notifications_enabled')
     .eq('id', userId)
     .single()
   return data as AuthProfile | null

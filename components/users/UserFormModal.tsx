@@ -33,6 +33,7 @@ export function UserFormModal({ open, mode, user, onClose, onSuccess }: UserForm
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<'admin' | 'manager' | 'technician'>('technician')
   const [notificationEmail, setNotificationEmail] = useState('')
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [createdPassword, setCreatedPassword] = useState<string | null>(null)
@@ -46,11 +47,13 @@ export function UserFormModal({ open, mode, user, onClose, onSuccess }: UserForm
       setEmail(user.email)
       setRole(normalizeRole(user.role))
       setNotificationEmail(user.notification_email ?? '')
+      setNotificationsEnabled(user.notifications_enabled ?? true)
     } else {
       setFullName('')
       setEmail('')
       setRole('technician')
       setNotificationEmail('')
+      setNotificationsEnabled(true)
     }
   }, [open, mode, user])
 
@@ -82,6 +85,7 @@ export function UserFormModal({ open, mode, user, onClose, onSuccess }: UserForm
           fullName,
           role,
           notificationEmail,
+          notificationsEnabled,
         })
         if (!res.ok) {
           setError(res.error)
@@ -187,6 +191,23 @@ export function UserFormModal({ open, mode, user, onClose, onSuccess }: UserForm
               <p className="mt-1 text-xs text-slate-500">
                 Notifications will go here instead of their login email.
               </p>
+              <label className="mt-3 flex cursor-pointer items-center gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={notificationsEnabled}
+                  onChange={(e) => setNotificationsEnabled(e.target.checked)}
+                  disabled={loading}
+                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="text-sm text-slate-700">
+                  Receive NBE Portal notifications
+                </span>
+              </label>
+              {!notificationsEnabled && (
+                <p className="mt-1 text-xs text-amber-600">
+                  This user will not receive any system notifications.
+                </p>
+              )}
             </div>
           )}
 
