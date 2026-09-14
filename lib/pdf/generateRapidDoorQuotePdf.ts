@@ -254,14 +254,14 @@ async function drawPageDoor(
   t(page, 'DOOR SPECIFICATION', ML + 8, y - 13, bold, 9, WHITE)
   y -= specBarH
 
-  // Two-column layout: left = spec table, right = image + key features
-  const leftColW = 255
-  const colGap   = 12
+  // Two-column layout: left = spec table (wider), right = image + key features (narrower)
+  const leftColW = 300
+  const colGap   = 10
   const rightColX = ML + leftColW + colGap
   const rightColW = CW - leftColW - colGap
   const specTopY  = y
 
-  // ── LEFT: spec table ──────────────────────────────────────────────────────
+  // ── LEFT: spec table (no row separator lines) ─────────────────────────────
   const lblX = ML + 4, valX = ML + 118, rowH = 13
   const techSpec = DOOR_TECH_SPECS[door.doorType] ?? { openingSpeed: '-', doorControl: 'Encoder', powerSupply: '1Ø-240V' }
   const safetyEdgeColour = (door as unknown as { safetyEdgeColour?: string }).safetyEdgeColour ?? ''
@@ -284,14 +284,18 @@ async function drawPageDoor(
 
   let ly = specTopY
   specRows.forEach(({ label, value, grey }) => {
-    drawHLine(page, ML, ly, leftColW, 0.3, rgb(0.88, 0.88, 0.88))
     t(page, label, lblX, ly - 9, reg, 7.5, GREY)
     t(page, value, valX, ly - 9, reg, 7.5, grey ? GREY : DARK)
     ly -= rowH
   })
-  ly -= 4  // gap before safety section
+  ly -= 8  // gap before safety section
 
-  // Safety features + activation sub-table
+  // Safety Features + Activation — 3-column:
+  //   col1 (section label) = lblX (aligns with spec labels)
+  //   col2 (sub-label)     = valX (aligns with spec values)
+  //   col3 (value)         = ML + 210
+  const sfValX = ML + 210
+  const sfRowH = 12
   const sfRows: { section: string; label: string; value: string }[] = [
     { section: 'Safety Features', label: 'Indicator Lamp',  value: '(Amber Strobe Light)' },
     { section: '',                label: 'Safety Sensor',   value: door.safetyByCategory?.safety       ?? '-' },
@@ -303,17 +307,15 @@ async function drawPageDoor(
     { section: '',                label: 'Induction Loop',  value: door.safetyByCategory?.inductLoop    ?? '-' },
     { section: '',                label: 'Other',           value: door.safetyByCategory?.swipe         ?? '-' },
   ]
-  const sfRowH = 12
   sfRows.forEach(({ section, label, value }) => {
-    drawHLine(page, ML, ly, leftColW, 0.3, rgb(0.88, 0.88, 0.88))
-    if (section) t(page, section, lblX, ly - 8, reg, 7.5, DARK)
-    t(page, label, ML + 62,  ly - 8, reg, 7, DARK)
-    t(page, value, ML + 130, ly - 8, reg, 7, GREY)
+    if (section) t(page, section, lblX,  ly - 8, reg, 7.5, DARK)
+    t(page, label,   valX,   ly - 8, reg, 7.5, DARK)
+    t(page, value,   sfValX, ly - 8, reg, 7.5, GREY)
     ly -= sfRowH
   })
-  drawHLine(page, ML, ly, leftColW, 0.3, rgb(0.88, 0.88, 0.88))
 
-  // ── RIGHT: door image + KEY FEATURES ──────────────────────────────────────
+  // ── RIGHT: door image + KEY FEATURES (light grey background) ─────────────
+  const LIGHT_GREY = rgb(0.95, 0.95, 0.95)
   const imgCode = colourToCode(door.colour)
   const newImgPath = path.join(process.cwd(), 'public', 'images', 'DOOR_WEBP', `${door.doorType}_${imgCode}.webp`)
   let doorImgEmbed: Awaited<ReturnType<typeof pdfDoc.embedPng>> | null = null
@@ -323,7 +325,7 @@ async function drawPageDoor(
     if (pngBuf) {
       doorImgEmbed = await pdfDoc.embedPng(pngBuf)
       const { width: dw, height: dh } = doorImgEmbed
-      const maxW = rightColW, maxH = 200
+      const maxW = rightColW - 8, maxH = 190
       imgDrawW = maxW
       imgDrawH = (dh / dw) * imgDrawW
       if (imgDrawH > maxH) { imgDrawH = maxH; imgDrawW = (dw / dh) * imgDrawH }
@@ -331,28 +333,35 @@ async function drawPageDoor(
   } catch { /* no image */ }
 
   let rightY = specTopY
-  if (doorImgEmbed && imgDrawW > 0) {
-    page.drawImage(doorImgEmbed, {
+
+  // Grey background for image area
+  const imgAreaH = doorImgEmbed ? imgDrawH + 22 : 0
+  if (imgAreaH > 0) {
+    drawRect(page, rightColX, rightY - imgAreaH, rightColW, imgAreaH, LIGHT_GREY)
+    page.drawImage(doorImgEmbed!, {
       x: rightColX + (rightColW - imgDrawW) / 2,
-      y: rightY - imgDrawH,
+      y: rightY - imgDrawH - 4,
       width: imgDrawW,
       height: imgDrawH,
     })
-    rightY -= imgDrawH + 2
+    rightY -= imgDrawH + 6
     const cap = 'Indicative Image - Configuration may vary'
     page.drawText(cap, { x: rightColX + (rightColW - reg.widthOfTextAtSize(cap, 7)) / 2, y: rightY - 8, size: 7, font: reg, color: GREY })
     rightY -= 16
   }
 
-  // KEY FEATURES box
+  // KEY FEATURES header + grey-background rows
   const features = KEY_FEATURES[door.doorType] ?? KEY_FEATURES['SP01']
   const kfBarH = 18
+  const iconSize = 24
+  const featRowH = 34
+  const kfTotalH = kfBarH + features.length * featRowH
   drawRect(page, rightColX, rightY - kfBarH, rightColW, kfBarH, BRAND)
   t(page, 'KEY FEATURES', rightColX + 8, rightY - 12, bold, 9, WHITE)
   rightY -= kfBarH
+  // Grey background for all feature rows
+  drawRect(page, rightColX, rightY - (kfTotalH - kfBarH), rightColW, kfTotalH - kfBarH, LIGHT_GREY)
 
-  const iconSize = 24
-  const featRowH = 34
   for (const feat of features) {
     const iconPath = path.join(process.cwd(), 'public', 'ICONS', `${feat.icon}.webp`)
     try {
