@@ -262,7 +262,7 @@ async function drawPageDoor(
   const specTopY  = y
 
   // ── LEFT: spec table (no row separator lines) ─────────────────────────────
-  const lblX = ML + 4, valX = ML + 118, rowH = 13
+  const lblX = ML + 4, valX = ML + 118, rowH = 16
   const techSpec = DOOR_TECH_SPECS[door.doorType] ?? { openingSpeed: '-', doorControl: 'Encoder', powerSupply: '1Ø-240V' }
   const safetyEdgeColour = (door as unknown as { safetyEdgeColour?: string }).safetyEdgeColour ?? ''
 
@@ -282,20 +282,20 @@ async function drawPageDoor(
     { label: 'Opening Speed',      value: techSpec.openingSpeed },
   ]
 
-  let ly = specTopY
+  let ly = specTopY - 6  // extra top padding after header bar (#2)
   specRows.forEach(({ label, value, grey }) => {
-    t(page, label, lblX, ly - 9, reg, 7.5, GREY)
-    t(page, value, valX, ly - 9, reg, 7.5, grey ? GREY : DARK)
+    t(page, label, lblX, ly - 9, reg, 8.5, GREY)   // larger font (#6)
+    t(page, value, valX, ly - 9, reg, 8.5, grey ? GREY : DARK)
     ly -= rowH
   })
-  ly -= 8  // gap before safety section
+  ly -= 16  // wider gap between spec list and Safety Features (#4)
 
   // Safety Features + Activation — 3-column:
   //   col1 (section label) = lblX (aligns with spec labels)
   //   col2 (sub-label)     = valX (aligns with spec values)
   //   col3 (value)         = ML + 210
   const sfValX = ML + 210
-  const sfRowH = 12
+  const sfRowH = 14
   const sfRows: { section: string; label: string; value: string }[] = [
     { section: 'Safety Features', label: 'Indicator Lamp',  value: '(Amber Strobe Light)' },
     { section: '',                label: 'Safety Sensor',   value: door.safetyByCategory?.safety       ?? '-' },
@@ -308,9 +308,9 @@ async function drawPageDoor(
     { section: '',                label: 'Other',           value: door.safetyByCategory?.swipe         ?? '-' },
   ]
   sfRows.forEach(({ section, label, value }) => {
-    if (section) t(page, section, lblX,  ly - 8, reg, 7.5, DARK)
-    t(page, label,   valX,   ly - 8, reg, 7.5, DARK)
-    t(page, value,   sfValX, ly - 8, reg, 7.5, GREY)
+    if (section) t(page, section, lblX,  ly - 8, reg, 8.5, DARK)
+    t(page, label,   valX,   ly - 8, reg, 8.5, DARK)
+    t(page, value,   sfValX, ly - 8, reg, 8,   GREY)
     ly -= sfRowH
   })
 
@@ -334,20 +334,19 @@ async function drawPageDoor(
 
   let rightY = specTopY
 
-  // Grey background for image area
-  const imgAreaH = doorImgEmbed ? imgDrawH + 22 : 0
-  if (imgAreaH > 0) {
-    drawRect(page, rightColX, rightY - imgAreaH, rightColW, imgAreaH, LIGHT_GREY)
-    page.drawImage(doorImgEmbed!, {
+  // Grey background only for the image itself; caption sits below on white (#1)
+  if (doorImgEmbed && imgDrawW > 0) {
+    drawRect(page, rightColX, rightY - imgDrawH - 8, rightColW, imgDrawH + 8, LIGHT_GREY)
+    page.drawImage(doorImgEmbed, {
       x: rightColX + (rightColW - imgDrawW) / 2,
       y: rightY - imgDrawH - 4,
       width: imgDrawW,
       height: imgDrawH,
     })
-    rightY -= imgDrawH + 6
+    rightY -= imgDrawH + 12  // gap between image bottom and caption
     const cap = 'Indicative Image - Configuration may vary'
-    page.drawText(cap, { x: rightColX + (rightColW - reg.widthOfTextAtSize(cap, 7)) / 2, y: rightY - 8, size: 7, font: reg, color: GREY })
-    rightY -= 16
+    page.drawText(cap, { x: rightColX + (rightColW - reg.widthOfTextAtSize(cap, 7)) / 2, y: rightY - 2, size: 7, font: reg, color: GREY })
+    rightY -= 14
   }
 
   // KEY FEATURES header + grey-background rows
@@ -394,6 +393,10 @@ async function drawPageDoor(
   const swHalf = leftColW
   const demolRequired = (door.demolition ?? 0) > 0
   const swRowH = 18
+  const swContentH = swRowH * 3  // 3 rows: Demolition Required, Demolition, Scope
+
+  // Grey background for left SITE WORKS content area (#5)
+  drawRect(page, ML, y - swContentH, leftColW, swContentH, LIGHT_GREY)
 
   // Left: demolition details
   let swY = y
