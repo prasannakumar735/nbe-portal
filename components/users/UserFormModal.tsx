@@ -32,6 +32,7 @@ export function UserFormModal({ open, mode, user, onClose, onSuccess }: UserForm
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<'admin' | 'manager' | 'technician'>('technician')
+  const [notificationEmail, setNotificationEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [createdPassword, setCreatedPassword] = useState<string | null>(null)
@@ -44,10 +45,12 @@ export function UserFormModal({ open, mode, user, onClose, onSuccess }: UserForm
       setFullName(user.full_name ?? '')
       setEmail(user.email)
       setRole(normalizeRole(user.role))
+      setNotificationEmail(user.notification_email ?? '')
     } else {
       setFullName('')
       setEmail('')
       setRole('technician')
+      setNotificationEmail('')
     }
   }, [open, mode, user])
 
@@ -78,6 +81,7 @@ export function UserFormModal({ open, mode, user, onClose, onSuccess }: UserForm
           userId: user.id,
           fullName,
           role,
+          notificationEmail,
         })
         if (!res.ok) {
           setError(res.error)
@@ -168,6 +172,23 @@ export function UserFormModal({ open, mode, user, onClose, onSuccess }: UserForm
             }
             disabled={loading}
           />
+
+          {mode === 'edit' && (
+            <div>
+              <Input
+                id="user-notification-email"
+                label="Notification Email"
+                type="email"
+                value={notificationEmail}
+                onChange={(e) => setNotificationEmail(e.target.value)}
+                disabled={loading}
+                placeholder="Optional — defaults to login email if blank"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Notifications will go here instead of their login email.
+              </p>
+            </div>
+          )}
 
           {createdPassword && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">

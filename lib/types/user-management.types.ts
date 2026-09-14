@@ -9,6 +9,7 @@ export type ManagedUserRow = {
   is_active: boolean
   created_at: string
   updated_at: string
+  notification_email: string | null
 }
 
 export type UserManagementActionResult =
