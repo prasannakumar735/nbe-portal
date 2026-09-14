@@ -5,7 +5,7 @@ export default async function DashboardProfilePage() {
     const { data: { user }, } = await supabase.auth.getUser();
     const { data: profile } = await supabase
         .from('profiles')
-        .select('full_name, phone')
+        .select('full_name, phone, notification_email')
         .eq('id', user?.id ?? '')
         .maybeSingle();
     const email = user?.email ?? '';
@@ -17,7 +17,12 @@ export default async function DashboardProfilePage() {
         </div>
 
         <div className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm">
-          <EditProfileForm email={email} initialFullName={profile?.full_name ?? ''} initialPhone={profile?.phone ?? ''}/>
+          <EditProfileForm
+            email={email}
+            initialFullName={profile?.full_name ?? ''}
+            initialPhone={profile?.phone ?? ''}
+            initialNotificationEmail={profile?.notification_email ?? ''}
+          />
         </div>
       </div>
     </div>);

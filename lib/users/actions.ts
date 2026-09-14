@@ -247,6 +247,7 @@ export async function resetUserPassword(input: {
 export async function updateOwnProfile(input: {
   fullName: string
   phone: string
+  notificationEmail?: string
 }): Promise<UserManagementActionResult> {
   const supabase = await createServerClient()
   const {
@@ -258,12 +259,18 @@ export async function updateOwnProfile(input: {
 
   const fullName = input.fullName.trim()
   const phone = input.phone.trim() || null
+  const notificationEmail = input.notificationEmail?.trim() || null
+
+  if (notificationEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notificationEmail)) {
+    return { ok: false, error: 'Invalid notification email address' }
+  }
 
   const { error } = await supabase
     .from('profiles')
     .update({
       full_name: fullName,
       phone,
+      notification_email: notificationEmail,
     })
     .eq('id', user.id)
 

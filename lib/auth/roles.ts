@@ -19,6 +19,8 @@ export type ProfileFromTable = {
   client_id?: string | null
   /** When set, client portal lists/PDFs/gallery are limited to this client_locations row (same client_id). */
   client_portal_location_id?: string | null
+  /** If set, notifications go here instead of the login email. Falls back to auth email when null. */
+  notification_email?: string | null
 }
 
 /** True for manager or admin (maintenance approvals, timecard approvals, /manager routes). */

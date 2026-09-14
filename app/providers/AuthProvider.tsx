@@ -46,6 +46,8 @@ type AuthContextType = {
   isEmployee: boolean
   isLoading: boolean
   isError: boolean
+  /** Notification email: profile.notification_email if set, otherwise the auth login email. */
+  notificationEmail: string | null
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -328,7 +330,7 @@ type AuthProviderProps = {
 async function fetchProfile(supabase: ReturnType<typeof createSupabaseClient>, userId: string): Promise<AuthProfile | null> {
   const { data } = await supabase
     .from('profiles')
-    .select('role, full_name, first_name, last_name, client_id, phone, is_active')
+    .select('role, full_name, first_name, last_name, client_id, phone, is_active, notification_email')
     .eq('id', userId)
     .single()
   return data as AuthProfile | null
@@ -496,6 +498,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isEmployee: checkIsEmployee(profile),
     isLoading,
     isError,
+    notificationEmail: profile?.notification_email ?? user?.email ?? null,
   }
 
   return (

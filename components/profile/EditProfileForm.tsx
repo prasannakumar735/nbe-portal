@@ -11,23 +11,26 @@ type EditProfileFormProps = {
   email: string
   initialFullName: string
   initialPhone: string
+  initialNotificationEmail: string
 }
 
-export function EditProfileForm({ email, initialFullName, initialPhone }: EditProfileFormProps) {
+export function EditProfileForm({ email, initialFullName, initialPhone, initialNotificationEmail }: EditProfileFormProps) {
   const router = useRouter()
   const [fullName, setFullName] = useState(initialFullName)
   const [phone, setPhone] = useState(initialPhone)
+  const [notificationEmail, setNotificationEmail] = useState(initialNotificationEmail)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     setFullName(initialFullName)
     setPhone(initialPhone)
-  }, [initialFullName, initialPhone])
+    setNotificationEmail(initialNotificationEmail)
+  }, [initialFullName, initialPhone, initialNotificationEmail])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    const res = await updateOwnProfile({ fullName, phone })
+    const res = await updateOwnProfile({ fullName, phone, notificationEmail })
     setLoading(false)
     if (!res.ok) {
       toast.error(res.error)
@@ -41,7 +44,7 @@ export function EditProfileForm({ email, initialFullName, initialPhone }: EditPr
     <form onSubmit={handleSubmit} className="max-w-lg space-y-4">
       <Input
         id="profile-email"
-        label="Email"
+        label="Login Email"
         value={email}
         readOnly
         disabled
@@ -66,6 +69,21 @@ export function EditProfileForm({ email, initialFullName, initialPhone }: EditPr
         autoComplete="tel"
         placeholder="Optional"
       />
+      <div>
+        <Input
+          id="profile-notification-email"
+          label="Notification Email"
+          type="email"
+          value={notificationEmail}
+          onChange={(e) => setNotificationEmail(e.target.value)}
+          disabled={loading}
+          autoComplete="email"
+          placeholder="Optional — defaults to login email if blank"
+        />
+        <p className="mt-1 text-xs text-slate-500">
+          System notifications (quotes, timesheets, etc.) will be sent here instead of your login email.
+        </p>
+      </div>
       <Button type="submit" loading={loading}>
         Save changes
       </Button>
