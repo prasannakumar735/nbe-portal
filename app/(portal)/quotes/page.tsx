@@ -195,7 +195,7 @@ export default function NewQuotesPage() {
   const [tempDesc,    setTempDesc]      = useState('')
 
   // Editable notes / disclaimers
-  const DEFAULT_PAGE2_SUMMARY_NOTE = "Subject to NBE Australia's standard Terms & Conditions. Final dimensions, site conditions and access must be confirmed prior to manufacture. Delivery, equipment hire and installation are excluded unless shown as priced line items. Electrical works are limited to connections between the control panel and door equipment. Power supply and isolator shall be provided by others."
+  const DEFAULT_PAGE2_SUMMARY_NOTE = "This quotation is based on the NBE Standard Door with galvanised frame, 900 g/m² PVC curtain and RAL 7035 zinc-coated control box. Optional extras are additional unless listed in the relevant Door Specification. Final dimensions, site conditions and access must be confirmed before manufacture. Delivery, demolition, equipment hire and installation are excluded unless shown as priced line items. Electrical works are limited to connections between the control panel and door equipment; power supply and isolator are by others. All supply and works are subject to NBE Australia’s standard Terms & Conditions."
   const [page2SummaryNote,    setPage2SummaryNote]    = useState<string>('')
   const [editingPage2Note,    setEditingPage2Note]    = useState(false)
   const [tempPage2Note,       setTempPage2Note]       = useState('')
@@ -581,12 +581,15 @@ The quote includes all relevant specifications and pricing as discussed. Please 
 
   const safetySelected = Object.values(safetyValues).filter(v => v && v !== '-')
 
-  const autoDescLines = [
-    doorType && DOOR_TYPE_NAMES[doorType] ? `${doorType} | ${DOOR_TYPE_NAMES[doorType]}` : '',
+const autoDescLines = [
+  doorType && DOOR_TYPE_NAMES[doorType] ? `${doorType} | ${DOOR_TYPE_NAMES[doorType]}` : '',
+  [
     openingW && openingH ? `${openingW} W × ${openingH} H mm` : '',
-    [frame && FRAME_NAMES[frame] ? `${FRAME_NAMES[frame]} frame` : '', curtain, colour, motorSide].filter(Boolean).join(' | '),
-    safetyEnabled && safetySelected.length > 0 ? `CONTROLS: ${safetySelected.join(' | ')}` : '',
-  ].filter(Boolean)
+    frame && FRAME_NAMES[frame] ? `${FRAME_NAMES[frame]} frame` : '',
+    colour,
+    motorSide && motorSide.trim() ? motorSide : ''
+  ].filter(v => typeof v === 'string' && v.trim().length > 0).join(' | ')
+].filter(Boolean)
 
   const displayDesc = customDesc ?? autoDescLines.join('\n')
 

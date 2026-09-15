@@ -583,11 +583,10 @@ async function drawPage2(
       descLines = d.customDesc.split('\n').map(l => l.trim()).filter(Boolean)
     } else {
       const dl1 = `${d.doorType} | ${d.doorTypeName}`
-      const dl2 = `${d.openingW} W × ${d.openingH} H mm`
-      const dl3 = `${d.frame} frame | ${d.curtain} | ${d.colour} | ${d.motorSide}`
-      const dl4 = (d.safetyLines?.length ?? 0) > 0 ? `CONTROLS: ${d.safetyLines.join(' | ')}` : ''
-      descLines = [dl1, dl2, dl3, dl4].filter(Boolean)
+      const dl2 = `${d.openingW} W × ${d.openingH} H mm | ${d.frame} frame | ${d.colour} | ${d.motorSide}`
+      descLines = [dl1, dl2]
     }
+    
     const rowH = descLines.length * 11 + 10
 
     t(page, String(di + 1), cNo + 2, y - 11, reg, 8.5, DARK)
@@ -668,7 +667,7 @@ async function drawPage2(
   tRight(page, fmtAUD(grandTotal * 1.1), ML + CW,               totBoxY + 6, bold, 11, WHITE)
 
   // ── FOOTER TERMS ─────────────────────────────────────────────────────────
-  const DEFAULT_PAGE2_SUMMARY_NOTE = "Subject to NBE Australia's standard Terms & Conditions. Final dimensions, site conditions and access must be confirmed prior to manufacture. Delivery, equipment hire and installation are excluded unless shown as priced line items. Electrical works are limited to connections between the control panel and door equipment. Power supply and isolator shall be provided by others."
+  const DEFAULT_PAGE2_SUMMARY_NOTE = "This quotation is based on the NBE Standard Door with galvanised frame, 900 g/m² PVC curtain and RAL 7035 zinc-coated control box. Optional extras are additional unless listed in the relevant Door Specification. Final dimensions, site conditions and access must be confirmed before manufacture. Delivery, demolition, equipment hire and installation are excluded unless shown as priced line items. Electrical works are limited to connections between the control panel and door equipment; power supply and isolator are by others. All supply and works are subject to NBE Australia’s standard Terms & Conditions."
   const terms = input.page2SummaryNote?.trim() || DEFAULT_PAGE2_SUMMARY_NOTE
   const footerSize = 8.5
   const footerLineH = 11
