@@ -2,6 +2,12 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont } from 'pdf-lib'
 import { embedRobotoForPdfLib } from '@/lib/pdf/robotoPdf'
+import {
+  mapOrDash,
+  INDICATOR_LAMP_MAP, SAFETY_SENSOR_MAP, PUSH_BUTTON_MAP,
+  RADAR_MAP, REMOTE_CONTROL_MAP, INDUCTION_LOOP_MAP, SWIPE_MAP,
+  DOOR_CONTROL_MAP, CURTAIN_DISPLAY_MAP, COLOUR_DISPLAY_MAP,
+} from '@/lib/quotes/rapidDoorMappings'
 
 // Convert WebP → PNG in-process so pdf-lib can embed it
 async function webpToPng(filePath: string): Promise<Buffer | null> {
@@ -93,6 +99,7 @@ export type DoorLineItem = {
   motorKw?:          string
   motorSide:         string
   cbSide?:           string
+  doorControl?:      string
   safetyLines:       string[]
   safetyByCategory?: Record<string, string>
   qty:               number
@@ -275,12 +282,12 @@ async function drawPageDoor(
     { label: 'Opening Size (Clear)', value: `${door.openingW} CW × ${door.openingH} CH mm` },
     { label: 'External Size',      value: door.externalW ? `${door.externalW} XW × ${door.externalH} XH mm` : '', grey: true },
     { label: 'Frame Material',     value: door.frame },
-    { label: 'Curtain Material',   value: door.curtain },
-    { label: 'Curtain Colour',     value: door.colour },
+    { label: 'Curtain Material',   value: mapOrDash(CURTAIN_DISPLAY_MAP, door.curtain) },
+    { label: 'Curtain Colour',     value: mapOrDash(COLOUR_DISPLAY_MAP, door.colour) },
     { label: 'Safety Edge Colour', value: safetyEdgeColour },
     { label: 'Motor',              value: door.motorKw ? `${door.motorKw} KW` : '' },
     { label: 'Motor Side',         value: door.motorSide },
-    { label: 'Door Control',       value: techSpec.doorControl },
+    { label: 'Door Control',       value: door.doorControl ? mapOrDash(DOOR_CONTROL_MAP, door.doorControl) : techSpec.doorControl },
     { label: 'Power Supply',       value: techSpec.powerSupply },
     { label: 'Opening Speed',      value: techSpec.openingSpeed },
   ]
@@ -302,16 +309,16 @@ async function drawPageDoor(
   //   col3 (value)         = ML + 210
   const sfValX = ML + 210
   const sfRowH = 17
+  const sb = door.safetyByCategory ?? {}
   const sfRows: { section: string; label: string; value: string }[] = [
-    { section: 'Safety Features', label: 'Indicator Lamp',  value: '(Amber Strobe Light)' },
-    { section: '',                label: 'Safety Sensor',   value: door.safetyByCategory?.safety       ?? '-' },
+    { section: 'Safety Features', label: 'Indicator Lamp',  value: mapOrDash(INDICATOR_LAMP_MAP, sb.indicatorLamp) },
+    { section: '',                label: 'Safety Sensor',   value: mapOrDash(SAFETY_SENSOR_MAP,  sb.safety) },
     { section: '',                label: 'Safety Edge',     value: '-' },
-    { section: '',                label: 'Other',           value: '' },
-    { section: 'Activation',      label: 'Push Button',     value: door.safetyByCategory?.pushButton    ?? '-' },
-    { section: '',                label: 'Radar',           value: door.safetyByCategory?.radar         ?? '-' },
-    { section: '',                label: 'Remote Control',  value: door.safetyByCategory?.remoteControl ?? '-' },
-    { section: '',                label: 'Induction Loop',  value: door.safetyByCategory?.inductLoop    ?? '-' },
-    { section: '',                label: 'Other',           value: door.safetyByCategory?.swipe         ?? '-' },
+    { section: 'Activation',      label: 'Push Button',     value: mapOrDash(PUSH_BUTTON_MAP,    sb.pushButton) },
+    { section: '',                label: 'Radar',           value: mapOrDash(RADAR_MAP,          sb.radar) },
+    { section: '',                label: 'Remote Control',  value: mapOrDash(REMOTE_CONTROL_MAP, sb.remoteControl) },
+    { section: '',                label: 'Induction Loop',  value: mapOrDash(INDUCTION_LOOP_MAP, sb.inductLoop) },
+    { section: '',                label: 'Other',           value: mapOrDash(SWIPE_MAP,          sb.swipe) },
   ]
   sfRows.forEach(({ section, label, value }) => {
     if (section) t(page, section, lblX,  ly - 8, reg, 8.5, DARK)

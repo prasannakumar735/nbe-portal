@@ -68,13 +68,15 @@ const MOTOR_KW_OPTIONS    = ['0.75', '1.5', '2.2', '3']
 const MOTOR_SIDE_OPTIONS  = ['RHD', 'LHD']
 const CONTROL_BOX_OPTIONS = ['RIGHT', 'LEFT']
 const SAFETY_DETECTION: { key: string; label: string; options: string[] }[] = [
-  { key: 'safety',        label: 'Safety',         options: ['PEC', 'SLC', 'TL'] },
+  { key: 'indicatorLamp', label: 'Indicator Lamp',  options: ['AMB', 'LED', 'RYG'] },
+  { key: 'safety',        label: 'Safety Sensor',   options: ['PEC', 'SLC'] },
   { key: 'pushButton',    label: 'Push Button',     options: ['PB01', 'PB02', 'PB05'] },
-  { key: 'radar',         label: 'Radar',           options: ['RADAR', '-'] },
-  { key: 'remoteControl', label: 'Remote Control',  options: ['R/C-4', 'R/C-8', 'R/C-16'] },
-  { key: 'inductLoop',    label: 'Induct. Loop',    options: ['I/L', '-'] },
-  { key: 'swipe',         label: 'Swipe',           options: ['SWIPE', '-'] },
+  { key: 'radar',         label: 'Radar',           options: ['STANDARD', 'FALCON', 'CONDOR', 'W-SCAN'] },
+  { key: 'remoteControl', label: 'Remote Control',  options: ['R/C-4J', 'R/C-4', 'R/C-8', 'R/C-16'] },
+  { key: 'inductLoop',    label: 'Induction Loop',  options: ['I/L AMP', 'I/L FULL'] },
+  { key: 'swipe',         label: 'Other',           options: ['SWIPE', 'P-CORD', 'K-SWITCH', 'RFID', 'I-LOCK', 'UPS', 'A/C'] },
 ]
+const DOOR_CONTROL_OPTIONS = ['ENC', 'LS'] as const
 const COLOUR_OPTIONS: { label: string; hex: string }[] = [
   { label: 'BL 543', hex: '#1B52D4' }, { label: 'RD 356', hex: '#DC2626' },
   { label: 'YL 119', hex: '#EAB308' }, { label: 'OR 244', hex: '#F97316' },
@@ -116,6 +118,7 @@ type SavedDoor = {
   motorKw: string
   motorSide: string
   cbSide: string
+  doorControl: string
   safetyLines: string[]
   safetyByCategory: Record<string, string>
   qty: number
@@ -144,6 +147,7 @@ export default function NewQuotesPage() {
   const [motorKw,       setMotorKw]      = useState('')
   const [motorSide,     setMotorSide]    = useState('')
   const [cbSide,        setCbSide]       = useState('')
+  const [doorControl,   setDoorControl]  = useState('')
   const [qty,           setQty]          = useState('1')
   const [unitPrice,     setUnitPrice]    = useState('')
   const [safetyEnabled, setSafetyEnabled]= useState(true)
@@ -407,7 +411,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
 
   function resetDoorForm() {
     setDoorType(''); setDoorModel(''); setOpeningW(''); setOpeningH(''); setFrame(''); setCurtain('')
-    setColour(''); setMotorKw(''); setMotorSide(''); setCbSide(''); setQty('1')
+    setColour(''); setMotorKw(''); setMotorSide(''); setCbSide(''); setDoorControl(''); setQty('1')
     setUnitPrice(''); setSafetyEnabled(true); setSafetyValues({}); setMotorEnabled(true); setEndUser('CUSTOMER')
     setCustomDoorImage(null); setCustomDoorImageName(null)
     setInstallation(''); setDemolition(''); setEquipHire(''); setAccTravel('')
@@ -467,7 +471,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
             ...(doorModel && openingW && openingH ? [{
               id: 'active',
               doorType, doorModel, openingW, openingH, frame, curtain, colour,
-              motorKw, motorSide, cbSide,
+              motorKw, motorSide, cbSide, doorControl,
               safetyLines: safetySelected,
               safetyByCategory: { ...safetyValues },
               qty: qtyN, unitPrice: unitN,
@@ -522,7 +526,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
           doorType: d.doorType, doorModel: d.doorModel ?? '',
           openingW: String(d.openingW ?? ''), openingH: String(d.openingH ?? ''),
           frame: d.frameRaw ?? (d as unknown as SavedDoor).frame ?? '', curtain: d.curtain ?? '', colour: d.colour ?? '',
-          motorKw: d.motorKw ?? '', motorSide: d.motorSide ?? '', cbSide: d.cbSide ?? '',
+          motorKw: d.motorKw ?? '', motorSide: d.motorSide ?? '', cbSide: d.cbSide ?? '', doorControl: (d as unknown as SavedDoor).doorControl ?? '',
           safetyLines: (d.safetyLines ?? []) as string[], safetyByCategory: (d.safetyByCategory ?? {}) as Record<string, string>,
           qty: Number(d.qty ?? 1), unitPrice: Number(d.unitPrice ?? 0),
           installation: Number(d.installation ?? 0), demolition: Number(d.demolition ?? 0),
@@ -624,7 +628,7 @@ const autoDescLines = [
     const door: SavedDoor = {
       id: crypto.randomUUID(),
       doorType, doorModel, openingW, openingH, frame, curtain, colour,
-      motorKw, motorSide, cbSide,
+      motorKw, motorSide, cbSide, doorControl,
       safetyLines: safetySelected,
       safetyByCategory: { ...safetyValues },
       qty: qtyN, unitPrice: unitN,
@@ -650,7 +654,7 @@ const autoDescLines = [
     // Restore this door's fields into the current form
     setDoorType(d.doorType); setDoorModel(d.doorModel ?? ''); setOpeningW(d.openingW); setOpeningH(d.openingH)
     setFrame(d.frame); setCurtain(d.curtain); setColour(d.colour)
-    setMotorKw(d.motorKw); setMotorSide(d.motorSide); setCbSide(d.cbSide)
+    setMotorKw(d.motorKw); setMotorSide(d.motorSide); setCbSide(d.cbSide); setDoorControl(d.doorControl ?? '')
     setQty(String(d.qty)); setUnitPrice(String(d.unitPrice))
     setInstallation(d.installation > 0 ? String(d.installation) : '')
     setDemolition(d.demolition > 0 ? String(d.demolition) : '')
@@ -661,7 +665,7 @@ const autoDescLines = [
     if (d.safetyLines.length > 0) {
       setSafetyEnabled(true)
       // We can't reconstruct per-field mapping perfectly, so put first 6 into the keys
-      const keys = ['safety','pushButton','radar','remoteControl','inductLoop','swipe']
+      const keys = ['indicatorLamp','safety','pushButton','radar','remoteControl','inductLoop','swipe']
       const vals: Record<string,string> = {}
       d.safetyLines.forEach((v, i) => { if (keys[i]) vals[keys[i]] = v })
       setSafetyValues(vals)
@@ -701,7 +705,7 @@ const autoDescLines = [
             frameRaw: d.frame,
             frame: FRAME_NAMES[d.frame] ?? d.frame,
             curtain: d.curtain, colour: d.colour,
-            motorKw: d.motorKw, motorSide: d.motorSide, cbSide: d.cbSide,
+            motorKw: d.motorKw, motorSide: d.motorSide, cbSide: d.cbSide, doorControl: d.doorControl ?? '',
             safetyLines: d.safetyLines,
             safetyByCategory: d.safetyByCategory,
             qty: d.qty, unitPrice: d.unitPrice,
@@ -719,7 +723,7 @@ const autoDescLines = [
           frameRaw: frame,
           frame: FRAME_NAMES[frame] ?? frame,
           curtain, colour,
-          motorKw, motorSide, cbSide,
+          motorKw, motorSide, cbSide, doorControl,
           safetyLines: safetySelected,
           safetyByCategory: { ...safetyValues },
           qty: qtyN, unitPrice: unitN,
@@ -1303,7 +1307,7 @@ const autoDescLines = [
               {/* Motor & Control Box — collapsible */}
               <div className="border-t border-slate-100">
                 <button type="button"
-                  onClick={() => { setMotorEnabled(v => !v); if (motorEnabled) { setMotorKw(''); setMotorSide(''); setCbSide('') } }}
+                  onClick={() => { setMotorEnabled(v => !v); if (motorEnabled) { setMotorKw(''); setMotorSide(''); setCbSide(''); setDoorControl('') } }}
                   className={`flex w-full items-center justify-between px-4 py-3 text-sm font-semibold uppercase tracking-wide transition ${motorEnabled ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-[18px]">settings</span>
@@ -1315,7 +1319,7 @@ const autoDescLines = [
                   </span>
                 </button>
                 {motorEnabled && (
-                  <div className="grid grid-cols-3 gap-3 p-4">
+                  <div className="grid grid-cols-4 gap-3 p-4">
                     <div>
                       <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Motor (kW)</label>
                       <div className="relative">
@@ -1345,6 +1349,17 @@ const autoDescLines = [
                           className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
                           <option value="">—</option>
                           {CONTROL_BOX_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Door Control</label>
+                      <div className="relative">
+                        <select value={doorControl} onChange={e => setDoorControl(e.target.value)}
+                          className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
+                          <option value="">—</option>
+                          {DOOR_CONTROL_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                         <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
                       </div>
