@@ -230,28 +230,28 @@ async function drawPageDoor(
   }
   t(page, 'ABN: 17 007 048 008', ML, y - logoH - 10, reg, 9, DARK)
 
-  // "DOOR  D01" large, right-aligned
+  // "DOOR  D01" large, right-aligned — regular weight (#5)
   const doorRefLabel = `DOOR  ${doorRef}`
-  t(page, doorRefLabel, PW - MR - bold.widthOfTextAtSize(doorRefLabel, 32), y - 28, bold, 32, BLACK)
+  t(page, doorRefLabel, PW - MR - reg.widthOfTextAtSize(doorRefLabel, 32), y - 28, reg, 32, BLACK)
 
   // "INDUSTRIAL RAPID DOOR" subtitle
   const subtitle = 'INDUSTRIAL RAPID DOOR'
-  t(page, subtitle, PW - MR - bold.widthOfTextAtSize(subtitle, 13), y - 58, bold, 13, BRAND)
+  t(page, subtitle, PW - MR - bold.widthOfTextAtSize(subtitle, 13), y - 62, bold, 13, BRAND)
 
-  y -= logoH + 22
+  y -= logoH + 30  // more gap after DOOR D01 (#6)
   drawHLine(page, ML, y, CW, 1, DARK)
-  y -= 16
+  y -= 32  // more gap before door title (#1)
 
   // ── DOOR TITLE ────────────────────────────────────────────────────────────
   t(page, `${door.doorType} | ${door.doorTypeName}`, ML, y, bold, 18, BLACK)
-  y -= 22
-  t(page, `Opening:   ${door.openingW} CW × ${door.openingH} CH mm   |   Quantity ${door.qty}`, ML, y, reg, 10, DARK)
-  y -= 24
+  y -= 26
+  t(page, `Opening:   ${door.openingW} CW × ${door.openingH} CH mm   |   Quantity ${door.qty}`, ML, y, reg, 12, DARK)
+  y -= 28
 
   // ── DOOR SPECIFICATION header bar ─────────────────────────────────────────
   const specBarH = 20
   drawRect(page, ML, y - specBarH, CW, specBarH, BRAND)
-  t(page, 'DOOR SPECIFICATION', ML + 8, y - 13, bold, 9, WHITE)
+  t(page, 'DOOR SPECIFICATION', ML + 8, y - 13, bold, 10.5, WHITE)
   y -= specBarH
 
   // Two-column layout: left = spec table (wider), right = image + key features (narrower)
@@ -262,7 +262,7 @@ async function drawPageDoor(
   const specTopY  = y
 
   // ── LEFT: spec table (no row separator lines) ─────────────────────────────
-  const lblX = ML + 4, valX = ML + 118, rowH = 16
+  const lblX = ML + 4, valX = ML + 118, rowH = 19
   const techSpec = DOOR_TECH_SPECS[door.doorType] ?? { openingSpeed: '-', doorControl: 'Encoder', powerSupply: '1Ø-240V' }
   const safetyEdgeColour = (door as unknown as { safetyEdgeColour?: string }).safetyEdgeColour ?? ''
 
@@ -282,7 +282,7 @@ async function drawPageDoor(
     { label: 'Opening Speed',      value: techSpec.openingSpeed },
   ]
 
-  let ly = specTopY - 6  // extra top padding after header bar (#2)
+  let ly = specTopY - 12  // extra top padding after header bar (#3)
   specRows.forEach(({ label, value, grey }) => {
     t(page, label, lblX, ly - 9, reg, 8.5, GREY)   // larger font (#6)
     t(page, value, valX, ly - 9, reg, 8.5, grey ? GREY : DARK)
@@ -295,7 +295,7 @@ async function drawPageDoor(
   //   col2 (sub-label)     = valX (aligns with spec values)
   //   col3 (value)         = ML + 210
   const sfValX = ML + 210
-  const sfRowH = 14
+  const sfRowH = 17
   const sfRows: { section: string; label: string; value: string }[] = [
     { section: 'Safety Features', label: 'Indicator Lamp',  value: '(Amber Strobe Light)' },
     { section: '',                label: 'Safety Sensor',   value: door.safetyByCategory?.safety       ?? '-' },
@@ -333,17 +333,18 @@ async function drawPageDoor(
   } catch { /* no image */ }
 
   let rightY = specTopY
+  const imgTopPad = 10  // white space above image
 
   // Grey background only for the image itself; caption sits below on white (#1)
   if (doorImgEmbed && imgDrawW > 0) {
-    drawRect(page, rightColX, rightY - imgDrawH - 8, rightColW, imgDrawH + 8, LIGHT_GREY)
+    drawRect(page, rightColX, rightY - imgDrawH - 8 - imgTopPad, rightColW, imgDrawH + 8, LIGHT_GREY)
     page.drawImage(doorImgEmbed, {
       x: rightColX + (rightColW - imgDrawW) / 2,
-      y: rightY - imgDrawH - 4,
+      y: rightY - imgDrawH - 4 - imgTopPad,
       width: imgDrawW,
       height: imgDrawH,
     })
-    rightY -= imgDrawH + 12  // gap between image bottom and caption
+    rightY -= imgDrawH + 12 + imgTopPad  // gap between image bottom and caption
     const cap = 'Indicative Image - Configuration may vary'
     page.drawText(cap, { x: rightColX + (rightColW - reg.widthOfTextAtSize(cap, 7)) / 2, y: rightY - 2, size: 7, font: reg, color: GREY })
     rightY -= 14
@@ -356,7 +357,7 @@ async function drawPageDoor(
   const featRowH = 34
   const kfTotalH = kfBarH + features.length * featRowH
   drawRect(page, rightColX, rightY - kfBarH, rightColW, kfBarH, BRAND)
-  t(page, 'KEY FEATURES', rightColX + 8, rightY - 12, bold, 9, WHITE)
+  t(page, 'KEY FEATURES', rightColX + 8, rightY - 12, bold, 10.5, WHITE)
   rightY -= kfBarH
   // Grey background for all feature rows
   drawRect(page, rightColX, rightY - (kfTotalH - kfBarH), rightColW, kfTotalH - kfBarH, LIGHT_GREY)
@@ -387,7 +388,7 @@ async function drawPageDoor(
 
   const swBarH = 20
   drawRect(page, ML, y - swBarH, leftColW, swBarH, BRAND)
-  t(page, 'SITE WORKS (OPTIONAL)', ML + 8, y - 13, bold, 9, WHITE)
+  t(page, 'SITE WORKS (OPTIONAL)', ML + 8, y - 13, bold, 10.5, WHITE)
   y -= swBarH
 
   const swHalf = leftColW
