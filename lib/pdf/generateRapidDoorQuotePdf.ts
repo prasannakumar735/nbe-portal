@@ -285,13 +285,16 @@ async function drawPageDoor(
     { label: 'Opening Speed',      value: techSpec.openingSpeed },
   ]
 
+  // Pre-compute where Safety Features will start so right column can align KEY FEATURES there
+  const sfStartY = specTopY - 12 - specRows.length * rowH - 16
+
   let ly = specTopY - 12  // extra top padding after header bar (#3)
   specRows.forEach(({ label, value, grey }) => {
-    t(page, label, lblX, ly - 9, reg, 8.5, GREY)   // larger font (#6)
+    t(page, label, lblX, ly - 9, reg, 8.5, GREY)
     t(page, value, valX, ly - 9, reg, 8.5, grey ? GREY : DARK)
     ly -= rowH
   })
-  ly -= 16  // wider gap between spec list and Safety Features (#4)
+  ly -= 16  // wider gap between spec list and Safety Features
 
   // Safety Features + Activation — 3-column:
   //   col1 (section label) = lblX (aligns with spec labels)
@@ -317,8 +320,14 @@ async function drawPageDoor(
     ly -= sfRowH
   })
 
-  // ── RIGHT: door image + KEY FEATURES (light grey background) ─────────────
+  // ── RIGHT: door image sized to align KEY FEATURES with Safety Features ───
   const LIGHT_GREY = rgb(0.95, 0.95, 0.95)
+  const kfBarH = 18
+  const captionH = 14
+  const imgTopPad = 10
+  // Image fills the space from specTopY down to sfStartY, leaving room for kfBar + caption
+  const maxImgH = (specTopY - sfStartY) - kfBarH - captionH - imgTopPad
+
   const imgCode = colourToCode(door.colour)
   const newImgPath = path.join(process.cwd(), 'public', 'images', 'DOOR_WEBP', `${door.doorType}_${imgCode}.webp`)
   let doorImgEmbed: Awaited<ReturnType<typeof pdfDoc.embedPng>> | null = null
@@ -328,17 +337,15 @@ async function drawPageDoor(
     if (pngBuf) {
       doorImgEmbed = await pdfDoc.embedPng(pngBuf)
       const { width: dw, height: dh } = doorImgEmbed
-      const maxW = rightColW - 8, maxH = 190
+      const maxW = rightColW - 8
       imgDrawW = maxW
       imgDrawH = (dh / dw) * imgDrawW
-      if (imgDrawH > maxH) { imgDrawH = maxH; imgDrawW = (dw / dh) * imgDrawH }
+      if (imgDrawH > maxImgH) { imgDrawH = maxImgH; imgDrawW = (dw / dh) * imgDrawH }
     }
   } catch { /* no image */ }
 
   let rightY = specTopY
-  const imgTopPad = 10  // white space above image
 
-  // Grey background only for the image itself; caption sits below on white (#1)
   if (doorImgEmbed && imgDrawW > 0) {
     drawRect(page, rightColX, rightY - imgDrawH - 8 - imgTopPad, rightColW, imgDrawH + 8, LIGHT_GREY)
     page.drawImage(doorImgEmbed, {
@@ -347,15 +354,16 @@ async function drawPageDoor(
       width: imgDrawW,
       height: imgDrawH,
     })
-    rightY -= imgDrawH + 12 + imgTopPad  // gap between image bottom and caption
+    rightY -= imgDrawH + 12 + imgTopPad
     const cap = 'Indicative Image - Configuration may vary'
     page.drawText(cap, { x: rightColX + (rightColW - reg.widthOfTextAtSize(cap, 7)) / 2, y: rightY - 2, size: 7, font: reg, color: GREY })
-    rightY -= 14
   }
+
+  // KEY FEATURES starts exactly at sfStartY — aligned with Safety Features on the left
+  rightY = sfStartY
 
   // KEY FEATURES header + grey-background rows
   const features = KEY_FEATURES[door.doorType] ?? KEY_FEATURES['SP01']
-  const kfBarH = 18
   const iconSize = 24
   const featRowH = 34
   const kfTotalH = kfBarH + features.length * featRowH
@@ -390,16 +398,28 @@ async function drawPageDoor(
   y = Math.max(contentBottom - 8, 175)  // never overlap footer
 
   const swBarH = 20
-  drawRect(page, ML, y - swBarH, leftColW, swBarH, BRAND)
-  t(page, 'SITE WORKS (OPTIONAL)', ML + 8, y - 13, bold, 10.5, WHITE)
-  y -= swBarH
-
   const swHalf = leftColW
   const demolRequired = (door.demolition ?? 0) > 0
   const swRowH = 18
-  const swContentH = swRowH * 3  // 3 rows: Demolition Required, Demolition, Scope
+  const swContentH = swRowH * 3
 
-  // Grey background for left SITE WORKS content area (#5)
+  // SITE WORKS header and Unit Door Price both start at the same y
+  drawRect(page, ML, y - swBarH, leftColW, swBarH, BRAND)
+  t(page, 'SITE WORKS (OPTIONAL)', ML + 8, y - 13, bold, 10.5, WHITE)
+
+  // Right pricing — aligned with SITE WORKS header (same y, before decrementing)
+  let prY = y
+  t(page, 'Unit Door Price', rightColX, prY - 13, reg, 9, DARK)
+  tRight(page, `$  ${door.unitPrice.toLocaleString('en-AU', { minimumFractionDigits: 2 })}`, ML + CW, prY - 13, reg, 9, DARK)
+  prY -= swBarH
+
+  t(page, 'Quantity', rightColX, prY - 11, reg, 9, DARK)
+  tRight(page, String(door.qty), ML + CW, prY - 11, reg, 9, DARK)
+  prY -= swRowH
+
+  y -= swBarH
+
+  // Grey background for left SITE WORKS content area
   drawRect(page, ML, y - swContentH, leftColW, swContentH, LIGHT_GREY)
 
   // Left: demolition details
@@ -433,16 +453,6 @@ async function drawPageDoor(
   if (demolRequired) t(page, 'Remove the existing Door', ML + 48, swY - 11, reg, 8, DARK)
   swY -= swRowH
   drawHLine(page, ML, swY, swHalf, 0.4, rgb(0.80, 0.80, 0.80))
-
-  // Right: pricing (aligned to right column)
-  let prY = y
-  t(page, 'Unit Door Price', rightColX, prY - 11, reg, 9, DARK)
-  tRight(page, `$  ${door.unitPrice.toLocaleString('en-AU', { minimumFractionDigits: 2 })}`, ML + CW, prY - 11, reg, 9, DARK)
-  prY -= swRowH
-
-  t(page, 'Quantity', rightColX, prY - 11, reg, 9, DARK)
-  tRight(page, String(door.qty), ML + CW, prY - 11, reg, 9, DARK)
-  prY -= swRowH + 2
 
   // DOOR SUBTOTAL bar
   const stH = 22
