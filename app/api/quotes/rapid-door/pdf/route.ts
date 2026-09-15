@@ -49,6 +49,23 @@ export async function POST(request: NextRequest) {
       body.doorImagePath = resolveDoorImagePath(body.doorType, body.colourCode, imageStyle)
     }
 
+    // Fetch option descriptions from DB (code→description per category)
+    try {
+      const sbOpts = createServiceRoleClient()
+      const { data: optRows } = await sbOpts
+        .from('rapid_door_option_map')
+        .select('category, code, description')
+        .eq('is_active', true)
+      if (optRows?.length) {
+        const descMap: Record<string, Record<string, string>> = {}
+        for (const row of optRows) {
+          if (!descMap[row.category]) descMap[row.category] = {}
+          descMap[row.category][row.code] = row.description
+        }
+        body.optionDescriptions = descMap
+      }
+    } catch { /* fall back to code values if DB unavailable */ }
+
     // Resolve T&C bytes from Supabase storage (uploaded via admin), falling back to bundled local file
     if (body.endUser) {
       try {

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { loadDoorImageStyle } from '@/app/(portal)/admin/settings/QuoteSettingsClient'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import type { DoorLineItem } from '@/lib/pdf/generateRapidDoorQuotePdf'
+import type { DoorOptionsMap, DoorOption } from '@/app/api/quotes/rapid-door/options/route'
 
 // ── Quote number helpers ──────────────────────────────────────────────────────
 async function fetchNextRapidDoorQuoteNumber(): Promise<string> {
@@ -61,27 +62,16 @@ const DOOR_TYPE_NAMES: Record<string, string> = {
   FR01: 'Freezer Rapid Door', CAD01: 'CAD Rapid Door',
   CL01: 'Clean Room Rapid Door', ES01: 'ES Rapid Door',
 }
-const FRAME_NAMES: Record<string, string> = { 'GAL': 'Galvanized', 'P/C': 'Powder Coated', 'S/S': 'Stainless Steel' }
-const FRAME_OPTIONS       = ['GAL', 'P/C', 'S/S']
-const CURTAIN_OPTIONS     = ['PVC900', 'INSUL', 'FRZ', 'MESH']
-const MOTOR_KW_OPTIONS    = ['0.75', '1.5', '2.2', '3']
-const MOTOR_SIDE_OPTIONS  = ['RHD', 'LHD']
-const CONTROL_BOX_OPTIONS = ['RIGHT', 'LEFT']
-const SAFETY_DETECTION: { key: string; label: string; options: string[] }[] = [
-  { key: 'indicatorLamp', label: 'Indicator Lamp',  options: ['AMB', 'LED', 'RYG'] },
-  { key: 'safety',        label: 'Safety Sensor',   options: ['PEC', 'SLC'] },
-  { key: 'pushButton',    label: 'Push Button',     options: ['PB01', 'PB02', 'PB05'] },
-  { key: 'radar',         label: 'Radar',           options: ['STANDARD', 'FALCON', 'CONDOR', 'W-SCAN'] },
-  { key: 'remoteControl', label: 'Remote Control',  options: ['R/C-4J', 'R/C-4', 'R/C-8', 'R/C-16'] },
-  { key: 'inductLoop',    label: 'Induction Loop',  options: ['I/L AMP', 'I/L FULL'] },
-  { key: 'swipe',         label: 'Other',           options: ['SWIPE', 'P-CORD', 'K-SWITCH', 'RFID', 'I-LOCK', 'UPS', 'A/C'] },
-]
-const DOOR_CONTROL_OPTIONS = ['ENC', 'LS'] as const
-const COLOUR_OPTIONS: { label: string; hex: string }[] = [
-  { label: 'BL 543', hex: '#1B52D4' }, { label: 'RD 356', hex: '#DC2626' },
-  { label: 'YL 119', hex: '#EAB308' }, { label: 'OR 244', hex: '#F97316' },
-  { label: 'GR 679', hex: '#16A34A' }, { label: 'GY 729', hex: '#9CA3AF' },
-  { label: 'TBC',    hex: '#E5E7EB' },
+// Safety/Detection categories in display order (category key → UI label)
+// Labels stay in code so the UI doesn't need an extra "category metadata" table
+const SAFETY_DETECTION_KEYS: { key: string; label: string }[] = [
+  { key: 'indicatorLamp', label: 'Indicator Lamp' },
+  { key: 'safety',        label: 'Safety Sensor'  },
+  { key: 'pushButton',    label: 'Push Button'    },
+  { key: 'radar',         label: 'Radar'          },
+  { key: 'remoteControl', label: 'Remote Control' },
+  { key: 'inductLoop',    label: 'Induction Loop' },
+  { key: 'swipe',         label: 'Other'          },
 ]
 const QUOTE_TYPES = [
   { value: 'GENERAL',                    label: 'General',                       icon: 'description', description: 'Standard quotation for general works and services' },
@@ -133,6 +123,23 @@ type SavedDoor = {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function NewQuotesPage() {
+  // DB-driven option lists (fetched once on mount)
+  const [doorOptions, setDoorOptions] = useState<DoorOptionsMap>({})
+
+  useEffect(() => {
+    fetch('/api/quotes/rapid-door/options')
+      .then(r => r.ok ? r.json() as Promise<DoorOptionsMap> : Promise.reject())
+      .then(setDoorOptions)
+      .catch(() => { /* UI remains functional; dropdowns show no options until retry */ })
+  }, [])
+
+  function opts(category: string): DoorOption[] { return doorOptions[category] ?? [] }
+  function optCodes(category: string): string[]  { return opts(category).map(o => o.code) }
+  // code→description lookup (used for frame display name in desc lines and PDF calls)
+  function optDesc(category: string, code: string): string {
+    return doorOptions[category]?.find(o => o.code === code)?.description || code
+  }
+
   // Quote type
   const [selected, setSelected] = useState<string>('')
 
@@ -589,7 +596,7 @@ const autoDescLines = [
   doorType && DOOR_TYPE_NAMES[doorType] ? `${doorType} | ${DOOR_TYPE_NAMES[doorType]}` : '',
   [
     openingW && openingH ? `${openingW} W × ${openingH} H mm` : '',
-    frame && FRAME_NAMES[frame] ? `${FRAME_NAMES[frame]} frame` : '',
+    frame ? `${optDesc('frame', frame)} frame` : '',
     colour,
     motorSide && motorSide.trim() ? motorSide : ''
   ].filter(v => typeof v === 'string' && v.trim().length > 0).join(' | ')
@@ -703,7 +710,7 @@ const autoDescLines = [
             openingW: d.openingW, openingH: d.openingH,
             externalW: ew, externalH: eh,
             frameRaw: d.frame,
-            frame: FRAME_NAMES[d.frame] ?? d.frame,
+            frame: optDesc('frame', d.frame),
             curtain: d.curtain, colour: d.colour,
             motorKw: d.motorKw, motorSide: d.motorSide, cbSide: d.cbSide, doorControl: d.doorControl ?? '',
             safetyLines: d.safetyLines,
@@ -721,7 +728,7 @@ const autoDescLines = [
           openingW, openingH,
           externalW: extW, externalH: extH,
           frameRaw: frame,
-          frame: FRAME_NAMES[frame] ?? frame,
+          frame: optDesc('frame', frame),
           curtain, colour,
           motorKw, motorSide, cbSide, doorControl,
           safetyLines: safetySelected,
@@ -1106,7 +1113,7 @@ const autoDescLines = [
                   <SelectWrapper>
                     <select value={frame} onChange={e => setFrame(e.target.value)} className={SELECT_CLS}>
                       <option value="" disabled>— Select frame —</option>
-                      {FRAME_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                      {optCodes('frame').map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
                   </SelectWrapper>
                 </div>
@@ -1116,7 +1123,7 @@ const autoDescLines = [
                   <SelectWrapper>
                     <select value={curtain} onChange={e => setCurtain(e.target.value)} className={SELECT_CLS}>
                       <option value="" disabled>— Select curtain —</option>
-                      {CURTAIN_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                      {optCodes('curtain').map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
                   </SelectWrapper>
                 </div>
@@ -1129,7 +1136,7 @@ const autoDescLines = [
                       {colour ? (
                         <>
                           <span className="h-6 w-10 shrink-0 rounded-md border border-slate-200"
-                            style={{ backgroundColor: COLOUR_OPTIONS.find(c => c.label === colour)?.hex }} />
+                            style={{ backgroundColor: opts('colour').find(c => c.code === colour)?.hexColour ?? undefined }} />
                           {colour}
                         </>
                       ) : <span className="text-slate-400">— Select colour —</span>}
@@ -1137,13 +1144,13 @@ const autoDescLines = [
                     </button>
                     {colourOpen && (
                       <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden">
-                        {COLOUR_OPTIONS.map(c => (
-                          <button key={c.label} type="button"
-                            onClick={() => { setColour(c.label); setColourOpen(false) }}
-                            className={`flex w-full items-center gap-3 px-4 py-2.5 text-sm font-medium transition hover:bg-slate-50 ${colour === c.label ? 'bg-indigo-50 text-indigo-700' : 'text-slate-800'}`}>
-                            <span className="h-6 w-10 shrink-0 rounded-md border border-slate-200" style={{ backgroundColor: c.hex }} />
-                            {c.label}
-                            {colour === c.label && <span className="material-symbols-outlined ml-auto text-indigo-500 text-base">check</span>}
+                        {opts('colour').map(c => (
+                          <button key={c.code} type="button"
+                            onClick={() => { setColour(c.code); setColourOpen(false) }}
+                            className={`flex w-full items-center gap-3 px-4 py-2.5 text-sm font-medium transition hover:bg-slate-50 ${colour === c.code ? 'bg-indigo-50 text-indigo-700' : 'text-slate-800'}`}>
+                            <span className="h-6 w-10 shrink-0 rounded-md border border-slate-200" style={{ backgroundColor: c.hexColour ?? undefined }} />
+                            {c.code}
+                            {colour === c.code && <span className="material-symbols-outlined ml-auto text-indigo-500 text-base">check</span>}
                           </button>
                         ))}
                       </div>
@@ -1178,7 +1185,7 @@ const autoDescLines = [
                 {colour && (
                   <span className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
                     <span className="inline-block h-3 w-3 rounded-full border border-slate-200"
-                      style={{ backgroundColor: COLOUR_OPTIONS.find(c => c.label === colour)?.hex }} />
+                      style={{ backgroundColor: opts('colour').find(c => c.code === colour)?.hexColour ?? undefined }} />
                     {colour}
                   </span>
                 )}
@@ -1287,14 +1294,14 @@ const autoDescLines = [
                 </button>
                 {safetyEnabled && (
                   <div className="grid grid-cols-3 gap-3 p-4">
-                    {SAFETY_DETECTION.map(field => (
+                    {SAFETY_DETECTION_KEYS.map(field => (
                       <div key={field.key}>
                         <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">{field.label}</label>
                         <div className="relative">
                           <select value={safetyValues[field.key] ?? ''} onChange={e => setSafetyField(field.key, e.target.value)}
                             className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
                             <option value="">— None —</option>
-                            {field.options.map(o => <option key={o} value={o}>{o}</option>)}
+                            {optCodes(field.key).map(o => <option key={o} value={o}>{o}</option>)}
                           </select>
                           <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
                         </div>
@@ -1326,7 +1333,7 @@ const autoDescLines = [
                         <select value={motorKw} onChange={e => setMotorKw(e.target.value)}
                           className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
                           <option value="">—</option>
-                          {MOTOR_KW_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                          {opts('motorKw').map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
                         </select>
                         <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
                       </div>
@@ -1337,7 +1344,7 @@ const autoDescLines = [
                         <select value={motorSide} onChange={e => setMotorSide(e.target.value)}
                           className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
                           <option value="">—</option>
-                          {MOTOR_SIDE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                          {optCodes('motorSide').map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                         <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
                       </div>
@@ -1348,7 +1355,7 @@ const autoDescLines = [
                         <select value={cbSide} onChange={e => setCbSide(e.target.value)}
                           className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
                           <option value="">—</option>
-                          {CONTROL_BOX_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                          {optCodes('controlBoxSide').map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                         <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
                       </div>
@@ -1359,7 +1366,7 @@ const autoDescLines = [
                         <select value={doorControl} onChange={e => setDoorControl(e.target.value)}
                           className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
                           <option value="">—</option>
-                          {DOOR_CONTROL_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                          {optCodes('doorControl').map(o => <option key={o} value={o}>{o}</option>)}
                         </select>
                         <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
                       </div>

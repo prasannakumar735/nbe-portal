@@ -2,12 +2,6 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont } from 'pdf-lib'
 import { embedRobotoForPdfLib } from '@/lib/pdf/robotoPdf'
-import {
-  mapOrDash,
-  INDICATOR_LAMP_MAP, SAFETY_SENSOR_MAP, PUSH_BUTTON_MAP,
-  RADAR_MAP, REMOTE_CONTROL_MAP, INDUCTION_LOOP_MAP, SWIPE_MAP,
-  DOOR_CONTROL_MAP, CURTAIN_DISPLAY_MAP, COLOUR_DISPLAY_MAP,
-} from '@/lib/quotes/rapidDoorMappings'
 
 // Convert WebP → PNG in-process so pdf-lib can embed it
 async function webpToPng(filePath: string): Promise<Buffer | null> {
@@ -154,6 +148,8 @@ export type RapidDoorQuotePdfInput = {
   accTravel?:        number
   lineTotal?:        number
   doorImagePath?:    string | null
+  /** code→description maps fetched from DB, keyed by category then code */
+  optionDescriptions?: Record<string, Record<string, string>>
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -214,12 +210,22 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): 
 
 // ── Page: Per-door detail (new layout matching reference design) ──────────────
 
+function descFor(
+  opts: Record<string, Record<string, string>> | undefined,
+  category: string,
+  code: string | undefined,
+): string {
+  if (!code || code === '-') return '-'
+  return opts?.[category]?.[code] ?? code
+}
+
 async function drawPageDoor(
   pdfDoc: PDFDocument,
   door: DoorLineItem,
   doorIndex: number,
   fonts: { reg: PDFFont; bold: PDFFont; display: PDFFont },
   logoImg: Awaited<ReturnType<typeof PDFDocument.prototype.embedPng>> | null,
+  optionDescriptions?: Record<string, Record<string, string>>,
 ) {
   const { reg, bold } = fonts
   const page = pdfDoc.addPage([595.28, 841.89])
@@ -282,12 +288,12 @@ async function drawPageDoor(
     { label: 'Opening Size (Clear)', value: `${door.openingW} CW × ${door.openingH} CH mm` },
     { label: 'External Size',      value: door.externalW ? `${door.externalW} XW × ${door.externalH} XH mm` : '', grey: true },
     { label: 'Frame Material',     value: door.frame },
-    { label: 'Curtain Material',   value: mapOrDash(CURTAIN_DISPLAY_MAP, door.curtain) },
-    { label: 'Curtain Colour',     value: mapOrDash(COLOUR_DISPLAY_MAP, door.colour) },
+    { label: 'Curtain Material',   value: descFor(optionDescriptions, 'curtain',  door.curtain) },
+    { label: 'Curtain Colour',     value: descFor(optionDescriptions, 'colour',   door.colour) },
     { label: 'Safety Edge Colour', value: safetyEdgeColour },
     { label: 'Motor',              value: door.motorKw ? `${door.motorKw} KW` : '' },
     { label: 'Motor Side',         value: door.motorSide },
-    { label: 'Door Control',       value: door.doorControl ? mapOrDash(DOOR_CONTROL_MAP, door.doorControl) : techSpec.doorControl },
+    { label: 'Door Control',       value: door.doorControl ? descFor(optionDescriptions, 'doorControl', door.doorControl) : techSpec.doorControl },
     { label: 'Power Supply',       value: techSpec.powerSupply },
     { label: 'Opening Speed',      value: techSpec.openingSpeed },
   ]
@@ -311,14 +317,14 @@ async function drawPageDoor(
   const sfRowH = 17
   const sb = door.safetyByCategory ?? {}
   const sfRows: { section: string; label: string; value: string }[] = [
-    { section: 'Safety Features', label: 'Indicator Lamp',  value: mapOrDash(INDICATOR_LAMP_MAP, sb.indicatorLamp) },
-    { section: '',                label: 'Safety Sensor',   value: mapOrDash(SAFETY_SENSOR_MAP,  sb.safety) },
+    { section: 'Safety Features', label: 'Indicator Lamp',  value: descFor(optionDescriptions, 'indicatorLamp',  sb.indicatorLamp) },
+    { section: '',                label: 'Safety Sensor',   value: descFor(optionDescriptions, 'safety',         sb.safety) },
     { section: '',                label: 'Safety Edge',     value: '-' },
-    { section: 'Activation',      label: 'Push Button',     value: mapOrDash(PUSH_BUTTON_MAP,    sb.pushButton) },
-    { section: '',                label: 'Radar',           value: mapOrDash(RADAR_MAP,          sb.radar) },
-    { section: '',                label: 'Remote Control',  value: mapOrDash(REMOTE_CONTROL_MAP, sb.remoteControl) },
-    { section: '',                label: 'Induction Loop',  value: mapOrDash(INDUCTION_LOOP_MAP, sb.inductLoop) },
-    { section: '',                label: 'Other',           value: mapOrDash(SWIPE_MAP,          sb.swipe) },
+    { section: 'Activation',      label: 'Push Button',     value: descFor(optionDescriptions, 'pushButton',     sb.pushButton) },
+    { section: '',                label: 'Radar',           value: descFor(optionDescriptions, 'radar',          sb.radar) },
+    { section: '',                label: 'Remote Control',  value: descFor(optionDescriptions, 'remoteControl',  sb.remoteControl) },
+    { section: '',                label: 'Induction Loop',  value: descFor(optionDescriptions, 'inductLoop',     sb.inductLoop) },
+    { section: '',                label: 'Other',           value: descFor(optionDescriptions, 'swipe',          sb.swipe) },
   ]
   sfRows.forEach(({ section, label, value }) => {
     if (section) t(page, section, lblX,  ly - 8, reg, 8.5, DARK)
@@ -746,7 +752,7 @@ export async function generateRapidDoorQuotePdf(input: RapidDoorQuotePdfInput): 
 
   // Per-door detail pages (spec table, image, key features, site works)
   for (let i = 0; i < doors.length; i++) {
-    await drawPageDoor(pdfDoc, doors[i], i, fonts, logoImg)
+    await drawPageDoor(pdfDoc, doors[i], i, fonts, logoImg, input.optionDescriptions)
   }
 
   // ── Append T&C pages — Supabase-uploaded bytes take priority over bundled local files ──
