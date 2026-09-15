@@ -15,6 +15,9 @@ async function webpToPng(filePath: string): Promise<Buffer | null> {
 function colourToCode(colour: string): string {
   const key = colour.toLowerCase().split(/[\s_-]/)[0]
   const map: Record<string, string> = {
+    // Code-prefix format (e.g. "BL 543", "GY 729")
+    bl: 'BL', rd: 'RD', yl: 'YL', or: 'OR', gr: 'GN', gy: 'GY', gn: 'GN', bk: 'BK',
+    // Full colour name fallbacks
     blue: 'BL', green: 'GN', grey: 'GY', gray: 'GY',
     orange: 'OR', red: 'RD', yellow: 'YL', black: 'BK',
   }

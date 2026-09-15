@@ -195,27 +195,16 @@ export default function NewQuotesPage() {
   const [tempDesc,    setTempDesc]      = useState('')
 
   // Editable notes / disclaimers
-  const DEFAULT_PAGE1_DISCLAIMER = 'This quotation is based on the NBE Standard Door comprising a galvanized frame, PVC curtain (900 g/m²), and a zinc-coated control box (RAL 7035). Optional extras (e.g. powder coating, light curtain, remote control, radar, traffic light, induction loop, contactless exit button) are available at additional cost. All other matters shall be subject to our standard Terms and Conditions (T&C). The electrical scope is limited to the connection between the control panel and the doors only. Power supply and isolator shall be provided by others.'
   const DEFAULT_PAGE2_SUMMARY_NOTE = "Subject to NBE Australia's standard Terms & Conditions. Final dimensions, site conditions and access must be confirmed prior to manufacture. Delivery, equipment hire and installation are excluded unless shown as priced line items. Electrical works are limited to connections between the control panel and door equipment. Power supply and isolator shall be provided by others."
-  const [page1Disclaimer,     setPage1Disclaimer]     = useState<string>('')
   const [page2SummaryNote,    setPage2SummaryNote]    = useState<string>('')
-  const [editingPage1Note,    setEditingPage1Note]    = useState(false)
   const [editingPage2Note,    setEditingPage2Note]    = useState(false)
-  const [tempPage1Note,       setTempPage1Note]       = useState('')
   const [tempPage2Note,       setTempPage2Note]       = useState('')
 
   function loadNotesFromStorage(qn: string) {
     try {
-      const d = localStorage.getItem(`nbe_note1_${qn}`)
       const s = localStorage.getItem(`nbe_note2_${qn}`)
-      if (d) setPage1Disclaimer(d)
       if (s) setPage2SummaryNote(s)
     } catch { /* ignore */ }
-  }
-  function saveNote1(qn: string | null, text: string) {
-    setPage1Disclaimer(text)
-    if (!qn) return
-    try { localStorage.setItem(`nbe_note1_${qn}`, text) } catch { /* ignore */ }
   }
   function saveNote2(qn: string | null, text: string) {
     setPage2SummaryNote(text)
@@ -433,7 +422,6 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     setSavedDoors([])
     setPreviewUrl(null)
     setShowPreview(false)
-    setPage1Disclaimer('')
     setPage2SummaryNote('')
     setCustName(''); setCustAttn(''); setCustAddress(''); setCustPostcode(''); setCustPhone(''); setCustEmail('')
     setIncludeSummary(true); setIndividualInstall(false)
@@ -490,7 +478,6 @@ The quote includes all relevant specifications and pricing as discussed. Please 
           includeSummary, individualInstall: !includeSummary ? individualInstall : false,
           endUser: endUser || undefined,
           imageStyle: loadDoorImageStyle(),
-          page1Disclaimer: page1Disclaimer || undefined,
           page2SummaryNote: page2SummaryNote || undefined,
         }),
       })
@@ -526,7 +513,6 @@ The quote includes all relevant specifications and pricing as discussed. Please 
       setIndividualInstall(det.individual_install ?? false)
       const eu = det.end_user_type ?? ''
       setEndUser((eu === 'CUSTOMER' || eu === 'DISTRIBUTOR' || eu === 'TENDER') ? eu : '')
-      if (det.page1_disclaimer) setPage1Disclaimer(det.page1_disclaimer)
       if (det.page2_note) setPage2SummaryNote(det.page2_note)
       // Load all doors except last into savedDoors; restore last door into form
       const doors = Array.isArray(det.doors) ? det.doors as DoorLineItem[] : []
@@ -751,7 +737,6 @@ The quote includes all relevant specifications and pricing as discussed. Please 
           customerName: custName, customerAttn: custAttn,
           customerAddress: custAddress, customerPostcode: custPostcode,
           customerPhone: custPhone, customerEmail: custEmail,
-          page1Disclaimer:  page1Disclaimer  || undefined,
           page2SummaryNote: page2SummaryNote || undefined,
           endUser:          endUser          || undefined,
           includeSummary,
@@ -789,7 +774,6 @@ The quote includes all relevant specifications and pricing as discussed. Please 
             individualInstall: !includeSummary ? individualInstall : false,
             endUser: endUser || undefined,
             imageStyle: loadDoorImageStyle(),
-            page1Disclaimer: page1Disclaimer || undefined,
             page2SummaryNote: page2SummaryNote || undefined,
           }),
         })
@@ -1593,38 +1577,6 @@ The quote includes all relevant specifications and pricing as discussed. Please 
 
             {/* Editable notes / disclaimers */}
             <div className="space-y-3">
-              {/* Page 1 Disclaimer */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Page 1 Disclaimer</span>
-                  {!editingPage1Note ? (
-                    <button type="button" onClick={() => { setTempPage1Note(page1Disclaimer || DEFAULT_PAGE1_DISCLAIMER); setEditingPage1Note(true) }}
-                      className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition">
-                      <span className="material-symbols-outlined text-[14px]">edit</span>Edit
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-1">
-                      <button type="button" onClick={() => setEditingPage1Note(false)}
-                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition">
-                        <span className="material-symbols-outlined text-[14px]">close</span>Cancel
-                      </button>
-                      <button type="button" onClick={() => { saveNote1(quoteNumber, tempPage1Note); setEditingPage1Note(false) }}
-                        className="flex items-center gap-1 rounded-lg bg-indigo-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-indigo-700 transition">
-                        <span className="material-symbols-outlined text-[14px]">check</span>Save
-                      </button>
-                    </div>
-                  )}
-                </div>
-                {editingPage1Note ? (
-                  <textarea rows={4} value={tempPage1Note} onChange={e => setTempPage1Note(e.target.value)}
-                    className="w-full rounded-lg border border-indigo-300 bg-white px-3 py-2 text-[12px] text-slate-700 shadow-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 resize-y" />
-                ) : (
-                  <p className="text-[12px] text-slate-500 leading-relaxed whitespace-pre-wrap">
-                    {page1Disclaimer || DEFAULT_PAGE1_DISCLAIMER}
-                  </p>
-                )}
-              </div>
-
               {/* Page 2 Summary Note — only shown when summary page is enabled */}
               {includeSummary && <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <div className="flex items-center justify-between mb-1.5">
