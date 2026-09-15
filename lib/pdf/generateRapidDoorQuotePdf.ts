@@ -398,13 +398,12 @@ async function drawPageDoor(
   y = Math.max(contentBottom - 8, 175)  // never overlap footer
 
   const swBarH = 20
-  const swHalf = leftColW
   const demolRequired = (door.demolition ?? 0) > 0
   const swRowH = 18
   const swContentH = swRowH * 3
 
-  // SITE WORKS header and Unit Door Price both start at the same y
-  drawRect(page, ML, y - swBarH, leftColW, swBarH, BRAND)
+  // SITE WORKS header spans full content width; Unit Door Price starts at the same y
+  drawRect(page, ML, y - swBarH, CW, swBarH, BRAND)
   t(page, 'SITE WORKS (OPTIONAL)', ML + 8, y - 13, bold, 10.5, WHITE)
 
   // Right pricing — aligned with SITE WORKS header (same y, before decrementing)
@@ -419,12 +418,12 @@ async function drawPageDoor(
 
   y -= swBarH
 
-  // Grey background for left SITE WORKS content area
-  drawRect(page, ML, y - swContentH, leftColW, swContentH, LIGHT_GREY)
+  // Grey background spans full width; pricing is drawn on top on the right side
+  drawRect(page, ML, y - swContentH, CW, swContentH, LIGHT_GREY)
 
   // Left: demolition details
   let swY = y
-  drawHLine(page, ML, swY, swHalf, 0.4, rgb(0.80, 0.80, 0.80))
+  drawHLine(page, ML, swY, CW, 0.4, rgb(0.80, 0.80, 0.80))
   t(page, 'Demolition Required', ML + 4, swY - 11, reg, 8, DARK)
   page.drawRectangle({ x: ML + 104, y: swY - 17, width: 9, height: 9, borderColor: DARK, borderWidth: 0.5, color: WHITE })
   if (demolRequired) {
@@ -440,7 +439,7 @@ async function drawPageDoor(
   t(page, 'No', ML + 148, swY - 11, reg, 8, DARK)
   swY -= swRowH
 
-  drawHLine(page, ML, swY, swHalf, 0.4, rgb(0.80, 0.80, 0.80))
+  drawHLine(page, ML, swY, CW, 0.4, rgb(0.80, 0.80, 0.80))
   t(page, 'Demolition', ML + 4, swY - 11, reg, 8, DARK)
   if (demolRequired) {
     t(page, fmtAUD(door.demolition), ML + 68, swY - 11, reg, 8, DARK)
@@ -448,11 +447,11 @@ async function drawPageDoor(
   }
   swY -= swRowH
 
-  drawHLine(page, ML, swY, swHalf, 0.4, rgb(0.80, 0.80, 0.80))
+  drawHLine(page, ML, swY, CW, 0.4, rgb(0.80, 0.80, 0.80))
   t(page, 'Scope', ML + 4, swY - 11, reg, 8, DARK)
   if (demolRequired) t(page, 'Remove the existing Door', ML + 48, swY - 11, reg, 8, DARK)
   swY -= swRowH
-  drawHLine(page, ML, swY, swHalf, 0.4, rgb(0.80, 0.80, 0.80))
+  drawHLine(page, ML, swY, CW, 0.4, rgb(0.80, 0.80, 0.80))
 
   // DOOR SUBTOTAL bar
   const stH = 22
