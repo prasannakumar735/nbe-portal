@@ -369,7 +369,7 @@ async function drawPageDoor(
     })
     rightY -= imgDrawH + 12 + imgTopPad
     const cap = 'Indicative Image - Configuration may vary'
-    page.drawText(cap, { x: rightColX + (rightColW - reg.widthOfTextAtSize(cap, 7)) / 2, y: rightY - 2, size: 7, font: reg, color: GREY })
+    page.drawText(cap, { x: rightColX, y: rightY - 2, size: 7, font: reg, color: GREY })
   }
 
   // KEY FEATURES starts exactly at sfStartY — aligned with Safety Features on the left
@@ -419,7 +419,9 @@ async function drawPageDoor(
   drawRect(page, ML, y - swBarH, CW, swBarH, BRAND)
   t(page, 'SITE WORKS (OPTIONAL)', ML + 8, y - 13, bold, 10.5, WHITE)
 
-  // Right pricing — aligned with SITE WORKS header (same y, before decrementing)
+  // Right pricing — white background over the BRAND bar so text is readable on white
+  const prW = CW - leftColW - colGap
+  drawRect(page, rightColX, y - swBarH, prW, swBarH, rgb(1, 1, 1))
   let prY = y
   t(page, 'Unit Door Price', rightColX, prY - 13, reg, 9, DARK)
   tRight(page, `$  ${door.unitPrice.toLocaleString('en-AU', { minimumFractionDigits: 2 })}`, ML + CW, prY - 13, reg, 9, DARK)
@@ -524,7 +526,7 @@ async function drawPage2(
   t(page, 'accountsreceivable@nbeaustralia.com.au',             ML, y - 24, reg,  8,   DARK)
   t(page, 'www.nbeaustralia.com.au',                            ML, y - 36, reg,  8,   DARK)
 
-  const dateLabelX = ML + CW - 130
+  const dateLabelX = ML + CW - 160
   const dateRows: [string, string][] = [
     ['DATE',        input.date],
     ['VALID UNTIL', input.validUntil],
@@ -574,7 +576,7 @@ async function drawPage2(
   y -= Math.max(custRows.length, summaryRows.length) * 13 + 16
 
   // ── LINE ITEMS TABLE ──────────────────────────────────────────────────────
-  const cNo = ML;  const cItem = ML + 22;  const cDesc = ML + 60
+  const cNo = ML;  const cItem = ML + 38;  const cDesc = ML + 75
   const cQtyW = 35;  const cQtyX = ML + CW - 165
   const cUpRight = ML + CW - 65;  const cTotRight = ML + CW
 
@@ -602,7 +604,7 @@ async function drawPage2(
     
     const rowH = descLines.length * 11 + 10
 
-    t(page, String(di + 1), cNo + 2, y - 11, reg, 8.5, DARK)
+    t(page, `D${String(di + 1).padStart(2, '0')}`, cNo + 2, y - 11, reg, 8.5, DARK)
     t(page, d.doorType,     cItem,   y - 11, reg, 8.5, DARK)
     descLines.forEach((ln, i) => t(page, ln, cDesc, y - 11 - i * 11, reg, 8, DARK))
     tCenter(page, String(d.qty),               cQtyX, cQtyW, y - 11, reg, 8.5, DARK)
@@ -631,15 +633,7 @@ async function drawPage2(
   const totalEquip   = doors.reduce((s, d) => s + d.equipHire, 0)
   const totalTravel  = doors.reduce((s, d) => s + d.accTravel, 0)
 
-  // Sub Total row (door prices from the per-door pages)
   const addlRowH = 18
-  drawHLine(page, ML, y, CW, 0.6, rgb(0.65, 0.65, 0.65))
-  t(page, 'Sub Total',        cDesc,     y - 12, bold, 9, DARK)
-  tCenter(page, String(totalQty), cQtyX, cQtyW, y - 12, reg, 9, DARK)
-  tRight(page, fmtAUD(doorSubtotal), cUpRight,  y - 12, reg, 9, DARK)
-  tRight(page, fmtAUD(doorSubtotal), cTotRight, y - 12, bold, 9, DARK)
-  y -= addlRowH
-
   const addlRows: [string, number][] = [
     ['Installation',           totalInstall],
     ['Demolition',             totalDemol],
@@ -663,17 +657,16 @@ async function drawPage2(
   t(page, 'Account Name: NBE Australia Pty Ltd',      ML, bankY - 14, reg,  8,   DARK)
   t(page, 'BSB: 013-525  |  Account No.: 3473-93755', ML, bankY - 26, reg,  8,   DARK)
 
-  const totLabelRight = ML + CW - 70
   const totValRight   = ML + CW
-
-  tRight(page, 'Subtotal',         totLabelRight, bankY,      bold, 10, DARK)
-  tRight(page, fmtAUD(grandTotal), totValRight,   bankY,      reg,  10, DARK)
-  tRight(page, 'GST (10%)',              totLabelRight, bankY - 22, bold, 10, DARK)
-  tRight(page, fmtAUD(grandTotal * 0.1), totValRight,  bankY - 22, reg,  10, DARK)
-
-  drawHLine(page, ML + CW - 170, bankY - 32, 170, 0.5)
-
   const totBoxW = 170
+  const totLabelX = ML + CW - totBoxW + 8  // labels left-aligned with TOTAL box
+
+  t(page, 'Subtotal',              totLabelX,     bankY,      bold, 10, DARK)
+  tRight(page, fmtAUD(grandTotal), totValRight,   bankY,      reg,  10, DARK)
+  t(page, 'GST (10%)',             totLabelX,     bankY - 22, bold, 10, DARK)
+  tRight(page, fmtAUD(grandTotal * 0.1), totValRight, bankY - 22, reg, 10, DARK)
+
+  drawHLine(page, ML + CW - totBoxW, bankY - 32, totBoxW, 0.5)
   const totBoxY = bankY - 56
   drawRect(page, ML + CW - totBoxW, totBoxY, totBoxW, 22, BLACK)
   t(page,      'TOTAL',                  ML + CW - totBoxW + 8, totBoxY + 6, bold, 11, WHITE)
