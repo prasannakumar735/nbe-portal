@@ -26,7 +26,7 @@ function colourToCode(colour: string): string {
 
 const KEY_FEATURES: Record<string, { icon: string; title: string; desc: string }[]> = {
   SP01: [
-    { icon: 'XL-Opening',    title: 'Large Opening Capacity',    desc: 'Suited to wider and taller openings' },
+    { icon: 'L-opening',     title: 'Large Opening Capacity',    desc: 'Suited to wider and taller openings' },
     { icon: 'Heavy-Duty',    title: 'Heavy-Duty Construction',   desc: 'Reinforced for demanding environments' },
     { icon: 'Reinforcement', title: 'Fibreglass Reinforcement',  desc: 'Improved impact absorption and rebound' },
     { icon: 'Safety',        title: 'Integrated Safety',         desc: 'Safety edge and photoelectric sensors' },
@@ -39,9 +39,9 @@ const KEY_FEATURES: Record<string, { icon: string; title: string; desc: string }
   ],
   FR01: [
     { icon: 'Insulation',   title: 'Insulated Curtain System',  desc: 'Helps reduce temperature transfer' },
-    { icon: 'ColdStorage',  title: 'Heated Guide System',       desc: 'Minimises ice build-up in guides' },
-    { icon: 'Speed',        title: 'Cold-Chain Efficiency',     desc: 'Supports freezer and coolroom access' },
-    { icon: 'Safety',       title: 'Integrated Safety',         desc: 'Safety edge and photoelectric sensors' },
+    { icon: 'Thermostat',   title: 'Heated Guide System',       desc: 'Minimises ice build-up in guides' },
+    { icon: 'ColdStorage',  title: 'Cold-Chain Efficiency',     desc: 'Supports freezer and coolroom access' },
+    { icon: 'Folding',      title: 'Folding Door Configuration',desc: 'Reduces ice build-up around the curtain' },
   ],
   CAD01: [
     { icon: 'XL-Opening',  title: 'Ex-Large Opening Capacity', desc: 'Suitable for oversized industrial openings' },
