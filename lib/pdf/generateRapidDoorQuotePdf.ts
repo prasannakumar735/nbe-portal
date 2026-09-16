@@ -578,7 +578,7 @@ async function drawPage2(
     ['Number of Types', String(doors.length)],
     ['Total Quantity',  String(totalQty)],
     ['Delivery',        hasDelivery ? 'Included' : 'Excluded'],
-    ...(hasInstall      ? [['Installation', 'Included'] as [string, string]] : []),
+    ['Installation',    hasInstall  ? 'Included' : 'Excluded'],
   ]
   const sy = y
   custRows.forEach(([label, val], i) => {
@@ -596,7 +596,7 @@ async function drawPage2(
   const cQtyW = 35;  const cQtyX = ML + CW - 165
   const cUpRight = ML + CW - 65;  const cTotRight = ML + CW
   // Description values start closer to QTY column; header centred between cDesc and cQtyX
-  const cDescValX = ML + 160
+  const cDescValX = ML + 100
 
   const TH = 20
   drawRect(page, ML, y - TH, CW, TH, BLACK)

@@ -1644,7 +1644,7 @@ const autoDescLines = [
                 <p className="text-sm font-semibold text-slate-700">Include Summary Page</p>
                 <p className="text-[11px] text-slate-400 mt-0.5">
                   {includeSummary
-                    ? 'Page 2 summary will be appended to the quote.'
+                    ? 'summary will be appended to the quote.'
                     : 'No summary page — Installation, Demolition, Equipment Hire & Travel shown on page 1 with updated total.'}
                 </p>
               </div>
@@ -1688,7 +1688,7 @@ const autoDescLines = [
               {/* Page 2 Summary Note — only shown when summary page is enabled */}
               {includeSummary && <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Page 2 Summary Note</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Summary Note</span>
                   {!editingPage2Note ? (
                     <button type="button" onClick={() => { setTempPage2Note(page2SummaryNote || DEFAULT_PAGE2_SUMMARY_NOTE); setEditingPage2Note(true) }}
                       className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition">
