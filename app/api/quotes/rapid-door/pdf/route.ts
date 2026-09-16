@@ -49,22 +49,36 @@ export async function POST(request: NextRequest) {
       body.doorImagePath = resolveDoorImagePath(body.doorType, body.colourCode, imageStyle)
     }
 
-    // Fetch option descriptions from DB (code→description per category)
+    // Fetch option labels + descriptions from DB
     try {
       const sbOpts = createServiceRoleClient()
       const { data: optRows } = await sbOpts
         .from('rapid_door_option_map')
-        .select('category, code, description')
+        .select('category, code, label, description')
         .eq('is_active', true)
       if (optRows?.length) {
         const descMap: Record<string, Record<string, string>> = {}
+        const doorTypeLabels: Record<string, string> = {}
         for (const row of optRows) {
           if (!descMap[row.category]) descMap[row.category] = {}
           descMap[row.category][row.code] = row.description
+          if (row.category === 'door_type') doorTypeLabels[row.code] = row.label
         }
         body.optionDescriptions = descMap
+        // Resolve doorTypeName server-side so the PDF never shows just the code
+        if (Object.keys(doorTypeLabels).length) {
+          const resolve = (doors: DoorLineItem[]) =>
+            doors.map(d => ({
+              ...d,
+              doorTypeName: doorTypeLabels[d.doorType] ?? d.doorTypeName ?? d.doorType,
+            }))
+          if (body.doors?.length) body.doors = resolve(body.doors)
+          if (body.doorTypeName && doorTypeLabels[body.doorType ?? '']) {
+            body.doorTypeName = doorTypeLabels[body.doorType ?? '']
+          }
+        }
       }
-    } catch { /* fall back to code values if DB unavailable */ }
+    } catch { /* fall back to values supplied by client if DB unavailable */ }
 
     // Resolve T&C bytes from Supabase storage (uploaded via admin), falling back to bundled local file
     if (body.endUser) {

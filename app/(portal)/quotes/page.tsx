@@ -57,22 +57,24 @@ function getDoorImageUrl(doorType: string, colourLabel: string): string | null {
   return `/images/${folder}/${doorType}/${cfg.prefix}_${code}.png`
 }
 
-const DOOR_TYPE_NAMES: Record<string, string> = {
-  PE01: 'Performance Rapid Door', SP01: 'Speed Rapid Door',
-  FR01: 'Freezer Rapid Door', CAD01: 'CAD Rapid Door',
-  CL01: 'Clean Room Rapid Door', ES01: 'ES Rapid Door',
-}
-// Safety/Detection categories in display order (category key → UI label)
-// Labels stay in code so the UI doesn't need an extra "category metadata" table
-const SAFETY_DETECTION_KEYS: { key: string; label: string }[] = [
+// Door type names are now DB-driven via doorOptions['door_type']
+// Safety/Detection categories split into two display groups
+// safetyEdgeColour uses its own state (rendered separately using existing colour picker)
+const SAFETY_FEATURES_KEYS: { key: string; label: string }[] = [
   { key: 'indicatorLamp', label: 'Indicator Lamp' },
   { key: 'safety',        label: 'Safety Sensor'  },
+  // Safety Edge Colour rendered separately using safetyEdgeColour state
+  { key: 'safetyOther',   label: 'Other'          },
+]
+const ACTIVATION_KEYS: { key: string; label: string }[] = [
   { key: 'pushButton',    label: 'Push Button'    },
   { key: 'radar',         label: 'Radar'          },
   { key: 'remoteControl', label: 'Remote Control' },
   { key: 'inductLoop',    label: 'Induction Loop' },
   { key: 'swipe',         label: 'Other'          },
 ]
+// Combined list for safetyLines/safetyByCategory derivation
+const SAFETY_DETECTION_KEYS = [...SAFETY_FEATURES_KEYS, ...ACTIVATION_KEYS]
 const QUOTE_TYPES = [
   { value: 'GENERAL',                    label: 'General',                       icon: 'description', description: 'Standard quotation for general works and services' },
   { value: 'INDUSTRIAL_RAPID_DOOR',      label: 'Industrial Rapid Door',         icon: 'garage',      description: 'Supply and installation of industrial rapid roller doors' },
@@ -109,10 +111,12 @@ type SavedDoor = {
   motorSide: string
   cbSide: string
   doorControl: string
+  safetyEdgeColour: string
   safetyLines: string[]
   safetyByCategory: Record<string, string>
   qty: number
   unitPrice: number
+  delivery: number
   installation: number
   demolition: number
   equipHire: number
@@ -139,6 +143,10 @@ export default function NewQuotesPage() {
   function optDesc(category: string, code: string): string {
     return doorOptions[category]?.find(o => o.code === code)?.description || code
   }
+  // door type name from DB (falls back to the code itself if not yet loaded)
+  function doorTypeName(code: string): string {
+    return doorOptions['door_type']?.find(o => o.code === code)?.label ?? code
+  }
 
   // Quote type
   const [selected, setSelected] = useState<string>('')
@@ -153,11 +161,11 @@ export default function NewQuotesPage() {
   const [colour,        setColour]       = useState('')
   const [motorKw,       setMotorKw]      = useState('')
   const [motorSide,     setMotorSide]    = useState('')
-  const [cbSide,        setCbSide]       = useState('')
-  const [doorControl,   setDoorControl]  = useState('')
+  const [cbSide,            setCbSide]           = useState('')
+  const [doorControl,       setDoorControl]      = useState('')
+  const [safetyEdgeColour,  setSafetyEdgeColour] = useState('')
   const [qty,           setQty]          = useState('1')
   const [unitPrice,     setUnitPrice]    = useState('')
-  const [safetyEnabled, setSafetyEnabled]= useState(true)
   const [safetyValues,  setSafetyValues] = useState<Record<string, string>>({})
   const [motorEnabled,  setMotorEnabled] = useState(true)
 
@@ -195,6 +203,7 @@ export default function NewQuotesPage() {
   const [endUser,           setEndUser]           = useState<'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER' | ''>('CUSTOMER')
   const [includeSummary,    setIncludeSummary]    = useState(true)
   const [individualInstall, setIndividualInstall] = useState(false)
+  const [delivery,      setDelivery]     = useState('')
   const [installation,  setInstallation] = useState('')
   const [demolition,    setDemolition]   = useState('')
   const [equipHire,     setEquipHire]    = useState('')
@@ -206,21 +215,32 @@ export default function NewQuotesPage() {
   const [tempDesc,    setTempDesc]      = useState('')
 
   // Editable notes / disclaimers
-  const DEFAULT_PAGE2_SUMMARY_NOTE = "This quotation is based on the NBE Standard Door with galvanised frame, 900 g/m² PVC curtain and RAL 7035 zinc-coated control box. Optional extras are additional unless listed in the relevant Door Specification. Final dimensions, site conditions and access must be confirmed before manufacture. Delivery, demolition, equipment hire and installation are excluded unless shown as priced line items. Electrical works are limited to connections between the control panel and door equipment; power supply and isolator are by others. All supply and works are subject to NBE Australia’s standard Terms & Conditions."
+  const DEFAULT_PAGE2_SUMMARY_NOTE = "This quotation is based on the NBE Standard Door with galvanised frame, 900 g/m² PVC curtain and RAL 7035 zinc-coated control box. Optional extras are additional unless listed in the relevant Door Specification. Final dimensions, site conditions and access must be confirmed before manufacture. Delivery, demolition, equipment hire and installation are excluded unless shown as priced line items. Electrical works are limited to connections between the control panel and door equipment; power supply and isolator are by others. All supply and works are subject to NBE Australia's standard Terms & Conditions."
+  const DEFAULT_SCOPE = "Remove the existing Door."
   const [page2SummaryNote,    setPage2SummaryNote]    = useState<string>('')
   const [editingPage2Note,    setEditingPage2Note]    = useState(false)
   const [tempPage2Note,       setTempPage2Note]       = useState('')
+  const [quoteScope,          setQuoteScope]          = useState<string>('')
+  const [editingScope,        setEditingScope]        = useState(false)
+  const [tempScope,           setTempScope]           = useState('')
 
   function loadNotesFromStorage(qn: string) {
     try {
       const s = localStorage.getItem(`nbe_note2_${qn}`)
       if (s) setPage2SummaryNote(s)
+      const sc = localStorage.getItem(`nbe_scope_${qn}`)
+      if (sc) setQuoteScope(sc)
     } catch { /* ignore */ }
   }
   function saveNote2(qn: string | null, text: string) {
     setPage2SummaryNote(text)
     if (!qn) return
     try { localStorage.setItem(`nbe_note2_${qn}`, text) } catch { /* ignore */ }
+  }
+  function saveScope(qn: string | null, text: string) {
+    setQuoteScope(text)
+    if (!qn) return
+    try { localStorage.setItem(`nbe_scope_${qn}`, text) } catch { /* ignore */ }
   }
 
   // Multi-door
@@ -409,8 +429,10 @@ The quote includes all relevant specifications and pricing as discussed. Please 
   const canSendEmail = toAllValid && ccAllValid && emailSubject.trim().length > 0 && emailBody.trim().length > 0 && !emailSending
 
   // Colour dropdown
-  const [colourOpen, setColourOpen] = useState(false)
-  const colourRef = useRef<HTMLDivElement>(null)
+  const [colourOpen,          setColourOpen]          = useState(false)
+  const [safetyEdgeColourOpen,setSafetyEdgeColourOpen] = useState(false)
+  const colourRef          = useRef<HTMLDivElement>(null)
+  const safetyEdgeColourRef = useRef<HTMLDivElement>(null)
 
   function setSafetyField(key: string, val: string) {
     setSafetyValues(prev => ({ ...prev, [key]: val }))
@@ -418,10 +440,10 @@ The quote includes all relevant specifications and pricing as discussed. Please 
 
   function resetDoorForm() {
     setDoorType(''); setDoorModel(''); setOpeningW(''); setOpeningH(''); setFrame(''); setCurtain('')
-    setColour(''); setMotorKw(''); setMotorSide(''); setCbSide(''); setDoorControl(''); setQty('1')
-    setUnitPrice(''); setSafetyEnabled(true); setSafetyValues({}); setMotorEnabled(true); setEndUser('CUSTOMER')
+    setColour(''); setMotorKw(''); setMotorSide(''); setCbSide(''); setDoorControl(''); setSafetyEdgeColour(''); setQty('1')
+    setUnitPrice(''); setSafetyValues({}); setMotorEnabled(true); setEndUser('CUSTOMER')
     setCustomDoorImage(null); setCustomDoorImageName(null)
-    setInstallation(''); setDemolition(''); setEquipHire(''); setAccTravel('')
+    setDelivery(''); setInstallation(''); setDemolition(''); setEquipHire(''); setAccTravel('')
     setCustomDesc(null); setEditingDesc(false)
   }
 
@@ -478,11 +500,11 @@ The quote includes all relevant specifications and pricing as discussed. Please 
             ...(doorModel && openingW && openingH ? [{
               id: 'active',
               doorType, doorModel, openingW, openingH, frame, curtain, colour,
-              motorKw, motorSide, cbSide, doorControl,
+              motorKw, motorSide, cbSide, doorControl, safetyEdgeColour,
               safetyLines: safetySelected,
               safetyByCategory: { ...safetyValues },
               qty: qtyN, unitPrice: unitN,
-              installation: instN, demolition: demolN, equipHire: equipN, accTravel: travN,
+              delivery: delivN, installation: instN, demolition: demolN, equipHire: equipN, accTravel: travN,
               lineTotal, customDesc,
             }] : []),
           ],
@@ -533,10 +555,10 @@ The quote includes all relevant specifications and pricing as discussed. Please 
           doorType: d.doorType, doorModel: d.doorModel ?? '',
           openingW: String(d.openingW ?? ''), openingH: String(d.openingH ?? ''),
           frame: d.frameRaw ?? (d as unknown as SavedDoor).frame ?? '', curtain: d.curtain ?? '', colour: d.colour ?? '',
-          motorKw: d.motorKw ?? '', motorSide: d.motorSide ?? '', cbSide: d.cbSide ?? '', doorControl: (d as unknown as SavedDoor).doorControl ?? '',
+          motorKw: d.motorKw ?? '', motorSide: d.motorSide ?? '', cbSide: d.cbSide ?? '', doorControl: (d as unknown as SavedDoor).doorControl ?? '', safetyEdgeColour: (d as unknown as SavedDoor).safetyEdgeColour ?? '',
           safetyLines: (d.safetyLines ?? []) as string[], safetyByCategory: (d.safetyByCategory ?? {}) as Record<string, string>,
           qty: Number(d.qty ?? 1), unitPrice: Number(d.unitPrice ?? 0),
-          installation: Number(d.installation ?? 0), demolition: Number(d.demolition ?? 0),
+          delivery: Number(d.delivery ?? 0), installation: Number(d.installation ?? 0), demolition: Number(d.demolition ?? 0),
           equipHire: Number(d.equipHire ?? 0), accTravel: Number(d.accTravel ?? 0),
           lineTotal: Number(d.lineTotal ?? 0), customDesc: d.customDesc ?? null,
         }))
@@ -557,8 +579,10 @@ The quote includes all relevant specifications and pricing as discussed. Please 
         setMotorKw(last.motorKw ?? '')
         setMotorSide(last.motorSide ?? '')
         setCbSide(last.cbSide ?? '')
+        setSafetyEdgeColour((last as unknown as SavedDoor).safetyEdgeColour ?? '')
         setQty(String(last.qty ?? 1))
         setUnitPrice(String(last.unitPrice ?? ''))
+        setDelivery(String(last.delivery || ''))
         setInstallation(String(last.installation || ''))
         setDemolition(String(last.demolition || ''))
         setEquipHire(String(last.equipHire || ''))
@@ -572,7 +596,8 @@ The quote includes all relevant specifications and pricing as discussed. Please 
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (colourRef.current && !colourRef.current.contains(e.target as Node)) setColourOpen(false)
+      if (colourRef.current          && !colourRef.current.contains(e.target as Node))          setColourOpen(false)
+      if (safetyEdgeColourRef.current && !safetyEdgeColourRef.current.contains(e.target as Node)) setSafetyEdgeColourOpen(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
@@ -584,21 +609,21 @@ The quote includes all relevant specifications and pricing as discussed. Please 
   // ── Derived values ──────────────────────────────────────────────────────────
   const qtyN      = parseFloat(qty) || 1
   const unitN     = parseFloat(unitPrice) || 0
+  const delivN    = parseFloat(delivery) || 0
   const instN     = parseFloat(installation) || 0
   const demolN    = parseFloat(demolition) || 0
   const equipN    = parseFloat(equipHire) || 0
   const travN     = parseFloat(accTravel) || 0
-  const lineTotal = qtyN * unitN + instN + demolN + equipN + travN
+  const lineTotal = qtyN * unitN + delivN + instN + demolN + equipN + travN
 
   const safetySelected = Object.values(safetyValues).filter(v => v && v !== '-')
 
 const autoDescLines = [
-  doorType && DOOR_TYPE_NAMES[doorType] ? `${doorType} | ${DOOR_TYPE_NAMES[doorType]}` : '',
+  doorType ? `${doorType} | ${doorTypeName(doorType)}` : '',
   [
     openingW && openingH ? `${openingW} W × ${openingH} H mm` : '',
     frame ? `${optDesc('frame', frame)} frame` : '',
     colour,
-    motorSide && motorSide.trim() ? motorSide : ''
   ].filter(v => typeof v === 'string' && v.trim().length > 0).join(' | ')
 ].filter(Boolean)
 
@@ -635,11 +660,11 @@ const autoDescLines = [
     const door: SavedDoor = {
       id: crypto.randomUUID(),
       doorType, doorModel, openingW, openingH, frame, curtain, colour,
-      motorKw, motorSide, cbSide, doorControl,
+      motorKw, motorSide, cbSide, doorControl, safetyEdgeColour,
       safetyLines: safetySelected,
       safetyByCategory: { ...safetyValues },
       qty: qtyN, unitPrice: unitN,
-      installation: instN, demolition: demolN, equipHire: equipN, accTravel: travN,
+      delivery: delivN, installation: instN, demolition: demolN, equipHire: equipN, accTravel: travN,
       lineTotal, customDesc,
     }
     setSavedDoors(prev => [...prev, door])
@@ -661,8 +686,9 @@ const autoDescLines = [
     // Restore this door's fields into the current form
     setDoorType(d.doorType); setDoorModel(d.doorModel ?? ''); setOpeningW(d.openingW); setOpeningH(d.openingH)
     setFrame(d.frame); setCurtain(d.curtain); setColour(d.colour)
-    setMotorKw(d.motorKw); setMotorSide(d.motorSide); setCbSide(d.cbSide); setDoorControl(d.doorControl ?? '')
+    setMotorKw(d.motorKw); setMotorSide(d.motorSide); setCbSide(d.cbSide); setDoorControl(d.doorControl ?? ''); setSafetyEdgeColour(d.safetyEdgeColour ?? '')
     setQty(String(d.qty)); setUnitPrice(String(d.unitPrice))
+    setDelivery((d.delivery ?? 0) > 0 ? String(d.delivery) : '')
     setInstallation(d.installation > 0 ? String(d.installation) : '')
     setDemolition(d.demolition > 0 ? String(d.demolition) : '')
     setEquipHire(d.equipHire > 0 ? String(d.equipHire) : '')
@@ -705,7 +731,7 @@ const autoDescLines = [
         ...savedDoors.map(d => {
           const { ew, eh } = calcExternal(d.openingW, d.openingH, d.doorType, d.doorModel ?? '')
           return {
-            doorType: d.doorType, doorTypeName: DOOR_TYPE_NAMES[d.doorType] ?? d.doorType,
+            doorType: d.doorType, doorTypeName: doorTypeName(d.doorType),
             doorModel: d.doorModel,
             openingW: d.openingW, openingH: d.openingH,
             externalW: ew, externalH: eh,
@@ -713,30 +739,33 @@ const autoDescLines = [
             frame: optDesc('frame', d.frame),
             curtain: d.curtain, colour: d.colour,
             motorKw: d.motorKw, motorSide: d.motorSide, cbSide: d.cbSide, doorControl: d.doorControl ?? '',
+            safetyEdgeColour: d.safetyEdgeColour ?? '',
             safetyLines: d.safetyLines,
             safetyByCategory: d.safetyByCategory,
             qty: d.qty, unitPrice: d.unitPrice,
-            installation: d.installation, demolition: d.demolition,
+            delivery: d.delivery ?? 0, installation: d.installation, demolition: d.demolition,
             equipHire: d.equipHire, accTravel: d.accTravel,
             lineTotal: d.lineTotal, customDesc: d.customDesc,
             colourCode: COLOUR_IMAGE_CODE[d.colour] ?? null,
+            scope: quoteScope || undefined,
           }
         }),
         {
-          doorType, doorTypeName: DOOR_TYPE_NAMES[doorType] ?? doorType,
+          doorType, doorTypeName: doorTypeName(doorType),
           doorModel,
           openingW, openingH,
           externalW: extW, externalH: extH,
           frameRaw: frame,
           frame: optDesc('frame', frame),
           curtain, colour,
-          motorKw, motorSide, cbSide, doorControl,
+          motorKw, motorSide, cbSide, doorControl, safetyEdgeColour,
           safetyLines: safetySelected,
           safetyByCategory: { ...safetyValues },
           qty: qtyN, unitPrice: unitN,
-          installation: instN, demolition: demolN, equipHire: equipN, accTravel: travN,
+          delivery: delivN, installation: instN, demolition: demolN, equipHire: equipN, accTravel: travN,
           lineTotal, customDesc,
           colourCode: COLOUR_IMAGE_CODE[colour] ?? null,
+          scope: quoteScope || undefined,
         },
       ]
 
@@ -1158,6 +1187,65 @@ const autoDescLines = [
                   </div>
                 </div>
 
+                {/* ── Safety Features ── */}
+                <div className="mt-3">
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-t-xl" style={{ backgroundColor: '#92D050' }}>
+                    <span className="material-symbols-outlined text-[16px] text-white">verified_user</span>
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-white">Safety Features</p>
+                  </div>
+                  <div className="rounded-b-xl border border-t-0 border-slate-200 p-4 grid grid-cols-3 gap-3">
+                    {SAFETY_FEATURES_KEYS.map(field => (
+                      <div key={field.key}>
+                        <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">{field.label}</label>
+                        <div className="relative">
+                          <select value={safetyValues[field.key] ?? ''} onChange={e => setSafetyField(field.key, e.target.value)}
+                            className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
+                            <option value="">— None —</option>
+                            {optCodes(field.key).map(o => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
+                        </div>
+                      </div>
+                    ))}
+                    {/* Safety Edge Colour — colour swatch picker using dedicated state */}
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Safety Edge Colour</label>
+                      <div className="relative" ref={safetyEdgeColourRef}>
+                        <button type="button" onClick={() => setSafetyEdgeColourOpen(o => !o)}
+                          className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
+                          {safetyEdgeColour ? (
+                            <>
+                              <span className="h-5 w-8 shrink-0 rounded border border-slate-200"
+                                style={{ backgroundColor: opts('safetyEdgeColour').find(c => c.code === safetyEdgeColour)?.hexColour ?? '#e5e7eb' }} />
+                              <span className="truncate">{safetyEdgeColour}</span>
+                            </>
+                          ) : <span className="text-slate-400 text-sm">— None —</span>}
+                          <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-base pointer-events-none">expand_more</span>
+                        </button>
+                        {safetyEdgeColourOpen && (
+                          <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden">
+                            <button key="" type="button"
+                              onClick={() => { setSafetyEdgeColour(''); setSafetyEdgeColourOpen(false) }}
+                              className={`flex w-full items-center gap-3 px-3 py-2 text-sm font-medium transition hover:bg-slate-50 ${!safetyEdgeColour ? 'bg-indigo-50 text-indigo-700' : 'text-slate-400'}`}>
+                              — None —
+                            </button>
+                            {opts('safetyEdgeColour').map(c => (
+                              <button key={c.code} type="button"
+                                onClick={() => { setSafetyEdgeColour(c.code); setSafetyEdgeColourOpen(false) }}
+                                className={`flex w-full items-center gap-3 px-3 py-2 text-sm font-medium transition hover:bg-slate-50 ${safetyEdgeColour === c.code ? 'bg-indigo-50 text-indigo-700' : 'text-slate-800'}`}>
+                                <span className="h-5 w-8 shrink-0 rounded border border-slate-200" style={{ backgroundColor: c.hexColour ?? '#e5e7eb' }} />
+                                {c.code}
+                                {safetyEdgeColour === c.code && <span className="material-symbols-outlined ml-auto text-indigo-500 text-base">check</span>}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+
               </>
             )}
 
@@ -1200,7 +1288,7 @@ const autoDescLines = [
                     alt={customDoorImageName ?? `${doorType} in ${colour}`}
                     className="w-full object-contain max-h-[280px]" />
                   <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/50 to-transparent px-4 py-3">
-                    <p className="text-xs font-semibold text-white">{doorType} — {DOOR_TYPE_NAMES[doorType]}</p>
+                    <p className="text-xs font-semibold text-white">{doorType} — {doorTypeName(doorType)}</p>
                     {curtain && <p className="text-[11px] text-white/70 mt-0.5">{curtain} · {colour}</p>}
                   </div>
                   {/* Upload overlay — visible on hover */}
@@ -1278,37 +1366,27 @@ const autoDescLines = [
                 )}
               </div>
 
-              {/* ── Safety / Detection ───────────────────────────────────── */}
+              {/* ── Activation ── */}
               <div className="mt-4 border-t border-slate-100">
-                <button type="button"
-                  onClick={() => { setSafetyEnabled(v => !v); setSafetyValues({}) }}
-                  className={`flex w-full items-center justify-between px-4 py-3 text-sm font-semibold uppercase tracking-wide transition ${safetyEnabled ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[18px]">security</span>
-                    Safety / Detection
-                    <span className="text-[11px] normal-case font-normal text-slate-400 ml-1">optional</span>
-                  </div>
-                  <span className="material-symbols-outlined text-[18px]">
-                    {safetyEnabled ? 'check_box' : 'check_box_outline_blank'}
-                  </span>
-                </button>
-                {safetyEnabled && (
-                  <div className="grid grid-cols-3 gap-3 p-4">
-                    {SAFETY_DETECTION_KEYS.map(field => (
-                      <div key={field.key}>
-                        <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">{field.label}</label>
-                        <div className="relative">
-                          <select value={safetyValues[field.key] ?? ''} onChange={e => setSafetyField(field.key, e.target.value)}
-                            className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
-                            <option value="">— None —</option>
-                            {optCodes(field.key).map(o => <option key={o} value={o}>{o}</option>)}
-                          </select>
-                          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
-                        </div>
+                <div className="flex items-center gap-2 px-4 py-2" style={{ backgroundColor: '#FF0000' }}>
+                  <span className="material-symbols-outlined text-[16px] text-white">sensors</span>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-white">Activation</p>
+                </div>
+                <div className="p-4 grid grid-cols-3 gap-3">
+                  {ACTIVATION_KEYS.map(field => (
+                    <div key={field.key}>
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">{field.label}</label>
+                      <div className="relative">
+                        <select value={safetyValues[field.key] ?? ''} onChange={e => setSafetyField(field.key, e.target.value)}
+                          className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
+                          <option value="">— None —</option>
+                          {optCodes(field.key).map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* Motor & Control Box — collapsible */}
@@ -1326,7 +1404,8 @@ const autoDescLines = [
                   </span>
                 </button>
                 {motorEnabled && (
-                  <div className="grid grid-cols-4 gap-3 p-4">
+                  <div className="p-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Motor (kW)</label>
                       <div className="relative">
@@ -1349,6 +1428,8 @@ const autoDescLines = [
                         <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
                       </div>
                     </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Control Box Side</label>
                       <div className="relative">
@@ -1371,6 +1452,7 @@ const autoDescLines = [
                         <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
                       </div>
                     </div>
+                  </div>
                   </div>
                 )}
               </div>
@@ -1508,8 +1590,9 @@ const autoDescLines = [
                   <p className="text-[11px] text-amber-700">Installation not entered — add if this quote includes installation.</p>
                 </div>
               )}
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-5 gap-3">
                 {[
+                  { label: 'Delivery',               value: delivery,     set: setDelivery },
                   { label: 'Installation',           value: installation, set: setInstallation },
                   { label: 'Demolition',             value: demolition,   set: setDemolition },
                   { label: 'Equipment Hire',         value: equipHire,    set: setEquipHire },
@@ -1633,6 +1716,38 @@ const autoDescLines = [
                   </p>
                 )}
               </div>}
+
+              {/* Scope of Works */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Scope of Works</span>
+                  {!editingScope ? (
+                    <button type="button" onClick={() => { setTempScope(quoteScope || DEFAULT_SCOPE); setEditingScope(true) }}
+                      className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition">
+                      <span className="material-symbols-outlined text-[14px]">edit</span>Edit
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <button type="button" onClick={() => { saveScope(quoteNumber, tempScope); setEditingScope(false) }}
+                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-emerald-600 hover:bg-emerald-50 transition">
+                        <span className="material-symbols-outlined text-[14px]">check</span>Save
+                      </button>
+                      <button type="button" onClick={() => setEditingScope(false)}
+                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition">
+                        <span className="material-symbols-outlined text-[14px]">close</span>Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {editingScope ? (
+                  <textarea rows={3} value={tempScope} onChange={e => setTempScope(e.target.value)}
+                    className="w-full rounded-lg border border-indigo-300 bg-white px-3 py-2 text-[12px] text-slate-700 shadow-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 resize-y" />
+                ) : (
+                  <p className="text-[12px] text-slate-500 leading-relaxed whitespace-pre-wrap">
+                    {quoteScope || DEFAULT_SCOPE}
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Action buttons */}

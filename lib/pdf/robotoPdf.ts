@@ -6,7 +6,8 @@ const ROBOTO_DIR = path.join(process.cwd(), 'public', 'fonts', 'roboto')
 
 export type RobotoPdfFonts = {
   regular: Awaited<ReturnType<PDFDocument['embedFont']>>
-  bold: Awaited<ReturnType<PDFDocument['embedFont']>>
+  bold:    Awaited<ReturnType<PDFDocument['embedFont']>>
+  italic:  Awaited<ReturnType<PDFDocument['embedFont']>>
 }
 
 /**
@@ -15,14 +16,16 @@ export type RobotoPdfFonts = {
  */
 export async function embedRobotoForPdfLib(pdf: PDFDocument): Promise<RobotoPdfFonts | null> {
   try {
-    const regPath = path.join(ROBOTO_DIR, 'ROBOTO-REGULAR.TTF')
-    const boldPath = path.join(ROBOTO_DIR, 'ROBOTO-BOLD.TTF')
-    const [regularBytes, boldBytes] = await Promise.all([readFile(regPath), readFile(boldPath)])
-    const [regular, bold] = await Promise.all([
+    const regPath    = path.join(ROBOTO_DIR, 'ROBOTO-REGULAR.TTF')
+    const boldPath   = path.join(ROBOTO_DIR, 'ROBOTO-BOLD.TTF')
+    const italicPath = path.join(ROBOTO_DIR, 'ROBOTO-ITALIC.TTF')
+    const [regularBytes, boldBytes, italicBytes] = await Promise.all([readFile(regPath), readFile(boldPath), readFile(italicPath)])
+    const [regular, bold, italic] = await Promise.all([
       pdf.embedFont(regularBytes, { subset: true }),
-      pdf.embedFont(boldBytes, { subset: true }),
+      pdf.embedFont(boldBytes,    { subset: true }),
+      pdf.embedFont(italicBytes,  { subset: true }),
     ])
-    return { regular, bold }
+    return { regular, bold, italic }
   } catch {
     return null
   }
