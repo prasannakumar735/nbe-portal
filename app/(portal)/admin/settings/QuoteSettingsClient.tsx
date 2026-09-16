@@ -499,6 +499,18 @@ function TcUploadSection() {
     fileInputRef.current?.click()
   }
 
+  async function downloadTcDoc(storagePath: string, fileName: string) {
+    try {
+      const res = await fetch(`/api/admin/quote-tc/download?path=${encodeURIComponent(storagePath)}`)
+      if (!res.ok) return
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = fileName; a.click()
+      URL.revokeObjectURL(url)
+    } catch { /* silent */ }
+  }
+
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     const target = pendingUpload.current
@@ -564,11 +576,19 @@ function TcUploadSection() {
                 )}
                 {msg && <p className={`text-[11px] mt-1 font-medium ${msg.ok ? 'text-green-600' : 'text-red-500'}`}>{msg.text}</p>}
               </div>
-              <button type="button" disabled={isUp} onClick={() => triggerUpload(activeTcType, eu.key)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition disabled:opacity-50 shrink-0">
-                {isUp ? <><span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>Uploading…</>
-                      : <><span className="material-symbols-outlined text-[14px]">upload</span>{current ? 'Replace' : 'Upload PDF'}</>}
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                {current && (
+                  <button type="button" onClick={() => downloadTcDoc(current.storage_path, current.file_name)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition">
+                    <span className="material-symbols-outlined text-[14px]">download</span>Download
+                  </button>
+                )}
+                <button type="button" disabled={isUp} onClick={() => triggerUpload(activeTcType, eu.key)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition disabled:opacity-50">
+                  {isUp ? <><span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>Uploading…</>
+                        : <><span className="material-symbols-outlined text-[14px]">upload</span>{current ? 'Replace' : 'Upload PDF'}</>}
+                </button>
+              </div>
             </div>
           )
         })}
