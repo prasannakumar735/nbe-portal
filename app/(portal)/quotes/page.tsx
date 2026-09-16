@@ -696,14 +696,13 @@ const autoDescLines = [
     setCustomDesc(d.customDesc); setEditingDesc(false)
     // Safety: reconstruct safetyValues map from safetyLines
     if (d.safetyLines.length > 0) {
-      setSafetyEnabled(true)
       // We can't reconstruct per-field mapping perfectly, so put first 6 into the keys
       const keys = ['indicatorLamp','safety','pushButton','radar','remoteControl','inductLoop','swipe']
       const vals: Record<string,string> = {}
       d.safetyLines.forEach((v, i) => { if (keys[i]) vals[keys[i]] = v })
       setSafetyValues(vals)
     } else {
-      setSafetyEnabled(false); setSafetyValues({}); setMotorEnabled(false)
+      setSafetyValues({}); setMotorEnabled(false)
     }
     // Remove from saved list so it's back in the form
     setSavedDoors(prev => prev.filter(x => x.id !== id))
