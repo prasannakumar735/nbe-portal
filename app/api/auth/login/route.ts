@@ -40,9 +40,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // body is patched after sign-in so auth cookies are set onto the same response object
-    const responseBody: { ok: boolean; role?: string | null; isActive?: boolean } = { ok: true }
-    const response = NextResponse.json(responseBody)
+    // Collect cookies set by Supabase during sign-in, apply them to the final response.
+    // The role/isActive are fetched before building the response so a single
+    // NextResponse.json carries the body and all Set-Cookie headers together.
+    type CookieEntry = { name: string; value: string; options: Record<string, unknown> }
+    const pendingCookies: CookieEntry[] = []
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -53,8 +55,9 @@ export async function POST(request: NextRequest) {
             return request.cookies.getAll()
           },
           setAll(cookiesToSet) {
+            // Collect for later — response doesn't exist yet
             cookiesToSet.forEach(({ name, value, options }) => {
-              response.cookies.set(name, value, options)
+              pendingCookies.push({ name, value, options: options as Record<string, unknown> })
             })
           },
         },
@@ -84,7 +87,9 @@ export async function POST(request: NextRequest) {
 
     void resetFailures(getClientIp(request)).catch(() => {})
 
-    // Fetch role so the client can redirect without creating a browser Supabase client
+    // Fetch role/isActive so the client can redirect without a browser Supabase client
+    let role: string | null = null
+    let isActive = true
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
       const { data: profile } = await supabase
@@ -92,11 +97,16 @@ export async function POST(request: NextRequest) {
         .select('role, is_active')
         .eq('id', user.id)
         .maybeSingle()
-      responseBody.role = profile?.role ?? null
-      responseBody.isActive = profile?.is_active !== false
+      role = profile?.role ?? null
+      isActive = profile?.is_active !== false
     }
 
-    return NextResponse.json(responseBody, { headers: response.headers })
+    // Build the final response with correct body, then apply all collected cookies
+    const response = NextResponse.json({ ok: true, role, isActive })
+    pendingCookies.forEach(({ name, value, options }) => {
+      response.cookies.set(name, value, options)
+    })
+    return response
   } catch (e) {
     if (e instanceof PayloadTooLargeError) {
       return NextResponse.json({ error: 'Payload too large.' }, { status: 413 })

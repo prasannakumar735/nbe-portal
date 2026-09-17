@@ -127,14 +127,29 @@ export function LoginClient({
       // API returns role so no browser Supabase client is needed — avoids AbortErrors on navigate
       const dest = resolvePostLoginDestination(loginJson.role ?? null, nextRedirect)
       if (process.env.NODE_ENV === 'development') {
-        console.log('[Login debug] navigating to', dest, '— any AbortErrors after this line are from pending Supabase lock operations being cancelled by the browser unload')
+        console.log(
+          '%c[LOGIN] API returned 200 ✓  role=%s  isActive=%s  dest=%s',
+          'color:green;font-weight:bold',
+          loginJson.role ?? 'null',
+          loginJson.isActive,
+          dest,
+        )
+        console.log(
+          '%c[LOGIN] calling window.location.assign — any AbortErrors from this point come from AuthProvider Supabase locks being cancelled during page unload, NOT from the login flow',
+          'color:orange',
+        )
       }
       window.location.assign(dest.startsWith('/') ? dest : '/dashboard')
     } catch (err) {
-      // AbortError means the page navigated away while a request was in-flight — login succeeded.
-      if (err instanceof Error && err.name === 'AbortError') return
+      // AbortError from the login fetch itself means the page navigated away — login succeeded.
+      if (err instanceof Error && err.name === 'AbortError') {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('%c[LOGIN] AbortError caught in login handler — login succeeded, page navigating', 'color:orange')
+        }
+        return
+      }
 
-      console.error('Login error:', err)
+      console.error('[LOGIN] error:', err)
 
       if (err instanceof TypeError && err.message.includes('fetch')) {
         setError('Network error: Unable to connect to the server. Please check your internet connection.')
