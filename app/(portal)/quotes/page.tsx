@@ -1444,12 +1444,12 @@ const autoDescLines = [
               </div>
 
               {/* ── Activation ── */}
-              <div className="mt-4 border-t border-slate-100">
-                <div className="flex items-center gap-2 px-4 py-2" style={{ backgroundColor: '#FF0000' }}>
+              <div className="mt-3">
+                <div className="flex items-center gap-2 px-4 py-2 rounded-t-xl" style={{ backgroundColor: '#FF0000' }}>
                   <span className="material-symbols-outlined text-[16px] text-white">sensors</span>
                   <p className="text-[11px] font-bold uppercase tracking-widest text-white">Activation</p>
                 </div>
-                <div className="p-4 grid grid-cols-2 gap-3">
+                <div className="rounded-b-xl border border-t-0 border-slate-200 p-4 grid grid-cols-2 gap-3">
                   {ACTIVATION_KEYS.map(field => (
                     <div key={field.key}>
                       <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">{field.label}<Tip text={tooltips[field.key]} /></label>
@@ -1466,22 +1466,21 @@ const autoDescLines = [
                 </div>
               </div>
 
-              {/* Motor & Control Box — collapsible */}
-              <div className="border-t border-slate-100">
+              {/* ── Motor & Control Box — collapsible card ── */}
+              <div className="mt-3">
                 <button type="button"
                   onClick={() => { setMotorEnabled(v => !v); if (motorEnabled) { setMotorKw(''); setMotorSide(''); setCbSide(''); setDoorControl('') } }}
-                  className={`flex w-full items-center justify-between px-4 py-3 text-sm font-semibold uppercase tracking-wide transition ${motorEnabled ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                  className={`flex w-full items-center justify-between gap-2 px-4 py-2 rounded-t-xl text-[11px] font-bold uppercase tracking-widest transition ${motorEnabled ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'}`}>
                   <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[18px]">settings</span>
-                    Motor &amp; Control Box
-                    <span className={`text-[11px] normal-case font-normal ml-1 ${motorEnabled ? 'text-indigo-200' : 'text-slate-400'}`}>optional</span>
+                    <span className="material-symbols-outlined text-[16px]">settings</span>
+                    <span>Motor &amp; Control Box</span>
+                    <span className={`text-[10px] normal-case font-normal ml-0.5 ${motorEnabled ? 'text-indigo-200' : 'text-indigo-400'}`}>optional</span>
                   </div>
-                  <span className="material-symbols-outlined text-[18px]">
+                  <span className="material-symbols-outlined text-[16px]">
                     {motorEnabled ? 'check_box' : 'check_box_outline_blank'}
                   </span>
                 </button>
-                {motorEnabled && (
-                  <div className="mx-4 mb-4 mt-3 rounded-xl border border-slate-200 p-4 space-y-3">
+                <div className={`rounded-b-xl border border-t-0 border-slate-200 ${motorEnabled ? 'p-4 space-y-3' : 'hidden'}`}>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Motor (kW)<Tip text={tooltips['motorKw']} /></label>
@@ -1530,8 +1529,7 @@ const autoDescLines = [
                       </div>
                     </div>
                   </div>
-                  </div>
-                )}
+                </div>
               </div>
 
             </div>
