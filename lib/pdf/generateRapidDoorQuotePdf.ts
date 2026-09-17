@@ -566,8 +566,8 @@ async function drawPage2(
   drawRect(page, ML, y - STRIP_H, CW, STRIP_H, BLACK)
   const half = CW / 2
   page.drawLine({ start: { x: ML + half, y }, end: { x: ML + half, y: y - STRIP_H }, thickness: 0.5, color: rgb(0.35, 0.35, 0.35) })
-  t(page, 'CUSTOMER',      ML + 8,        y - 13, bold, 9, WHITE)
-  t(page, 'QUOTE SUMMARY', ML + half + 8, y - 13, bold, 9, WHITE)
+  t(page, 'CUSTOMER',      ML + 8,        y - 13, bold, 10, WHITE)
+  t(page, 'QUOTE SUMMARY', ML + half + 8, y - 13, bold, 10, WHITE)
   y -= STRIP_H + 20
 
   const cLX = ML + 8;  const cVX = ML + 68
@@ -607,12 +607,12 @@ async function drawPage2(
 
   const TH = 20
   drawRect(page, ML, y - TH, CW, TH, BLACK)
-  t(page, 'REF',         cNo + 2,  y - 14, bold, 9, WHITE)
-  t(page, 'ITEM',        cItem,    y - 14, bold, 9, WHITE)
-  tCenter(page, 'DESCRIPTION', cDesc, cQtyX - cDesc, y - 14, bold, 9, WHITE)
-  tCenter(page, 'QTY',        cQtyX, cQtyW, y - 14, bold, 9, WHITE)
-  tRight(page,  'DOOR PRICE', cUpRight,     y - 14, bold, 9, WHITE)
-  tRight(page,  'TOTAL', cTotRight - 8,     y - 14, bold, 9, WHITE)
+  t(page, 'REF',         cNo + 2,  y - 14, bold, 10, WHITE)
+  t(page, 'ITEM',        cItem,    y - 14, bold, 10, WHITE)
+  tCenter(page, 'DESCRIPTION', cDesc, cQtyX - cDesc, y - 14, bold, 10, WHITE)
+  tCenter(page, 'QTY',        cQtyX, cQtyW, y - 14, bold, 10, WHITE)
+  tRight(page,  'DOOR PRICE', cUpRight,     y - 14, bold, 10, WHITE)
+  tRight(page,  'TOTAL', cTotRight - 8,     y - 14, bold, 10, WHITE)
   y -= TH + 4
 
   for (let di = 0; di < doors.length; di++) {
@@ -695,8 +695,8 @@ async function drawPage2(
   drawHLine(page, ML + CW - totBoxW, bankY - 32, totBoxW, 0.5)
   const totBoxY = bankY - 56
   drawRect(page, ML + CW - totBoxW, totBoxY, totBoxW, 22, BLACK)
-  t(page,      'TOTAL',                  ML + CW - totBoxW + 8, totBoxY + 6, bold, 11, WHITE)
-  tRight(page, fmtAUD(grandTotal * 1.1), ML + CW,               totBoxY + 6, reg,  11, WHITE)
+  t(page,      'TOTAL',                  ML + CW - totBoxW + 8, totBoxY + 6, bold, 10, WHITE)
+  tRight(page, fmtAUD(grandTotal * 1.1), ML + CW,               totBoxY + 6, bold, 10, WHITE)
 
   // ── FOOTER TERMS ─────────────────────────────────────────────────────────
   const DEFAULT_PAGE2_SUMMARY_NOTE = "This quotation is based on the NBE Standard Door with galvanised frame, 900 g/m² PVC curtain and RAL 7035 zinc-coated control box. Optional extras are additional unless listed in the relevant Door Specification. Final dimensions, site conditions and access must be confirmed before manufacture. Delivery, demolition, equipment hire and installation are excluded unless shown as priced line items. Electrical works are limited to connections between the control panel and door equipment; power supply and isolator are by others. All supply and works are subject to NBE Australia’s standard Terms & Conditions."
