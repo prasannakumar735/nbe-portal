@@ -40,7 +40,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const response = NextResponse.json({ ok: true })
+    // body is patched after sign-in so auth cookies are set onto the same response object
+    const responseBody: { ok: boolean; role?: string | null; isActive?: boolean } = { ok: true }
+    const response = NextResponse.json(responseBody)
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -81,7 +83,20 @@ export async function POST(request: NextRequest) {
     }
 
     void resetFailures(getClientIp(request)).catch(() => {})
-    return response
+
+    // Fetch role so the client can redirect without creating a browser Supabase client
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, is_active')
+        .eq('id', user.id)
+        .maybeSingle()
+      responseBody.role = profile?.role ?? null
+      responseBody.isActive = profile?.is_active !== false
+    }
+
+    return NextResponse.json(responseBody, { headers: response.headers })
   } catch (e) {
     if (e instanceof PayloadTooLargeError) {
       return NextResponse.json({ error: 'Payload too large.' }, { status: 413 })

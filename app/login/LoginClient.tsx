@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { TurnstileWidget, type TurnstileWidgetHandle } from '@/components/security/TurnstileWidget'
 import { AuthScreenLogo } from '@/components/common/AuthScreenLogo'
-import { createSupabaseClient } from '@/lib/supabase/client'
 import pkg from '@/package.json'
 
 type LoginClientProps = {
@@ -101,7 +100,9 @@ export function LoginClient({
         }),
       })
 
-      const loginJson = (await loginRes.json().catch(() => ({}))) as { error?: string; ok?: boolean }
+      const loginJson = (await loginRes.json().catch(() => ({}))) as {
+        error?: string; ok?: boolean; role?: string | null; isActive?: boolean
+      }
 
       if (!loginRes.ok) {
         turnstileRef.current?.reset()
@@ -117,44 +118,14 @@ export function LoginClient({
         return
       }
 
-      const supabase = createSupabaseClient()
-
-      // Login API sets HttpOnly cookies on this response; the browser client may not see the session
-      // until the next tick or after cookies are committed — retry briefly, then hard-navigate so
-      // middleware always receives the same cookie jar (fixes first-attempt bounce to /login).
-      for (let attempt = 0; attempt < 16; attempt++) {
-        const {
-          data: { session: s },
-        } = await supabase.auth.getSession()
-        if (s?.user) break
-        await new Promise(r => setTimeout(r, 60 + attempt * 20))
-      }
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      if (!session?.user) {
-        setError('Sign in failed — session not established. Please try again.')
-        setLoading(false)
-        return
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role, is_active')
-        .eq('id', session.user.id)
-        .maybeSingle()
-
-      if (profile && profile.is_active === false) {
-        await supabase.auth.signOut()
+      if (loginJson.isActive === false) {
         setError('Your account has been deactivated. Contact an administrator.')
         setLoading(false)
         return
       }
 
-      const dest = resolvePostLoginDestination(profile?.role ?? null, nextRedirect)
-      // Hard navigation: full reload picks up Set-Cookie from login without relying on App Router.
+      // API returns role so no browser Supabase client is needed — avoids AbortErrors on navigate
+      const dest = resolvePostLoginDestination(loginJson.role ?? null, nextRedirect)
       window.location.assign(dest.startsWith('/') ? dest : '/dashboard')
     } catch (err) {
       // AbortError means the page navigated away while a request was in-flight — login succeeded.
