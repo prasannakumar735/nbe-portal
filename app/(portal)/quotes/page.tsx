@@ -276,11 +276,13 @@ export default function NewQuotesPage() {
   const [endUser,           setEndUser]           = useState<'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER' | ''>('CUSTOMER')
   const [includeSummary,    setIncludeSummary]    = useState(true)
   const [individualInstall, setIndividualInstall] = useState(false)
-  const [delivery,      setDelivery]     = useState('')
-  const [installation,  setInstallation] = useState('')
-  const [demolition,    setDemolition]   = useState('')
-  const [equipHire,     setEquipHire]    = useState('')
-  const [accTravel,     setAccTravel]    = useState('')
+  const [delivery,          setDelivery]         = useState('')
+  const [installation,      setInstallation]     = useState('')
+  const [demolition,        setDemolition]       = useState('')
+  const [demolitionEnabled, setDemolitionEnabled] = useState(false)
+  const [demolitionScope,   setDemolitionScope]  = useState('')
+  const [equipHire,         setEquipHire]        = useState('')
+  const [accTravel,         setAccTravel]        = useState('')
 
   // Quotation description (editable)
   const [editingDesc, setEditingDesc]   = useState(false)
@@ -516,7 +518,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     setColour(''); setMotorKw(''); setMotorSide(''); setCbSide(''); setDoorControl(''); setSafetyEdgeColour(''); setQty('1')
     setUnitPrice(''); setSafetyValues({}); setMotorEnabled(true); setEndUser('CUSTOMER')
     setCustomDoorImage(null); setCustomDoorImageName(null)
-    setDelivery(''); setInstallation(''); setDemolition(''); setEquipHire(''); setAccTravel('')
+    setDelivery(''); setInstallation(''); setDemolition(''); setDemolitionEnabled(false); setDemolitionScope(''); setEquipHire(''); setAccTravel('')
     setCustomDesc(null); setEditingDesc(false)
   }
 
@@ -763,7 +765,10 @@ const autoDescLines = [
     setQty(String(d.qty)); setUnitPrice(String(d.unitPrice))
     setDelivery((d.delivery ?? 0) > 0 ? String(d.delivery) : '')
     setInstallation(d.installation > 0 ? String(d.installation) : '')
-    setDemolition(d.demolition > 0 ? String(d.demolition) : '')
+    const demolVal = d.demolition > 0 ? String(d.demolition) : ''
+    setDemolition(demolVal)
+    setDemolitionEnabled(d.demolition > 0)
+    setDemolitionScope((d as any).demolitionScope ?? '')
     setEquipHire(d.equipHire > 0 ? String(d.equipHire) : '')
     setAccTravel(d.accTravel > 0 ? String(d.accTravel) : '')
     setCustomDesc(d.customDesc); setEditingDesc(false)
@@ -1649,60 +1654,81 @@ const autoDescLines = [
               </div>
             </div>
 
-            {/* Additional Costs */}
+            {/* Demolition — door-specific */}
             <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Additional Costs</p>
-                <span className="text-[10px] text-slate-400 normal-case">(optional)</span>
-                {!includeSummary && savedDoors.length > 0 && (
-                  <>
-                    <span className="text-slate-300 text-xs">·</span>
-                    <div className="relative group/tip flex items-center">
-                      <span className="material-symbols-outlined text-[13px] text-slate-400 cursor-help">info</span>
-                      <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tip:flex w-56 flex-col items-center z-50">
-                        <div className="rounded-lg bg-slate-800 px-3 py-2 text-[11px] text-white leading-relaxed shadow-lg text-center">
-                          When ON, each door page shows its own installation cost. When OFF, all costs are combined on the last door&apos;s page only.
-                        </div>
-                        <div className="h-2 w-2 rotate-45 bg-slate-800 -mt-1" />
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Demolition</p>
+              <div className="rounded-xl border border-slate-200 overflow-hidden">
+                <button type="button"
+                  onClick={() => { setDemolitionEnabled(v => !v); if (demolitionEnabled) { setDemolition(''); setDemolitionScope('') } }}
+                  className={`flex w-full items-center justify-between gap-2 px-4 py-3 text-sm font-semibold transition ${demolitionEnabled ? 'bg-orange-500 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px]">construction</span>
+                    <span>Include Demolition</span>
+                  </div>
+                  <span className="material-symbols-outlined text-[20px]">
+                    {demolitionEnabled ? 'check_box' : 'check_box_outline_blank'}
+                  </span>
+                </button>
+                {demolitionEnabled && (
+                  <div className="p-4 space-y-3 border-t border-slate-100">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-slate-400">Demolition Cost<Tip text={tooltips['demolition']} /></label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
+                        <input type="text" inputMode="decimal" placeholder="0.00" value={demolition} onChange={e => setDemolition(e.target.value)}
+                          className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-6 pr-3 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
                       </div>
                     </div>
-                    <span className="text-[11px] text-slate-500 font-medium">Individual per-door costs</span>
-                    <button
-                      type="button"
-                      onClick={() => setIndividualInstall(v => !v)}
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${individualInstall ? 'bg-indigo-500' : 'bg-slate-300'}`}
-                    >
-                      <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ${individualInstall ? 'translate-x-4' : 'translate-x-0'}`} />
-                    </button>
-                  </>
-                )}
-              </div>
-              {!installation && (
-                <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
-                  <span className="material-symbols-outlined text-[14px] text-amber-500">info</span>
-                  <p className="text-[11px] text-amber-700">Installation not entered — add if this quote includes installation.</p>
-                </div>
-              )}
-              <div className="grid grid-cols-5 gap-3">
-                {[
-                  { label: 'Delivery',               tipKey: 'delivery',     value: delivery,     set: setDelivery },
-                  { label: 'Installation',           tipKey: 'installation', value: installation, set: setInstallation },
-                  { label: 'Demolition',             tipKey: 'demolition',   value: demolition,   set: setDemolition },
-                  { label: 'Equipment Hire',         tipKey: 'equipHire',    value: equipHire,    set: setEquipHire },
-                  { label: 'Accommodation & Travel', tipKey: 'accTravel',    value: accTravel,    set: setAccTravel },
-                ].map(({ label, tipKey, value, set }) => (
-                  <div key={label}>
-                    <label className="mb-1 block text-xs font-medium text-slate-500">{label}<Tip text={tooltips[tipKey]} /></label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
-                      <input type="text" inputMode="decimal" placeholder="0.00" value={value} onChange={e => set(e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-6 pr-3 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-slate-400">Demolition Scope of Work</label>
+                      <textarea
+                        value={demolitionScope}
+                        onChange={e => setDemolitionScope(e.target.value)}
+                        placeholder="Describe the demolition work — e.g. remove existing roller door, dispose of old frame and curtain…"
+                        rows={3}
+                        className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+                      />
                     </div>
                   </div>
-                ))}
+                )}
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* ── Project Costs (quote-level, not per-door) ─────────────────────── */}
+      {showRightPanel && (
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 px-6 py-4 flex items-center gap-3">
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-500">Project Costs</h2>
+            <span className="text-[11px] text-slate-400 normal-case font-normal">applies to whole quote, not per door</span>
+          </div>
+          <div className="px-6 py-5 space-y-4">
+            {!installation && (
+              <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+                <span className="material-symbols-outlined text-[14px] text-amber-500">info</span>
+                <p className="text-[11px] text-amber-700">Installation not entered — add a cost if this quote includes installation.</p>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: 'Delivery',               tipKey: 'delivery',     value: delivery,     set: setDelivery },
+                { label: 'Installation',           tipKey: 'installation', value: installation, set: setInstallation },
+                { label: 'Equipment Hire',         tipKey: 'equipHire',    value: equipHire,    set: setEquipHire },
+                { label: 'Accommodation & Travel', tipKey: 'accTravel',    value: accTravel,    set: setAccTravel },
+              ].map(({ label, tipKey, value, set }) => (
+                <div key={label}>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">{label}<Tip text={tooltips[tipKey]} /></label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
+                    <input type="text" inputMode="decimal" placeholder="0.00" value={value} onChange={e => set(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-6 pr-3 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
