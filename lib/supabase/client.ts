@@ -4,6 +4,67 @@ import { createBrowserClient } from '@supabase/ssr'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
+ * Custom lock function that wraps navigator.locks.request.
+ *
+ * The GoTrueClient fires an uncaught async IIFE for each onAuthStateChange
+ * registration. That IIFE calls navigator.locks.request to queue a lock
+ * acquisition. When window.location.assign fires (page unload), the browser
+ * cancels all pending (queued, not yet granted) lock requests with AbortError.
+ * Because the IIFE has no .catch(), these become unhandled rejections that the
+ * Next.js dev overlay surfaces as blocking errors.
+ *
+ * We catch AbortError ONLY from the acquisition phase (when `fn` was never
+ * called — the lock was never granted). AbortErrors thrown from inside `fn`
+ * (i.e. after the lock is held) still propagate so real auth errors surface.
+ */
+async function safeNavigatorLock<R>(
+  name: string,
+  acquireTimeout: number,
+  fn: () => Promise<R>,
+): Promise<R> {
+  if (typeof navigator === 'undefined' || !navigator.locks) {
+    return await fn()
+  }
+
+  if (acquireTimeout === 0) {
+    return await navigator.locks.request(
+      name,
+      { mode: 'exclusive', ifAvailable: true },
+      async (lock) => {
+        if (!lock) return null as unknown as R
+        return await fn()
+      },
+    )
+  }
+
+  const ac = acquireTimeout > 0 ? new AbortController() : null
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  if (ac && acquireTimeout > 0) timeoutId = setTimeout(() => ac!.abort(), acquireTimeout)
+
+  let lockEntered = false
+  try {
+    return await navigator.locks.request(
+      name,
+      { mode: 'exclusive', ...(ac ? { signal: ac.signal } : {}) },
+      async () => {
+        lockEntered = true
+        return await fn()
+      },
+    )
+  } catch (err) {
+    // AbortError before fn ran = browser cancelled the queued lock request
+    // (page navigation/unload). The lock was never held; returning undefined
+    // is safe and prevents unhandled rejections in the Next.js dev overlay.
+    if (!lockEntered && err instanceof DOMException && err.name === 'AbortError') {
+      return undefined as unknown as R
+    }
+    throw err
+  } finally {
+    if (timeoutId !== null) clearTimeout(timeoutId)
+  }
+}
+
+/**
  * SINGLETON Supabase Browser Client
  * 
  * CRITICAL: This is a singleton to prevent multiple GoTrueClient instances.
@@ -89,10 +150,6 @@ export function createSupabaseClient() {
     return supabaseClient
   }
 
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[Supabase] creating new browser client', new Error().stack?.split('\n').slice(1, 4).join(' | '))
-  }
-
   // Create new instance only once
   supabaseClient = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -105,6 +162,7 @@ export function createSupabaseClient() {
         detectSessionInUrl: true,
         debug: process.env.NODE_ENV === 'development',
         storage: createSafeStorage(),
+        lock: safeNavigatorLock,
       },
     }
   )

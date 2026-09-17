@@ -141,22 +141,6 @@ function SessionLifecycle() {
     scheduleIdleTimers()
   }, [scheduleIdleTimers])
 
-  useEffect(() => {
-    let cancelled = false
-    const supabase = createSupabaseClient()
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, newSession) => {
-      if (cancelled) return
-      if (event === 'SIGNED_IN' && newSession) {
-        setLoginAtNow()
-      }
-    })
-    return () => {
-      cancelled = true
-      subscription.unsubscribe()
-    }
-  }, [])
 
   useEffect(() => {
     if (isLoading || !session) return
@@ -343,23 +327,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [isError, setIsError] = useState(false)
 
-  // DEBUG: log all unhandled rejections in dev so we can identify the source
-  useEffect(() => {
-    if (process.env.NODE_ENV !== 'development') return
-    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
-      const reason = event.reason as { name?: string; message?: string; stack?: string } | null
-      console.warn(
-        '[AuthProvider debug] unhandledRejection:',
-        reason?.name,
-        reason?.message,
-        reason?.stack?.split('\n').slice(0, 4).join(' | '),
-      )
-      // Do NOT call event.preventDefault() here — we want to see the full error
-    }
-    window.addEventListener('unhandledrejection', onUnhandledRejection)
-    return () => window.removeEventListener('unhandledrejection', onUnhandledRejection)
-  }, [])
-
   // Load profile from profiles table when user changes (single source of truth for role)
   useEffect(() => {
     if (!user?.id) {
@@ -402,10 +369,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     let subscription: ReturnType<typeof supabase.auth.onAuthStateChange>['data']['subscription'] | null = null
 
     const init = async () => {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[AuthProvider debug] init start, client id:', (supabase as unknown as { instanceID?: string })?.instanceID)
-      }
-
       // Epoch-based forced sign-out. Awaited serially so its signOut() lock
       // acquisition completes before onAuthStateChange registers — eliminates
       // one source of concurrent navigator.locks.request calls.
@@ -414,18 +377,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       } catch { /* ignore */ }
       if (cancelled) return
 
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[AuthProvider debug] registering onAuthStateChange')
-      }
-
       // onAuthStateChange fires synchronously with INITIAL_SESSION on registration,
       // providing the current session — no separate getSession() lock call needed.
       const { data } = supabase.auth.onAuthStateChange((event, newSession) => {
         if (cancelled) return
-
-        if (process.env.NODE_ENV === 'development') {
-          console.log('[AuthProvider debug] auth event:', event, '| user:', newSession?.user?.email ?? 'none')
-        }
 
         // Invalid refresh token: Supabase fires SIGNED_OUT when it can't refresh.
         // If it somehow doesn't, treat a session carrying a known-bad token as null.
@@ -436,15 +391,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
           return
         }
 
+        if (event === 'SIGNED_IN' && newSession) setLoginAtNow()
+
         setSession(newSession)
         setUser(newSession?.user ?? null)
         setIsLoading(false)
       })
       subscription = data.subscription
-
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[AuthProvider debug] onAuthStateChange registered')
-      }
     }
 
     void init()
