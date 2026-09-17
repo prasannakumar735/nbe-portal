@@ -89,6 +89,10 @@ export function createSupabaseClient() {
     return supabaseClient
   }
 
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[Supabase] creating new browser client', new Error().stack?.split('\n').slice(1, 4).join(' | '))
+  }
+
   // Create new instance only once
   supabaseClient = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

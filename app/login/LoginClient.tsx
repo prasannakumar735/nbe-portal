@@ -126,6 +126,9 @@ export function LoginClient({
 
       // API returns role so no browser Supabase client is needed — avoids AbortErrors on navigate
       const dest = resolvePostLoginDestination(loginJson.role ?? null, nextRedirect)
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Login debug] navigating to', dest, '— any AbortErrors after this line are from pending Supabase lock operations being cancelled by the browser unload')
+      }
       window.location.assign(dest.startsWith('/') ? dest : '/dashboard')
     } catch (err) {
       // AbortError means the page navigated away while a request was in-flight — login succeeded.

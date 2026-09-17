@@ -343,20 +343,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [isError, setIsError] = useState(false)
 
+  // DEBUG: log all unhandled rejections in dev so we can identify the source
   useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return
     const onUnhandledRejection = (event: PromiseRejectionEvent) => {
-      const reason = event.reason as { name?: string; message?: string } | null
-      if (
-        String(reason?.name ?? '') === 'AbortError' ||
-        String(reason?.message ?? '').includes('signal is aborted')
-      ) {
-        event.preventDefault()
-      }
+      const reason = event.reason as { name?: string; message?: string; stack?: string } | null
+      console.warn(
+        '[AuthProvider debug] unhandledRejection:',
+        reason?.name,
+        reason?.message,
+        reason?.stack?.split('\n').slice(0, 4).join(' | '),
+      )
+      // Do NOT call event.preventDefault() here — we want to see the full error
     }
     window.addEventListener('unhandledrejection', onUnhandledRejection)
-    return () => {
-      window.removeEventListener('unhandledrejection', onUnhandledRejection)
-    }
+    return () => window.removeEventListener('unhandledrejection', onUnhandledRejection)
   }, [])
 
   // Load profile from profiles table when user changes (single source of truth for role)
@@ -381,74 +382,75 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return () => { cancelled = true }
   }, [user?.id])
 
-  // Initialize auth state on mount
+  // Single effect: epoch check → onAuthStateChange.
+  //
+  // WHY one effect instead of two (getSession + onAuthStateChange separately):
+  // GoTrueClient uses navigator.locks (Web Locks API) to serialise auth operations.
+  // When getSession() and onAuthStateChange are registered in separate concurrent
+  // useEffect calls, they both call _acquireLock before the first lock is held,
+  // race past the lockAcquired guard, and queue multiple navigator.locks.request
+  // calls for the same lock. When window.location.assign fires on login, the
+  // browser cancels the queued (waiting) requests → AbortError unhandled rejections.
+  //
+  // onAuthStateChange fires immediately with INITIAL_SESSION carrying the current
+  // session, so a separate getSession() call is redundant. Awaiting the epoch check
+  // before registering the listener serialises any signOut it may need with the
+  // subsequent INITIAL_SESSION lock acquisition.
   useEffect(() => {
     let cancelled = false
-    const initializeAuth = async () => {
+    const supabase = createSupabaseClient()
+    let subscription: ReturnType<typeof supabase.auth.onAuthStateChange>['data']['subscription'] | null = null
+
+    const init = async () => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[AuthProvider debug] init start, client id:', (supabase as unknown as { instanceID?: string })?.instanceID)
+      }
+
+      // Epoch-based forced sign-out. Awaited serially so its signOut() lock
+      // acquisition completes before onAuthStateChange registers — eliminates
+      // one source of concurrent navigator.locks.request calls.
       try {
-        const supabase = createSupabaseClient()
-
         await enforceAppSessionEpochSignOut(() => supabase.auth.signOut())
+      } catch { /* ignore */ }
+      if (cancelled) return
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[AuthProvider debug] registering onAuthStateChange')
+      }
+
+      // onAuthStateChange fires synchronously with INITIAL_SESSION on registration,
+      // providing the current session — no separate getSession() lock call needed.
+      const { data } = supabase.auth.onAuthStateChange((event, newSession) => {
         if (cancelled) return
 
-        const {
-          data: { session: initialSession },
-          error,
-        } = await supabase.auth.getSession()
-        if (cancelled) return
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[AuthProvider debug] auth event:', event, '| user:', newSession?.user?.email ?? 'none')
+        }
 
-        if (error) {
-          if (String((error as { name?: string } | null)?.name ?? '') === 'AbortError') {
-            setIsError(false)
-            return
-          }
-          if (isInvalidOrMissingRefreshTokenError(error)) {
-            try {
-              await supabase.auth.signOut()
-            } catch {
-              /* ignore */
-            }
-            if (cancelled) return
-            setSession(null)
-            setUser(null)
-            setIsError(false)
-          } else {
-            console.error('Error getting session:', error)
-            setIsError(true)
-          }
-        } else {
-          setSession(initialSession)
-          setUser(initialSession?.user || null)
-        }
-      } catch (err) {
-        if (cancelled) return
-        if (String((err as { name?: string } | null)?.name ?? '') === 'AbortError') {
-          setIsError(false)
-          return
-        }
-        if (isInvalidOrMissingRefreshTokenError(err)) {
-          try {
-            const supabase = createSupabaseClient()
-            await supabase.auth.signOut()
-          } catch {
-            /* ignore */
-          }
-          if (cancelled) return
+        // Invalid refresh token: Supabase fires SIGNED_OUT when it can't refresh.
+        // If it somehow doesn't, treat a session carrying a known-bad token as null.
+        if (isInvalidOrMissingRefreshTokenError(newSession)) {
           setSession(null)
           setUser(null)
-          setIsError(false)
-        } else {
-          console.error('Auth initialization error:', err)
-          setIsError(true)
+          setIsLoading(false)
+          return
         }
-      } finally {
-        if (!cancelled) setIsLoading(false)
+
+        setSession(newSession)
+        setUser(newSession?.user ?? null)
+        setIsLoading(false)
+      })
+      subscription = data.subscription
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[AuthProvider debug] onAuthStateChange registered')
       }
     }
 
-    void initializeAuth()
+    void init()
     return () => {
       cancelled = true
+      subscription?.unsubscribe()
     }
   }, [])
 
@@ -462,30 +464,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
     window.addEventListener('online', onOnline)
     return () => window.removeEventListener('online', onOnline)
-  }, [])
-
-  // Subscribe to auth state changes
-  useEffect(() => {
-    let cancelled = false
-    const supabase = createSupabaseClient()
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, newSession) => {
-      if (cancelled) return
-      setSession(newSession)
-      setUser(newSession?.user || null)
-      setIsLoading(false)
-
-      if (process.env.NODE_ENV === 'development') {
-        console.log('Auth event:', event, '| User:', newSession?.user?.email)
-      }
-    })
-
-    return () => {
-      cancelled = true
-      subscription?.unsubscribe()
-    }
   }, [])
 
   const value: AuthContextType = {
