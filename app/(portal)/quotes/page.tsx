@@ -1543,8 +1543,9 @@ const autoDescLines = [
                   </div>
                 </div>
               )}
-            </div>
+              </div>
 
+            </div>
           </div>
         )}
       </div>
