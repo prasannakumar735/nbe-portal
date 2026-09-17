@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server'
 import { requirePortalStaff } from '@/lib/security/requirePortalStaff'
-import { unauthorizedOrForbiddenResponse } from '@/lib/security/httpAuthErrors'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 
 export async function GET() {
-  const auth = await requirePortalStaff()
-  if (!auth.ok) return unauthorizedOrForbiddenResponse(auth)
+  try {
+    await requirePortalStaff()
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   const sb = createServiceRoleClient()
   const { data, error } = await sb
