@@ -238,6 +238,9 @@ export default function NewQuotesPage() {
   const [unitPrice,     setUnitPrice]    = useState('')
   const [safetyValues,  setSafetyValues] = useState<Record<string, string>>({})
   const [motorEnabled,  setMotorEnabled] = useState(true)
+  const [showSafety,    setShowSafety]   = useState(true)
+  const [showActivation, setShowActivation] = useState(true)
+  const [showMotor,     setShowMotor]    = useState(true)
 
   // Custom door image upload
   const [customDoorImage,     setCustomDoorImage]     = useState<string | null>(null)  // base64 data URL
@@ -1261,11 +1264,16 @@ const autoDescLines = [
 
                 {/* ── Safety Features ── */}
                 <div className="mt-3">
-                  <div className="flex items-center gap-2 px-4 py-2 rounded-t-xl" style={{ backgroundColor: '#92D050' }}>
-                    <span className="material-symbols-outlined text-[16px] text-white">verified_user</span>
-                    <p className="text-[11px] font-bold uppercase tracking-widest text-white">Safety Features</p>
-                  </div>
-                  <div className="rounded-b-xl border border-t-0 border-slate-200 p-4 grid grid-cols-2 gap-3">
+                  <button type="button" onClick={() => setShowSafety(v => !v)}
+                    className="flex w-full items-center justify-between gap-2 px-4 py-2 rounded-t-xl transition"
+                    style={{ backgroundColor: '#92D050' }}>
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[16px] text-white">verified_user</span>
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-white">Safety Features</p>
+                    </div>
+                    <span className="material-symbols-outlined text-[18px] text-white">{showSafety ? 'expand_less' : 'expand_more'}</span>
+                  </button>
+                  {showSafety && <div className="rounded-b-xl border border-t-0 border-slate-200 p-4 grid grid-cols-2 gap-3">
                     {SAFETY_FEATURES_KEYS.map(field => (
                       <div key={field.key}>
                         <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">{field.label}<Tip text={tooltips[field.key]} /></label>
@@ -1320,7 +1328,7 @@ const autoDescLines = [
                         )}
                       </div>
                     </div>
-                  </div>
+                  </div>}
                 </div>
 
               </>
@@ -1341,7 +1349,7 @@ const autoDescLines = [
 
         {/* ── RIGHT: door preview + pricing ─────────────────────────────────── */}
         {showRightPanel && (
-          <div className="w-[420px] shrink-0 flex flex-col gap-4">
+          <div className="w-[420px] shrink-0">
             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col">
 
               {/* Door preview header */}
@@ -1399,11 +1407,9 @@ const autoDescLines = [
               <input ref={customImageInputRef} type="file" accept="image/*" className="hidden"
                 onChange={handleCustomImageUpload} />
 
-            </div>{/* end Door Preview card */}
-
-            {/* ── Quotation Description — standalone card ── */}
-            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div className="bg-slate-800 rounded-t-2xl px-4 py-2.5 flex items-center justify-between">
+              {/* ── Quotation Description ── */}
+              <div className="border-t border-slate-100">
+                <div className="bg-slate-800 px-4 py-2.5 flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase tracking-widest text-white">Quotation Description</p>
                   {!editingDesc ? (
                     <button type="button"
@@ -1443,47 +1449,49 @@ const autoDescLines = [
                     )}
                   </div>
                 )}
+              </div>{/* end Quotation Description */}
 
-            </div>{/* end Quotation Description card */}
-
-            {/* ── Activation — standalone card ── */}
-            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-2.5" style={{ backgroundColor: '#FF0000' }}>
-                <span className="material-symbols-outlined text-[16px] text-white">sensors</span>
-                <p className="text-[11px] font-bold uppercase tracking-widest text-white">Activation</p>
-              </div>
-              <div className="p-4 grid grid-cols-2 gap-3">
-                {ACTIVATION_KEYS.map(field => (
-                  <div key={field.key}>
-                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">{field.label}<Tip text={tooltips[field.key]} /></label>
-                    <div className="relative">
-                      <select value={safetyValues[field.key] ?? ''} onChange={e => setSafetyField(field.key, e.target.value)}
-                        className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
-                        <option value="">— None —</option>
-                        {optCodes(field.key).map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
-                    </div>
+              {/* ── Activation ── */}
+              <div className="border-t border-slate-100">
+                <button type="button" onClick={() => setShowActivation(v => !v)}
+                  className="flex w-full items-center justify-between gap-2 px-4 py-2.5 transition"
+                  style={{ backgroundColor: '#FF0000' }}>
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[16px] text-white">sensors</span>
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-white">Activation</p>
                   </div>
-                ))}
+                  <span className="material-symbols-outlined text-[18px] text-white">{showActivation ? 'expand_less' : 'expand_more'}</span>
+                </button>
+                {showActivation && (
+                  <div className="p-4 grid grid-cols-2 gap-3">
+                    {ACTIVATION_KEYS.map(field => (
+                      <div key={field.key}>
+                        <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">{field.label}<Tip text={tooltips[field.key]} /></label>
+                        <div className="relative">
+                          <select value={safetyValues[field.key] ?? ''} onChange={e => setSafetyField(field.key, e.target.value)}
+                            className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
+                            <option value="">— None —</option>
+                            {optCodes(field.key).map(o => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
 
-            {/* ── Motor & Control Box — standalone collapsible card ── */}
-            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-              <button type="button"
-                onClick={() => { setMotorEnabled(v => !v); if (motorEnabled) { setMotorKw(''); setMotorSide(''); setCbSide(''); setDoorControl('') } }}
-                className={`flex w-full items-center justify-between gap-2 px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest transition ${motorEnabled ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'}`}>
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[16px]">settings</span>
-                  <span>Motor &amp; Control Box</span>
-                  <span className={`text-[10px] normal-case font-normal ml-0.5 ${motorEnabled ? 'text-indigo-200' : 'text-indigo-400'}`}>optional</span>
-                </div>
-                <span className="material-symbols-outlined text-[16px]">
-                  {motorEnabled ? 'check_box' : 'check_box_outline_blank'}
-                </span>
-              </button>
-              {motorEnabled && (
+              {/* ── Motor & Control Box ── */}
+              <div className="border-t border-slate-100">
+                <button type="button" onClick={() => setShowMotor(v => !v)}
+                  className={`flex w-full items-center justify-between gap-2 px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest transition ${motorEnabled ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'}`}>
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[16px]">settings</span>
+                    <span>Motor &amp; Control Box</span>
+                  </div>
+                  <span className="material-symbols-outlined text-[18px]">{showMotor ? 'expand_less' : 'expand_more'}</span>
+                </button>
+                {showMotor && (
                 <div className="p-4 space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
