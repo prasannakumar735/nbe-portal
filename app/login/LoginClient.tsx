@@ -157,6 +157,9 @@ export function LoginClient({
       // Hard navigation: full reload picks up Set-Cookie from login without relying on App Router.
       window.location.assign(dest.startsWith('/') ? dest : '/dashboard')
     } catch (err) {
+      // AbortError means the page navigated away while a request was in-flight — login succeeded.
+      if (err instanceof Error && err.name === 'AbortError') return
+
       console.error('Login error:', err)
 
       if (err instanceof TypeError && err.message.includes('fetch')) {
