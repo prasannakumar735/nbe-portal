@@ -1,5 +1,6 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import { loadDoorImageStyle } from '@/app/(portal)/admin/settings/QuoteSettingsClient'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import type { DoorLineItem } from '@/lib/pdf/generateRapidDoorQuotePdf'
@@ -126,31 +127,66 @@ type SavedDoor = {
 }
 
 // ── Tooltip component ─────────────────────────────────────────────────────────
+// Portal-based tooltip — renders in document.body so it escapes overflow:hidden on parent containers.
+// normal-case + tracking-normal override any uppercase/tracking inherited from label styles.
 function Tip({ text }: { text?: string }) {
+  const [open, setOpen] = useState(false)
+  const [panelStyle, setPanelStyle] = useState<CSSProperties>({})
+  const triggerRef = useRef<HTMLSpanElement>(null)
+
+  const reposition = useCallback(() => {
+    const el = triggerRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const centerX = rect.left + rect.width / 2
+    const clampedX = Math.max(138, Math.min(centerX, window.innerWidth - 138))
+    setPanelStyle({
+      top: rect.top - 10,
+      left: clampedX,
+      transform: 'translate(-50%, -100%)',
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    reposition()
+    window.addEventListener('scroll', reposition, true)
+    window.addEventListener('resize', reposition)
+    return () => {
+      window.removeEventListener('scroll', reposition, true)
+      window.removeEventListener('resize', reposition)
+    }
+  }, [open, reposition])
+
   if (!text) return null
+
   return (
-    <span className="relative group/tip inline-flex items-center ml-1 align-middle">
+    <>
       <span
+        ref={triggerRef}
         tabIndex={0}
         role="button"
         aria-label="More information"
-        className="flex items-center justify-center w-3.5 h-3.5 rounded-full text-slate-400 hover:text-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 transition-colors cursor-help"
+        className="inline-flex items-center ml-1 align-middle cursor-help text-slate-400 hover:text-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 transition-colors"
+        onMouseEnter={() => { setOpen(true) }}
+        onMouseLeave={() => { setOpen(false) }}
+        onFocus={() => { setOpen(true) }}
+        onBlur={() => { setOpen(false) }}
       >
-        <span className="material-symbols-outlined text-[13px] leading-none">info</span>
+        <span className="material-symbols-outlined text-[15px] leading-none select-none">info</span>
       </span>
-      {/* Tooltip card — appears on hover/focus, fades out with delay */}
-      <span
-        role="tooltip"
-        className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50
-          w-56 rounded-lg bg-slate-800 px-3 py-2 text-[11px] leading-relaxed text-slate-100 shadow-lg
-          opacity-0 group-hover/tip:opacity-100 focus-within:opacity-100
-          transition-opacity duration-150 delay-0 group-hover/tip:delay-0
-          [.group\/tip:not(:hover)_&]:delay-75"
-      >
-        {text}
-        <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
-      </span>
-    </span>
+      {open && typeof document !== 'undefined' && createPortal(
+        <div
+          role="tooltip"
+          className="pointer-events-none fixed w-64 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11.5px] leading-relaxed text-slate-700 shadow-lg normal-case tracking-normal font-normal"
+          style={panelStyle}
+        >
+          {text}
+          <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-200" />
+        </div>,
+        document.body,
+      )}
+    </>
   )
 }
 
