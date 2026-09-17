@@ -446,6 +446,9 @@ export function QuoteSettingsClient() {
 
       {/* T&C Document Upload */}
       <TcUploadSection />
+
+      {/* Field Tooltips Editor */}
+      <TooltipEditorSection />
     </div>
   )
 }
@@ -595,6 +598,111 @@ function TcUploadSection() {
       </div>
       <input ref={fileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleFileChange} />
       <p className="text-[11px] text-slate-400">PDF files only · Max 20 MB · Uploaded files are stored in Supabase Storage and applied immediately to all new quotes.</p>
+    </div>
+  )
+}
+
+// ── Field Tooltip Editor ───────────────────────────────────────────────────────
+type TooltipRow = { field_key: string; label: string; tooltip_text: string }
+
+function TooltipEditorSection() {
+  const [rows,    setRows]    = useState<TooltipRow[]>([])
+  const [editing, setEditing] = useState<string | null>(null)     // field_key being edited
+  const [draft,   setDraft]   = useState('')
+  const [saving,  setSaving]  = useState(false)
+  const [msg,     setMsg]     = useState<{ key: string; ok: boolean; text: string } | null>(null)
+
+  useEffect(() => { load() }, [])
+
+  async function load() {
+    try {
+      const res = await fetch('/api/admin/quote-tooltips')
+      const json = await res.json()
+      if (json.ok) setRows(json.data)
+    } catch { /* silent */ }
+  }
+
+  async function save(key: string) {
+    setSaving(true); setMsg(null)
+    try {
+      const res = await fetch(`/api/admin/quote-tooltips/${key}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tooltip_text: draft }),
+      })
+      const json = await res.json()
+      if (json.ok) {
+        setMsg({ key, ok: true, text: 'Saved' })
+        setRows(r => r.map(x => x.field_key === key ? { ...x, tooltip_text: draft } : x))
+        setEditing(null)
+      } else {
+        setMsg({ key, ok: false, text: json.error ?? 'Failed to save' })
+      }
+    } catch { setMsg({ key, ok: false, text: 'Network error' }) }
+    setSaving(false)
+  }
+
+  return (
+    <div className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div className="border-b border-slate-100 px-5 py-4 flex items-center gap-3">
+        <span className="material-symbols-outlined text-slate-400 text-[20px]">info</span>
+        <div>
+          <p className="text-sm font-semibold text-slate-700">Field Tooltips</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">Hover descriptions shown next to each form field in the rapid door quote builder.</p>
+        </div>
+      </div>
+      <div className="divide-y divide-slate-100">
+        {rows.length === 0 && (
+          <p className="px-5 py-6 text-sm text-slate-400 text-center">No tooltips found. Run the DB migration to seed the default set.</p>
+        )}
+        {rows.map(row => {
+          const isEditing = editing === row.field_key
+          const rowMsg    = msg?.key === row.field_key ? msg : null
+          return (
+            <div key={row.field_key} className="px-5 py-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">{row.label}</p>
+                  <p className="text-[10px] text-slate-400 font-mono mt-0.5">{row.field_key}</p>
+                  {isEditing ? (
+                    <textarea
+                      value={draft}
+                      onChange={e => setDraft(e.target.value)}
+                      rows={3}
+                      className="mt-2 w-full rounded-lg border border-indigo-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 resize-y"
+                    />
+                  ) : (
+                    <p className="mt-1.5 text-sm text-slate-600 leading-relaxed">{row.tooltip_text}</p>
+                  )}
+                  {rowMsg && (
+                    <p className={`text-[11px] mt-1 font-medium ${rowMsg.ok ? 'text-green-600' : 'text-red-500'}`}>{rowMsg.text}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0 mt-0.5">
+                  {isEditing ? (
+                    <>
+                      <button type="button" disabled={saving} onClick={() => save(row.field_key)}
+                        className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition disabled:opacity-50">
+                        {saving ? <span className="material-symbols-outlined text-[13px] animate-spin">progress_activity</span> : <span className="material-symbols-outlined text-[13px]">check</span>}
+                        Save
+                      </button>
+                      <button type="button" onClick={() => setEditing(null)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition">
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <button type="button" onClick={() => { setDraft(row.tooltip_text); setEditing(row.field_key); setMsg(null) }}
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition">
+                      <span className="material-symbols-outlined text-[13px]">edit</span>Edit
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

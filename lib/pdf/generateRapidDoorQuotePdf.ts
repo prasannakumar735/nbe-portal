@@ -335,11 +335,18 @@ async function drawPageDoor(
     { section: '',                label: 'Induction Loop',  value: descFor(optionDescriptions, 'inductLoop',     sb.inductLoop) },
     { section: '',                label: 'Other',           value: descFor(optionDescriptions, 'swipe',          sb.swipe) },
   ]
+  const sfValMaxW = (ML + leftColW) - sfValX - 4  // available width for value text
   sfRows.forEach(({ section, label, value }) => {
+    // Split on explicit newlines first, then word-wrap each paragraph
+    const rawLines = value ? value.split('\n') : [value]
+    const valueLines = rawLines.flatMap(para =>
+      para.trim() === '' ? [''] : wrapText(para, reg, 8, sfValMaxW)
+    )
+    const rowHeight = sfRowH * Math.max(1, valueLines.length)
     if (section) t(page, section, lblX,  ly - 8, reg, 8.5, DARK)
-    t(page, label,   valX,   ly - 8, reg, 8.5, DARK)
-    t(page, value,   sfValX, ly - 8, reg, 8,   DARK)
-    ly -= sfRowH
+    t(page, label, valX, ly - 8, reg, 8.5, DARK)
+    valueLines.forEach((ln, i) => t(page, ln, sfValX, ly - 8 - i * sfRowH, reg, 8, DARK))
+    ly -= rowHeight
   })
 
   // ── RIGHT: door image sized to align KEY FEATURES with Safety Features ───

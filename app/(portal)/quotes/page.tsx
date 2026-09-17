@@ -125,16 +125,50 @@ type SavedDoor = {
   customDesc: string | null
 }
 
+// ── Tooltip component ─────────────────────────────────────────────────────────
+function Tip({ text }: { text?: string }) {
+  if (!text) return null
+  return (
+    <span className="relative group/tip inline-flex items-center ml-1 align-middle">
+      <span
+        tabIndex={0}
+        role="button"
+        aria-label="More information"
+        className="flex items-center justify-center w-3.5 h-3.5 rounded-full text-slate-400 hover:text-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 transition-colors cursor-help"
+      >
+        <span className="material-symbols-outlined text-[13px] leading-none">info</span>
+      </span>
+      {/* Tooltip card — appears on hover/focus, fades out with delay */}
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50
+          w-56 rounded-lg bg-slate-800 px-3 py-2 text-[11px] leading-relaxed text-slate-100 shadow-lg
+          opacity-0 group-hover/tip:opacity-100 focus-within:opacity-100
+          transition-opacity duration-150 delay-0 group-hover/tip:delay-0
+          [.group\/tip:not(:hover)_&]:delay-75"
+      >
+        {text}
+        <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
+      </span>
+    </span>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function NewQuotesPage() {
   // DB-driven option lists (fetched once on mount)
   const [doorOptions, setDoorOptions] = useState<DoorOptionsMap>({})
+  const [tooltips,    setTooltips]    = useState<Record<string, string>>({})
 
   useEffect(() => {
     fetch('/api/quotes/rapid-door/options')
       .then(r => r.ok ? r.json() as Promise<DoorOptionsMap> : Promise.reject())
       .then(setDoorOptions)
       .catch(() => { /* UI remains functional; dropdowns show no options until retry */ })
+    fetch('/api/quotes/rapid-door/tooltips')
+      .then(r => r.ok ? r.json() as Promise<Record<string, string>> : Promise.reject())
+      .then(setTooltips)
+      .catch(() => { /* tooltips optional — fields still work without them */ })
   }, [])
 
   function opts(category: string): DoorOption[] { return doorOptions[category] ?? [] }
@@ -1077,41 +1111,42 @@ const autoDescLines = [
               )
             })()}
 
-            {/* Door Type */}
+            {/* Door Type + Door Model — two columns */}
             {isRapidDoor && (
-              <div>
-                <label className={LABEL_REQ_CLS}>Door Type</label>
-                <SelectWrapper>
-                  <select value={doorType} onChange={e => setDoorType(e.target.value)} className={SELECT_CLS}>
-                    <option value="" disabled>— Select door type —</option>
-                    {RAPID_DOOR_TYPES.map(dt => <option key={dt} value={dt}>{dt}</option>)}
-                  </select>
-                </SelectWrapper>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={LABEL_REQ_CLS}>Door Type<Tip text={tooltips['doorType']} /></label>
+                  <SelectWrapper>
+                    <select value={doorType} onChange={e => setDoorType(e.target.value)} className={SELECT_CLS}>
+                      <option value="" disabled>— Select door type —</option>
+                      {RAPID_DOOR_TYPES.map(dt => <option key={dt} value={dt}>{dt}</option>)}
+                    </select>
+                  </SelectWrapper>
+                </div>
+                <div>
+                  <label className={LABEL_REQ_CLS}>Door Model<Tip text={tooltips['doorModel']} /></label>
+                  <SelectWrapper>
+                    <select value={doorModel} onChange={e => setDoorModel(e.target.value)} className={SELECT_CLS} disabled={!doorType}>
+                      <option value="" disabled>— Select model —</option>
+                      {getDoorModelOptions(doorType).map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </SelectWrapper>
+                </div>
               </div>
             )}
 
             {/* Fields shown once door type chosen */}
             {isRapidDoor && doorType && (
               <>
-                {/* Door Model */}
-                <div>
-                  <label className={LABEL_REQ_CLS}>Door Model</label>
-                  <SelectWrapper>
-                    <select value={doorModel} onChange={e => setDoorModel(e.target.value)} className={SELECT_CLS}>
-                      <option value="" disabled>— Select model —</option>
-                      {getDoorModelOptions(doorType).map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                  </SelectWrapper>
-                </div>
 
                 {/* Opening dimensions + derived externals */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className={LABEL_REQ_CLS}>Clear Width <span className="normal-case font-normal after:content-none">(mm)</span></label>
+                    <label className={LABEL_REQ_CLS}>Clear Width <span className="normal-case font-normal after:content-none">(mm)</span><Tip text={tooltips['clearWidth']} /></label>
                     <input type="number" min={0} placeholder="e.g. 2500" value={openingW} onChange={e => setOpeningW(e.target.value)} className={INPUT_CLS} />
                   </div>
                   <div>
-                    <label className={LABEL_REQ_CLS}>Clear Height <span className="normal-case font-normal after:content-none">(mm)</span></label>
+                    <label className={LABEL_REQ_CLS}>Clear Height <span className="normal-case font-normal after:content-none">(mm)</span><Tip text={tooltips['clearHeight']} /></label>
                     <input type="number" min={0} placeholder="e.g. 3000" value={openingH} onChange={e => setOpeningH(e.target.value)} className={INPUT_CLS} />
                   </div>
                 </div>
@@ -1136,28 +1171,30 @@ const autoDescLines = [
                   </div>
                 )}
 
-                <div>
-                  <label className={LABEL_REQ_CLS}>Frame</label>
-                  <SelectWrapper>
-                    <select value={frame} onChange={e => setFrame(e.target.value)} className={SELECT_CLS}>
-                      <option value="" disabled>— Select frame —</option>
-                      {optCodes('frame').map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  </SelectWrapper>
+                {/* Frame + Curtain — two columns */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={LABEL_REQ_CLS}>Frame<Tip text={tooltips['frame']} /></label>
+                    <SelectWrapper>
+                      <select value={frame} onChange={e => setFrame(e.target.value)} className={SELECT_CLS}>
+                        <option value="" disabled>— Select frame —</option>
+                        {optCodes('frame').map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    </SelectWrapper>
+                  </div>
+                  <div>
+                    <label className={LABEL_REQ_CLS}>Curtain<Tip text={tooltips['curtain']} /></label>
+                    <SelectWrapper>
+                      <select value={curtain} onChange={e => setCurtain(e.target.value)} className={SELECT_CLS}>
+                        <option value="" disabled>— Select curtain —</option>
+                        {optCodes('curtain').map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    </SelectWrapper>
+                  </div>
                 </div>
 
                 <div>
-                  <label className={LABEL_REQ_CLS}>Curtain</label>
-                  <SelectWrapper>
-                    <select value={curtain} onChange={e => setCurtain(e.target.value)} className={SELECT_CLS}>
-                      <option value="" disabled>— Select curtain —</option>
-                      {optCodes('curtain').map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  </SelectWrapper>
-                </div>
-
-                <div>
-                  <label className={LABEL_REQ_CLS}>Colour</label>
+                  <label className={LABEL_REQ_CLS}>Colour<Tip text={tooltips['colour']} /></label>
                   <div className="relative" ref={colourRef}>
                     <button type="button" onClick={() => setColourOpen(o => !o)}
                       className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white py-3 pl-4 pr-10 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
@@ -1192,23 +1229,29 @@ const autoDescLines = [
                     <span className="material-symbols-outlined text-[16px] text-white">verified_user</span>
                     <p className="text-[11px] font-bold uppercase tracking-widest text-white">Safety Features</p>
                   </div>
-                  <div className="rounded-b-xl border border-t-0 border-slate-200 p-4 grid grid-cols-3 gap-3">
+                  <div className="rounded-b-xl border border-t-0 border-slate-200 p-4 grid grid-cols-2 gap-3">
                     {SAFETY_FEATURES_KEYS.map(field => (
                       <div key={field.key}>
-                        <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">{field.label}</label>
-                        <div className="relative">
-                          <select value={safetyValues[field.key] ?? ''} onChange={e => setSafetyField(field.key, e.target.value)}
-                            className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
-                            <option value="">— None —</option>
-                            {optCodes(field.key).map(o => <option key={o} value={o}>{o}</option>)}
-                          </select>
-                          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
-                        </div>
+                        <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">{field.label}<Tip text={tooltips[field.key]} /></label>
+                        {field.key === 'safetyOther' ? (
+                          <textarea value={safetyValues[field.key] ?? ''} onChange={e => { setSafetyField(field.key, e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px' }}
+                            placeholder="Describe other safety feature…" rows={1}
+                            className="w-full resize-none overflow-hidden rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-3 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+                        ) : (
+                          <div className="relative">
+                            <select value={safetyValues[field.key] ?? ''} onChange={e => setSafetyField(field.key, e.target.value)}
+                              className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
+                              <option value="">— None —</option>
+                              {optCodes(field.key).map(o => <option key={o} value={o}>{o}</option>)}
+                            </select>
+                            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
+                          </div>
+                        )}
                       </div>
                     ))}
-                    {/* Safety Edge Colour — colour swatch picker using dedicated state */}
+                    {/* Safety Edge Colour — colour swatch picker */}
                     <div>
-                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Safety Edge Colour</label>
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Safety Edge Colour<Tip text={tooltips['safetyEdgeColour']} /></label>
                       <div className="relative" ref={safetyEdgeColourRef}>
                         <button type="button" onClick={() => setSafetyEdgeColourOpen(o => !o)}
                           className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
@@ -1243,7 +1286,6 @@ const autoDescLines = [
                     </div>
                   </div>
                 </div>
-
 
               </>
             )}
@@ -1285,7 +1327,7 @@ const autoDescLines = [
                     key={customDoorImage ?? colour}
                     src={customDoorImage ?? getDoorImageUrl(doorType, colour)!}
                     alt={customDoorImageName ?? `${doorType} in ${colour}`}
-                    className="w-full object-contain max-h-[280px]" />
+                    className="w-full object-contain max-h-[200px]" />
                   <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/50 to-transparent px-4 py-3">
                     <p className="text-xs font-semibold text-white">{doorType} — {doorTypeName(doorType)}</p>
                     {curtain && <p className="text-[11px] text-white/70 mt-0.5">{curtain} · {colour}</p>}
@@ -1307,7 +1349,7 @@ const autoDescLines = [
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center gap-3 h-36 text-slate-400 shrink-0 bg-slate-50 relative group">
+                <div className="flex flex-col items-center justify-center gap-3 h-24 text-slate-400 shrink-0 bg-slate-50 relative group">
                   <span className="material-symbols-outlined text-5xl text-slate-300">garage</span>
                   <p className="text-sm">{colour ? 'No image for this colour' : 'Select a colour to preview'}</p>
                   <button type="button" onClick={() => customImageInputRef.current?.click()}
@@ -1322,7 +1364,7 @@ const autoDescLines = [
                 onChange={handleCustomImageUpload} />
 
               {/* ── Quotation Description — with edit pencil ────────────────── */}
-              <div className="mt-6 border-t border-slate-100">
+              <div className="mt-3 border-t border-slate-100">
                 <div className="bg-slate-800 px-4 py-2.5 flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase tracking-widest text-white">Quotation Description</p>
                   {!editingDesc ? (
@@ -1371,10 +1413,10 @@ const autoDescLines = [
                   <span className="material-symbols-outlined text-[16px] text-white">sensors</span>
                   <p className="text-[11px] font-bold uppercase tracking-widest text-white">Activation</p>
                 </div>
-                <div className="p-4 grid grid-cols-3 gap-3">
+                <div className="p-4 grid grid-cols-2 gap-3">
                   {ACTIVATION_KEYS.map(field => (
                     <div key={field.key}>
-                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">{field.label}</label>
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">{field.label}<Tip text={tooltips[field.key]} /></label>
                       <div className="relative">
                         <select value={safetyValues[field.key] ?? ''} onChange={e => setSafetyField(field.key, e.target.value)}
                           className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
@@ -1403,10 +1445,10 @@ const autoDescLines = [
                   </span>
                 </button>
                 {motorEnabled && (
-                  <div className="p-4 space-y-3">
+                  <div className="mx-4 mb-4 mt-3 rounded-xl border border-slate-200 p-4 space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Motor (kW)</label>
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Motor (kW)<Tip text={tooltips['motorKw']} /></label>
                       <div className="relative">
                         <select value={motorKw} onChange={e => setMotorKw(e.target.value)}
                           className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
@@ -1417,7 +1459,7 @@ const autoDescLines = [
                       </div>
                     </div>
                     <div>
-                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Motor Side</label>
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Motor Side<Tip text={tooltips['motorSide']} /></label>
                       <div className="relative">
                         <select value={motorSide} onChange={e => setMotorSide(e.target.value)}
                           className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
@@ -1430,7 +1472,7 @@ const autoDescLines = [
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Control Box Side</label>
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Control Box Side<Tip text={tooltips['controlBoxSide']} /></label>
                       <div className="relative">
                         <select value={cbSide} onChange={e => setCbSide(e.target.value)}
                           className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
@@ -1441,7 +1483,7 @@ const autoDescLines = [
                       </div>
                     </div>
                     <div>
-                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Door Control</label>
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Door Control<Tip text={tooltips['doorControl']} /></label>
                       <div className="relative">
                         <select value={doorControl} onChange={e => setDoorControl(e.target.value)}
                           className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
@@ -1455,6 +1497,7 @@ const autoDescLines = [
                   </div>
                 )}
               </div>
+
             </div>
           </div>
         )}
@@ -1591,14 +1634,14 @@ const autoDescLines = [
               )}
               <div className="grid grid-cols-5 gap-3">
                 {[
-                  { label: 'Delivery',               value: delivery,     set: setDelivery },
-                  { label: 'Installation',           value: installation, set: setInstallation },
-                  { label: 'Demolition',             value: demolition,   set: setDemolition },
-                  { label: 'Equipment Hire',         value: equipHire,    set: setEquipHire },
-                  { label: 'Accommodation & Travel', value: accTravel,    set: setAccTravel },
-                ].map(({ label, value, set }) => (
+                  { label: 'Delivery',               tipKey: 'delivery',     value: delivery,     set: setDelivery },
+                  { label: 'Installation',           tipKey: 'installation', value: installation, set: setInstallation },
+                  { label: 'Demolition',             tipKey: 'demolition',   value: demolition,   set: setDemolition },
+                  { label: 'Equipment Hire',         tipKey: 'equipHire',    value: equipHire,    set: setEquipHire },
+                  { label: 'Accommodation & Travel', tipKey: 'accTravel',    value: accTravel,    set: setAccTravel },
+                ].map(({ label, tipKey, value, set }) => (
                   <div key={label}>
-                    <label className="mb-1 block text-xs font-medium text-slate-500">{label}</label>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">{label}<Tip text={tooltips[tipKey]} /></label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
                       <input type="text" inputMode="decimal" placeholder="0.00" value={value} onChange={e => set(e.target.value)}
@@ -1716,10 +1759,10 @@ const autoDescLines = [
                 )}
               </div>}
 
-              {/* Scope of Works */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              {/* Demolition Scope of Works — only shown when demolition cost is entered */}
+              {parseFloat(demolition) > 0 && <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Scope of Works</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Demolition Scope of Works</span>
                   {!editingScope ? (
                     <button type="button" onClick={() => { setTempScope(quoteScope || DEFAULT_SCOPE); setEditingScope(true) }}
                       className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition">
@@ -1746,7 +1789,7 @@ const autoDescLines = [
                     {quoteScope || DEFAULT_SCOPE}
                   </p>
                 )}
-              </div>
+              </div>}
             </div>
 
             {/* Action buttons */}

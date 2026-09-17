@@ -1,0 +1,20 @@
+import { NextResponse } from 'next/server'
+import { requirePortalStaff } from '@/lib/security/requirePortalStaff'
+import { unauthorizedOrForbiddenResponse } from '@/lib/security/httpAuthErrors'
+import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
+
+export async function GET() {
+  const auth = await requirePortalStaff()
+  if (!auth.ok) return unauthorizedOrForbiddenResponse(auth)
+
+  const sb = createServiceRoleClient()
+  const { data, error } = await sb
+    .from('quote_field_tooltips')
+    .select('field_key, tooltip_text')
+
+  if (error) return NextResponse.json({}, { status: 500 })
+
+  const map: Record<string, string> = {}
+  for (const row of data ?? []) map[row.field_key] = row.tooltip_text
+  return NextResponse.json(map)
+}
