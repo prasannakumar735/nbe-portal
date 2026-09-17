@@ -344,7 +344,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isError, setIsError] = useState(false)
 
   useEffect(() => {
-    if (process.env.NODE_ENV !== 'development') return
     const onUnhandledRejection = (event: PromiseRejectionEvent) => {
       const reason = event.reason as { name?: string; message?: string } | null
       if (
