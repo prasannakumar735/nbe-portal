@@ -255,7 +255,7 @@ async function drawPageDoor(
   t(page, doorRefLabel, PW - MR - display.widthOfTextAtSize(doorRefLabel, 36), y - 28, display, 36, BLACK)
 
   const subtitle = 'INDUSTRIAL RAPID DOOR'
-  t(page, subtitle, PW - MR - bold.widthOfTextAtSize(subtitle, 13), y - 62, bold, 13, BRAND)
+  t(page, subtitle, PW - MR - bold.widthOfTextAtSize(subtitle, 12), y - 62, bold, 12, BRAND)
 
   y -= logoH + 30  // more gap after DOOR D01 (#6)
   drawHLine(page, ML, y, CW, 1, DARK)
@@ -270,7 +270,7 @@ async function drawPageDoor(
   // ── DOOR SPECIFICATION header bar ─────────────────────────────────────────
   const specBarH = 20
   drawRect(page, ML, y - specBarH, CW, specBarH, BRAND)
-  t(page, 'DOOR SPECIFICATION', ML + 4, y - 13, bold, 10.5, WHITE)
+  t(page, 'DOOR SPECIFICATION', ML + 4, y - 13, bold, 10, WHITE)
   y -= specBarH
 
   // Two-column layout: left = spec table (wider), right = image + key features (narrower)
@@ -310,9 +310,10 @@ async function drawPageDoor(
   const sfStartY = specTopY - 12 - specRows.length * rowH - 16
 
   let ly = specTopY - 12  // extra top padding after header bar (#3)
+  const SPEC_COLOR = rgb(0x1F/255, 0x29/255, 0x33/255)
   specRows.forEach(({ label, value, grey }) => {
-    t(page, label, lblX, ly - 9, reg, 8.5, grey ? GREY : DARK)
-    t(page, value, valX, ly - 9, reg, 8.5, grey ? GREY : DARK)
+    t(page, label, lblX, ly - 9, reg, 8, grey ? GREY : SPEC_COLOR)
+    t(page, value, valX, ly - 9, reg, 8, grey ? GREY : SPEC_COLOR)
     ly -= rowH
   })
   ly -= 16  // wider gap between spec list and Safety Features
@@ -343,8 +344,8 @@ async function drawPageDoor(
       para.trim() === '' ? [''] : wrapText(para, reg, 8, sfValMaxW)
     )
     const rowHeight = sfRowH * Math.max(1, valueLines.length)
-    if (section) t(page, section, lblX,  ly - 8, reg, 8.5, DARK)
-    t(page, label, valX, ly - 8, reg, 8.5, DARK)
+    if (section) t(page, section, lblX,  ly - 8, reg, 8, DARK)
+    t(page, label, valX, ly - 8, reg, 8, DARK)
     valueLines.forEach((ln, i) => t(page, ln, sfValX, ly - 8 - i * sfRowH, reg, 8, DARK))
     ly -= rowHeight
   })
@@ -385,7 +386,7 @@ async function drawPageDoor(
     })
     rightY -= imgDrawH + 18 + imgTopPad   // 18pt gap for more space before caption (#6)
     const cap = 'Indicative Image - Configuration may vary'
-    page.drawText(cap, { x: rightColX, y: rightY - 2, size: 8, font: italic, color: rgb(0.502, 0.502, 0.502) })
+    page.drawText(cap, { x: rightColX, y: rightY - 2, size: 8, font: italic, color: rgb(0x80/255, 0x80/255, 0x80/255) })
     rightY -= captionH + 4   // move below caption; KEY FEATURES starts here — removes dead space (#5)
   }
 
@@ -396,7 +397,7 @@ async function drawPageDoor(
   const kfTotalH = kfBarH + features.length * featRowH
   const kfBottom = sfStartY - kfTotalH   // bottom edge of KEY FEATURES block
   drawRect(page, rightColX, rightY - kfBarH, rightColW, kfBarH, BRAND)
-  t(page, 'KEY FEATURES', rightColX + 8, rightY - 12, bold, 10.5, WHITE)
+  t(page, 'KEY FEATURES', rightColX + 8, rightY - 13, bold, 10, WHITE)
   rightY -= kfBarH
   // Grey background for all feature rows
   drawRect(page, rightColX, rightY - (kfTotalH - kfBarH), rightColW, kfTotalH - kfBarH, LIGHT_GREY)
@@ -415,8 +416,8 @@ async function drawPageDoor(
         })
       }
     } catch { /* no icon */ }
-    t(page, feat.title, rightColX + 42, rightY - 14, bold, 8.5, DARK)
-    t(page, feat.desc,  rightColX + 42, rightY - 26, reg,  7.5, GREY)
+    t(page, feat.title, rightColX + 42, rightY - 14, bold, 8, DARK)
+    t(page, feat.desc,  rightColX + 42, rightY - 26, reg,  8, GREY)
     rightY -= featRowH
   }
 
@@ -432,7 +433,9 @@ async function drawPageDoor(
   const stH = 30   // DOOR SUBTOTAL bar height (taller than a regular row)
   // Left column has 3 rows when demolRequired (demol required + demol amount + scope), else 1 row
   const leftRows = demolRequired ? 3 : 1
-  const swContentH = Math.max(swRowH * leftRows, swRowH + stH)   // tallest of left/right columns
+  // Right column: Unit Door Price + Quantity + DOOR SUBTOTAL + optional Demolition Cost
+  const rightContentH = 2 * swRowH + stH + (demolRequired ? swRowH : 0)
+  const swContentH = Math.max(swRowH * leftRows, rightContentH)
 
   // Site Works box only as wide as its content (labels + values ≈ 230pt)
   const swBoxW = 230
@@ -441,26 +444,28 @@ async function drawPageDoor(
   drawRect(page, ML, y - swBarH - swContentH, swBoxW, swContentH, LIGHT_GREY)
 
   // ── Header text ──────────────────────────────────────────────────────────
-  t(page, 'SITE WORKS (OPTIONAL)', ML + 4, y - 13, bold, 10.5, WHITE)
-  t(page, 'Unit Door Price', rightColX, y - 13, reg, 9, DARK)
-  tRight(page, `$  ${door.unitPrice.toLocaleString('en-AU', { minimumFractionDigits: 2 })}`, ML + CW, y - 13, reg, 9, DARK)
+  t(page, 'SITE WORKS (OPTIONAL)', ML + 4, y - 12, bold, 10, WHITE)
 
   y -= swBarH   // move y to top of content rows
 
-  // ── Right column: Quantity | DOOR SUBTOTAL | Demolition Cost ─────────────
-  // Row 1 right: Quantity
-  t(page, 'Quantity', rightColX, y - 11, reg, 9, DARK)
-  tRight(page, String(door.qty), ML + CW, y - 11, reg, 9, DARK)
+  // ── Right column: Unit Door Price | Quantity | DOOR SUBTOTAL | Demolition Cost ──
+  // Row 1 right: Unit Door Price (aligned with first left content row)
+  t(page, 'Unit Door Price', rightColX, y - 11, reg, 10, BLACK)
+  tRight(page, `$  ${door.unitPrice.toLocaleString('en-AU', { minimumFractionDigits: 2 })}`, ML + CW - 5, y - 11, reg, 10, BLACK)
 
-  // Row 2 right: DOOR SUBTOTAL bar (30pt tall, 10pt bold)
-  drawRect(page, rightColX - 4, y - swRowH - stH, rightColW + 4, stH, BLACK)
-  t(page, 'DOOR SUBTOTAL (ex. GST)', rightColX + 2, y - swRowH - (stH / 2) - 5, bold, 10, WHITE)
-  tRight(page, `$  ${(door.qty * door.unitPrice).toLocaleString('en-AU', { minimumFractionDigits: 2 })}`, ML + CW, y - swRowH - (stH / 2) - 5, bold, 10, WHITE)
+  // Row 2 right: Quantity
+  t(page, 'Quantity', rightColX, y - swRowH - 11, reg, 8, BLACK)
+  tRight(page, String(door.qty), ML + CW - 5, y - swRowH - 11, reg, 8, BLACK)
 
-  // Row 3 right: Demolition Cost (below the taller subtotal bar)
+  // Row 3 right: DOOR SUBTOTAL bar
+  drawRect(page, rightColX - 4, y - 2 * swRowH - stH, rightColW + 4, stH, BLACK)
+  t(page, 'DOOR SUBTOTAL (ex. GST)', rightColX + 2, y - 2 * swRowH - (stH / 2) - 4, bold, 9, WHITE)
+  tRight(page, `$  ${(door.qty * door.unitPrice).toLocaleString('en-AU', { minimumFractionDigits: 2 })}`, ML + CW - 5, y - 2 * swRowH - (stH / 2) - 4, bold, 11, WHITE)
+
+  // Row 4 right: Demolition Cost (only when demolition is required)
   if (demolRequired) {
-    t(page, 'Demolition Cost', rightColX, y - swRowH - stH - 11, reg, 9, DARK)
-    tRight(page, `$  ${door.demolition.toLocaleString('en-AU', { minimumFractionDigits: 2 })}`, ML + CW, y - swRowH - stH - 11, reg, 9, DARK)
+    t(page, 'Demolition Cost', rightColX, y - 2 * swRowH - stH - 11, reg, 9, DARK)
+    tRight(page, `$  ${door.demolition.toLocaleString('en-AU', { minimumFractionDigits: 2 })}`, ML + CW - 5, y - 2 * swRowH - stH - 11, reg, 9, DARK)
   }
 
   // ── Left column: 3 content rows ──────────────────────────────────────────
@@ -470,7 +475,7 @@ async function drawPageDoor(
   // Row 1: Demolition Required + Yes/No checkboxes
   let swY = y
   t(page, 'Demolition Required', swLblX, swY - 11, reg, 8, DARK)
-  const cbY = swY - 17
+  const cbY = swY - 12
   page.drawRectangle({ x: swValX, y: cbY, width: 8, height: 8, borderColor: DARK, borderWidth: 0.5, color: WHITE })
   if (demolRequired) {
     page.drawLine({ start: { x: swValX + 1.5, y: cbY + 3 }, end: { x: swValX + 3.5, y: cbY },     thickness: 1, color: DARK })
@@ -537,14 +542,14 @@ async function drawPage2(
   t(page, 'QUOTE', PW - MR - display.widthOfTextAtSize('QUOTE', 36), y - 26, display, 36, BLACK)
 
   const subtitle = 'INDUSTRIAL RAPID DOOR'
-  t(page, subtitle, PW - MR - bold.widthOfTextAtSize(subtitle, 13), y - 52, bold, 13, BRAND)
+  t(page, subtitle, PW - MR - bold.widthOfTextAtSize(subtitle, 12), y - 52, bold, 12, BRAND)
 
   y -= logoH + 22
   drawHLine(page, ML, y, CW, 1, DARK)
   y -= 20
 
   // ── COMPANY INFO + DATE BLOCK ─────────────────────────────────────────────
-  t(page, 'NBE AUSTRALIA',                                      ML, y,      bold, 8.5, DARK)
+  t(page, 'NBE AUSTRALIA',                                      ML, y,      bold, 8,   DARK)
   t(page, '22A Humeside Dr, Campbellfield VIC 3061, Australia', ML, y - 12, reg,  8,   DARK)
   t(page, 'accountsreceivable@nbeaustralia.com.au',             ML, y - 24, reg,  8,   DARK)
   t(page, 'www.nbeaustralia.com.au',                            ML, y - 36, reg,  8,   DARK)
@@ -590,7 +595,7 @@ async function drawPage2(
   const sy = y
   custRows.forEach(([label, val], i) => {
     t(page, label, cLX, y - i * 13, bold, 8, DARK)
-    t(page, val,   cVX, y - i * 13, reg,  8, DARK)
+    t(page, val,   cVX, y - i * 13, reg,  8, rgb(0x1F/255, 0x29/255, 0x33/255))
   })
   summaryRows.forEach(([label, val], i) => {
     t(page, label, sLX, sy - i * 13, bold, 8, DARK)
@@ -644,7 +649,7 @@ async function drawPage2(
     return lines * 11 + 10
   })()
   const emptyRowH = Math.max(Math.round(firstRowH * 0.7), 28)
-  const emptyCount = Math.max(0, 4 - (doors.length - 1))
+  const emptyCount = Math.max(0, 4 - (doors.length - 1) - (doors.length <= 2 ? 1 : 0))
   for (let i = 0; i < emptyCount; i++) {
     drawHLine(page, ML, y, CW, 0.3, rgb(0.85, 0.85, 0.85))
     y -= emptyRowH
@@ -668,10 +673,10 @@ async function drawPage2(
   ]
   addlRows.forEach(([label, amount], i) => {
     drawHLine(page, ML, y, CW, 0.6, rgb(0.65, 0.65, 0.65))
-    t(page, label,                                          cItem,     y - 12, reg, 9, DARK)
-    tCenter(page, amount > 0 ? '1' : '-',                  cQtyX, cQtyW, y - 12, reg, 9, DARK)
-    tRight(page, amount > 0 ? fmtAUD(amount) : '(excl.)',  cUpRight,  y - 12, reg, 9, DARK)
-    tRight(page, amount > 0 ? fmtAUD(amount) : '-',        cTotRight, y - 12, reg, 9, DARK)
+    t(page, label,                                          cItem,     y - 12, reg, 8, DARK)
+    tCenter(page, amount > 0 ? '1' : '-',                  cQtyX, cQtyW, y - 12, reg, 8, DARK)
+    tRight(page, amount > 0 ? fmtAUD(amount) : '(excl.)',  cUpRight,  y - 12, reg, 8, DARK)
+    tRight(page, amount > 0 ? fmtAUD(amount) : '-',        cTotRight, y - 12, reg, 8, DARK)
     if (i === addlRows.length - 1) drawHLine(page, ML, y - addlRowH, CW, 0.6, rgb(0.65, 0.65, 0.65))
     y -= addlRowH
   })
@@ -679,9 +684,9 @@ async function drawPage2(
 
   // ── BANK DETAILS + TOTALS ─────────────────────────────────────────────────
   const bankY = y
-  t(page, 'BANK DETAILS',                             ML, bankY,      bold, 8.5, DARK)
-  t(page, 'Account Name: NBE Australia Pty Ltd',      ML, bankY - 14, reg,  8,   DARK)
-  t(page, 'BSB: 013-525  |  Account No.: 3473-93755', ML, bankY - 26, reg,  8,   DARK)
+  t(page, 'BANK DETAILS',                             ML, bankY - 14, bold, 8,   DARK)
+  t(page, 'Account Name: NBE Australia Pty Ltd',      ML, bankY - 26, reg,  8,   DARK)
+  t(page, 'BSB: 013-525  |  Account No.: 3473-93755', ML, bankY - 38, reg,  8,   DARK)
 
   const totValRight   = ML + CW
   const totBoxW = 170
@@ -689,11 +694,10 @@ async function drawPage2(
 
   t(page, 'Subtotal',              totLabelX,     bankY,      reg,  10, DARK)
   tRight(page, fmtAUD(grandTotal), totValRight,   bankY,      reg,  10, DARK)
-  t(page, 'GST (10%)',             totLabelX,     bankY - 22, reg,  10, DARK)
-  tRight(page, fmtAUD(grandTotal * 0.1), totValRight, bankY - 22, reg, 10, DARK)
+  t(page, 'GST (10%)',             totLabelX,     bankY - 14, reg,  9, DARK)
+  tRight(page, fmtAUD(grandTotal * 0.1), totValRight, bankY - 14, reg, 9, DARK)
 
-  drawHLine(page, ML + CW - totBoxW, bankY - 32, totBoxW, 0.5)
-  const totBoxY = bankY - 56
+  const totBoxY = bankY - 48
   drawRect(page, ML + CW - totBoxW, totBoxY, totBoxW, 22, BLACK)
   t(page,      'TOTAL',                  ML + CW - totBoxW + 8, totBoxY + 6, bold, 10, WHITE)
   tRight(page, fmtAUD(grandTotal * 1.1), ML + CW,               totBoxY + 6, bold, 10, WHITE)
@@ -703,7 +707,7 @@ async function drawPage2(
   const terms = input.page2SummaryNote?.trim() || DEFAULT_PAGE2_SUMMARY_NOTE
   const footerSize = 8
   const footerLineH = 11
-  const footerColor = rgb(89/255, 89/255, 89/255)   // #595959
+  const footerColor = rgb(0x33/255, 0x33/255, 0x33/255)   // #333333
   const footerLines = terms.split('\n').flatMap(para => wrapText(para, italic, footerSize, CW))
   // Leave room for the page-number footer bar (drawn in post-processing at y ~= 20)
   const footerStartY = 52 + (footerLines.length - 1) * footerLineH

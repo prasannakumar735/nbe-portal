@@ -291,31 +291,65 @@ export default function NewQuotesPage() {
 
   // Editable notes / disclaimers
   const DEFAULT_PAGE2_SUMMARY_NOTE = "This quotation is based on the NBE Standard Door with galvanised frame, 900 g/m² PVC curtain and RAL 7035 zinc-coated control box. Optional extras are additional unless listed in the relevant Door Specification. Final dimensions, site conditions and access must be confirmed before manufacture. Delivery, demolition, equipment hire and installation are excluded unless shown as priced line items. Electrical works are limited to connections between the control panel and door equipment; power supply and isolator are by others. All supply and works are subject to NBE Australia's standard Terms & Conditions."
-  const DEFAULT_SCOPE = "Remove the existing Door."
   const [page2SummaryNote,    setPage2SummaryNote]    = useState<string>('')
   const [editingPage2Note,    setEditingPage2Note]    = useState(false)
   const [tempPage2Note,       setTempPage2Note]       = useState('')
-  const [quoteScope,          setQuoteScope]          = useState<string>('')
-  const [editingScope,        setEditingScope]        = useState(false)
-  const [tempScope,           setTempScope]           = useState('')
+
+  // Maintenance quote — editable disclaimer + T&C end user selector
+  const DEFAULT_MAINT_TERMS = 'This quotation covers the maintenance service, repair works and/or parts listed above. Pricing is valid for 30 days from the date of issue. Work will be carried out during standard business hours unless otherwise agreed. Additional works identified on-site will be quoted separately before proceeding. Travel, accommodation and after-hours rates may apply depending on site location and scheduling requirements. All works are subject to NBE Australia\'s standard Terms & Conditions.'
+  const [maintTerms,        setMaintTerms]        = useState<string>('')
+  const [editingMaintTerms, setEditingMaintTerms] = useState(false)
+  const [tempMaintTerms,    setTempMaintTerms]    = useState('')
+  const [maintEndUser,      setMaintEndUser]      = useState<'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER' | ''>('CUSTOMER')
+
+  // Maintenance quote — editable sender / company info
+  const [maintSenderName,    setMaintSenderName]    = useState('NBE AUSTRALIA')
+  const [maintSenderAddress, setMaintSenderAddress] = useState('22A Humeside Dr, Campbellfield VIC 3061, Australia')
+  const [maintSenderEmail,   setMaintSenderEmail]   = useState('accountsreceivable@nbeaustralia.com.au')
+  const [maintContactName,   setMaintContactName]   = useState('Andrew Newton')
+  const [maintContactPhone,  setMaintContactPhone]  = useState('(04) 2705 5556')
+  const [maintContactEmail,  setMaintContactEmail]  = useState('anewton@nbeaustralia.com.au')
+
+  // General quote — editable disclaimer + T&C end user selector
+  const DEFAULT_GENERAL_TERMS = 'This quotation covers the goods and/or services listed above. Pricing is valid for 30 days from the date of issue. All works are subject to NBE Australia\'s standard Terms & Conditions.'
+  const [generalTerms,        setGeneralTerms]        = useState<string>('')
+  const [editingGeneralTerms, setEditingGeneralTerms] = useState(false)
+  const [tempGeneralTerms,    setTempGeneralTerms]    = useState('')
+  const [generalEndUser,      setGeneralEndUser]      = useState<'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER' | ''>('CUSTOMER')
+
+  // General quote — editable sender / company info
+  const [generalSenderName,    setGeneralSenderName]    = useState('NBE AUSTRALIA')
+  const [generalSenderAddress, setGeneralSenderAddress] = useState('22A Humeside Dr, Campbellfield VIC 3061, Australia')
+  const [generalSenderEmail,   setGeneralSenderEmail]   = useState('accountsreceivable@nbeaustralia.com.au')
+  const [generalContactName,   setGeneralContactName]   = useState('Andrew Newton')
+  const [generalContactPhone,  setGeneralContactPhone]  = useState('(04) 2705 5556')
+  const [generalContactEmail,  setGeneralContactEmail]  = useState('anewton@nbeaustralia.com.au')
+
+  // Parts quote — editable disclaimer + T&C end user selector
+  const DEFAULT_PARTS_TERMS = 'This quotation covers the parts and components listed above. Pricing is valid for 30 days from the date of issue. All items are subject to availability at time of order. All supply is subject to NBE Australia\'s standard Terms & Conditions.'
+  const [partsTerms,        setPartsTerms]        = useState<string>('')
+  const [editingPartsTerms, setEditingPartsTerms] = useState(false)
+  const [tempPartsTerms,    setTempPartsTerms]    = useState('')
+  const [partsEndUser,      setPartsEndUser]      = useState<'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER' | ''>('CUSTOMER')
+
+  // Parts quote — editable sender / company info
+  const [partsSenderName,    setPartsSenderName]    = useState('NBE AUSTRALIA')
+  const [partsSenderAddress, setPartsSenderAddress] = useState('22A Humeside Dr, Campbellfield VIC 3061, Australia')
+  const [partsSenderEmail,   setPartsSenderEmail]   = useState('accountsreceivable@nbeaustralia.com.au')
+  const [partsContactName,   setPartsContactName]   = useState('Andrew Newton')
+  const [partsContactPhone,  setPartsContactPhone]  = useState('(04) 2705 5556')
+  const [partsContactEmail,  setPartsContactEmail]  = useState('anewton@nbeaustralia.com.au')
 
   function loadNotesFromStorage(qn: string) {
     try {
       const s = localStorage.getItem(`nbe_note2_${qn}`)
       if (s) setPage2SummaryNote(s)
-      const sc = localStorage.getItem(`nbe_scope_${qn}`)
-      if (sc) setQuoteScope(sc)
     } catch { /* ignore */ }
   }
   function saveNote2(qn: string | null, text: string) {
     setPage2SummaryNote(text)
     if (!qn) return
     try { localStorage.setItem(`nbe_note2_${qn}`, text) } catch { /* ignore */ }
-  }
-  function saveScope(qn: string | null, text: string) {
-    setQuoteScope(text)
-    if (!qn) return
-    try { localStorage.setItem(`nbe_scope_${qn}`, text) } catch { /* ignore */ }
   }
 
   // Multi-door
@@ -375,9 +409,9 @@ export default function NewQuotesPage() {
   // Logged-in user email (for CC self option)
   const [loggedInEmail, setLoggedInEmail] = useState('')
   useEffect(() => {
-    createSupabaseClient().auth.getUser().then(({ data }) => {
-      if (data.user?.email) setLoggedInEmail(data.user.email)
-    })
+    createSupabaseClient().auth.getUser()
+      .then(({ data }) => { if (data.user?.email) setLoggedInEmail(data.user.email) })
+      .catch(() => { /* non-critical — CC-self option just won't pre-fill */ })
   }, [])
 
   // ── Signature (single HTML blob, persisted in localStorage) ─────────────────
@@ -533,6 +567,9 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     setPage2SummaryNote('')
     setCustName(''); setCustAttn(''); setCustAddress(''); setCustPostcode(''); setCustPhone(''); setCustEmail('')
     setIncludeSummary(true); setIndividualInstall(false)
+    setMaintItems(Array.from({ length: 5 }, emptyMaintItem))
+    setSavedPvcDoors([]); resetActivePvcDoor()
+    setPvcDiscountPct(''); setPvcDelivery(''); setPvcInstallation('')
   }
 
   // ── Explicit save (without generating PDF) ───────────────────────────────────
@@ -681,6 +718,330 @@ The quote includes all relevant specifications and pricing as discussed. Please 
   // Cleanup blob URL on unmount
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
 
+  // ── Maintenance / Repair state ───────────────────────────────────────────────
+  type MaintItem = { item: string; description: string; width: string; height: string; qty: number; unitPrice: number }
+  const emptyMaintItem = (): MaintItem => ({ item: '', description: '', width: '', height: '', qty: 1, unitPrice: 0 })
+  const [maintItems, setMaintItems] = useState<MaintItem[]>(() => Array.from({ length: 5 }, emptyMaintItem))
+
+  type GeneralItem = { item: string; description: string; width: string; height: string; qty: number; unitPrice: number }
+  const emptyGeneralItem = (): GeneralItem => ({ item: '', description: '', width: '', height: '', qty: 1, unitPrice: 0 })
+  const [generalItems, setGeneralItems] = useState<GeneralItem[]>(() => Array.from({ length: 5 }, emptyGeneralItem))
+
+  function updateGeneralItem<K extends keyof GeneralItem>(i: number, key: K, val: GeneralItem[K]) {
+    setGeneralItems(prev => prev.map((it, idx) => idx === i ? { ...it, [key]: val } : it))
+  }
+
+  type PartsItem = { item: string; description: string; width: string; height: string; qty: number; unitPrice: number }
+  const emptyPartsItem = (): PartsItem => ({ item: '', description: '', width: '', height: '', qty: 1, unitPrice: 0 })
+  const [partsItems, setPartsItems] = useState<PartsItem[]>(() => Array.from({ length: 5 }, emptyPartsItem))
+
+  function updatePartsItem<K extends keyof PartsItem>(i: number, key: K, val: PartsItem[K]) {
+    setPartsItems(prev => prev.map((it, idx) => idx === i ? { ...it, [key]: val } : it))
+  }
+
+  function updateMaintItem<K extends keyof MaintItem>(i: number, key: K, val: MaintItem[K]) {
+    setMaintItems(prev => prev.map((it, idx) => idx === i ? { ...it, [key]: val } : it))
+  }
+
+  // ── PVC Flex System state ────────────────────────────────────────────────────
+  type PvcFlexDoorItem = {
+    id: string
+    openingW: string; openingH: string
+    stripWidth: number; thickness: number
+    grade: 'Ambient' | 'Freezer'
+    profile: 'Ribbed' | 'Flat' | 'Coloured'
+    hanger: 'Galvanised' | 'Stainless Steel'
+    supplyType: 'Complete Door' | 'Strip Curtain Only' | 'Headrail Only'
+    mountingType: 'Face Fixed' | 'Soffit Fixed'
+    sliding: 'NA' | 'Single' | 'Dual'
+    raisedHeadrail: boolean
+    qty: number
+  }
+
+  // Saved/locked doors (chips at top) + individual active-door fields (rapid-door style)
+  const [savedPvcDoors, setSavedPvcDoors] = useState<PvcFlexDoorItem[]>([])
+  const [pvcW,       setPvcW]       = useState('')
+  const [pvcH,       setPvcH]       = useState('')
+  const [pvcStripW,  setPvcStripW]  = useState(200)
+  const [pvcThick,   setPvcThick]   = useState(2)
+  const [pvcGrade,   setPvcGrade]   = useState<'Ambient' | 'Freezer'>('Ambient')
+  const [pvcProfile, setPvcProfile] = useState<'Ribbed' | 'Flat' | 'Coloured'>('Ribbed')
+  const [pvcHanger,  setPvcHanger]  = useState<'Galvanised' | 'Stainless Steel'>('Galvanised')
+  const [pvcSupply,  setPvcSupply]  = useState<'Complete Door' | 'Strip Curtain Only' | 'Headrail Only'>('Complete Door')
+  const [pvcMount,   setPvcMount]   = useState<'Face Fixed' | 'Soffit Fixed'>('Face Fixed')
+  const [pvcSliding, setPvcSliding] = useState<'NA' | 'Single' | 'Dual'>('NA')
+  const [pvcRaisedHR, setPvcRaisedHR] = useState(false)
+  const [pvcQtyStr,  setPvcQtyStr]  = useState('1')
+
+  function resetActivePvcDoor() {
+    setPvcW(''); setPvcH(''); setPvcStripW(200); setPvcThick(2)
+    setPvcGrade('Ambient'); setPvcProfile('Ribbed'); setPvcHanger('Galvanised')
+    setPvcSupply('Complete Door'); setPvcMount('Face Fixed')
+    setPvcSliding('NA'); setPvcRaisedHR(false); setPvcQtyStr('1')
+  }
+
+  function lockAndAddPvcDoor() {
+    if (!pvcW || !pvcH) return
+    setSavedPvcDoors(prev => [...prev, {
+      id: crypto.randomUUID(), openingW: pvcW, openingH: pvcH,
+      stripWidth: pvcStripW, thickness: pvcThick, grade: pvcGrade, profile: pvcProfile,
+      hanger: pvcHanger, supplyType: pvcSupply, mountingType: pvcMount,
+      sliding: pvcSliding, raisedHeadrail: pvcRaisedHR, qty: parseInt(pvcQtyStr) || 1,
+    }])
+    resetActivePvcDoor()
+  }
+
+  function removeSavedPvcDoor(id: string) {
+    setSavedPvcDoors(prev => prev.filter(d => d.id !== id))
+  }
+
+  function editSavedPvcDoor(id: string) {
+    const d = savedPvcDoors.find(x => x.id === id)
+    if (!d) return
+    // If there's unsaved data in the active form, save it first
+    if (pvcW && pvcH) lockAndAddPvcDoor()
+    setPvcW(d.openingW); setPvcH(d.openingH); setPvcStripW(d.stripWidth); setPvcThick(d.thickness)
+    setPvcGrade(d.grade); setPvcProfile(d.profile); setPvcHanger(d.hanger)
+    setPvcSupply(d.supplyType); setPvcMount(d.mountingType)
+    setPvcSliding(d.sliding); setPvcRaisedHR(d.raisedHeadrail); setPvcQtyStr(String(d.qty))
+    setSavedPvcDoors(prev => prev.filter(x => x.id !== id))
+  }
+
+  const [pvcDiscountPct, setPvcDiscountPct] = useState('')
+  const [pvcDelivery, setPvcDelivery] = useState('')
+  const [pvcInstallation, setPvcInstallation] = useState('')
+
+  const DEFAULT_PVC_TERMS = "This quotation covers the PVC strip curtain system(s) listed above. Strip configurations are calculated from nominated opening dimensions; final measurements must be verified on-site before manufacture. Pricing is valid for 30 days from date of issue. Delivery and installation are excluded unless shown as priced line items. All supply and installation is subject to NBE Australia's standard Terms & Conditions."
+  const [pvcTerms, setPvcTerms] = useState<string>('')
+  const [editingPvcTerms, setEditingPvcTerms] = useState(false)
+  const [tempPvcTerms, setTempPvcTerms] = useState('')
+  const [pvcEndUser, setPvcEndUser] = useState<'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER' | ''>('CUSTOMER')
+
+  const [pvcSenderName,    setPvcSenderName]    = useState('NBE AUSTRALIA')
+  const [pvcSenderAddress, setPvcSenderAddress] = useState('22A Humeside Dr, Campbellfield VIC 3061, Australia')
+  const [pvcSenderEmail,   setPvcSenderEmail]   = useState('accountsreceivable@nbeaustralia.com.au')
+  const [pvcContactName,   setPvcContactName]   = useState('Andrew Newton')
+  const [pvcContactPhone,  setPvcContactPhone]  = useState('(04) 2705 5556')
+  const [pvcContactEmail,  setPvcContactEmail]  = useState('anewton@nbeaustralia.com.au')
+
+  async function handleGenerateMaintenance() {
+    setGenerating(true)
+    try {
+      if (!quoteNumberRef.current) {
+        const res = await fetch('/api/quotes/next-number?prefix=QREP')
+        if (!res.ok) throw new Error('Failed to allocate quote number')
+        const { quoteNumber: qn } = await res.json() as { quoteNumber: string }
+        quoteNumberRef.current = qn
+        setQuoteNumber(qn)
+      }
+      const filled = maintItems.filter(it => it.item.trim())
+      const validDate = new Date(); validDate.setDate(validDate.getDate() + 30)
+      const validUntil = `${String(validDate.getDate()).padStart(2,'0')}/${String(validDate.getMonth()+1).padStart(2,'0')}/${validDate.getFullYear()}`
+      const res = await fetch('/api/quotes/maintenance/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quoteNumber: quoteNumberRef.current,
+          date: todayDisplay(), validUntil,
+          customerName: custName, customerAttn: custAttn,
+          customerAddress: custAddress, customerPostcode: custPostcode,
+          customerPhone: custPhone, customerEmail: custEmail,
+          lineItems: filled,
+          terms: maintTerms || DEFAULT_MAINT_TERMS,
+          endUser: maintEndUser || undefined,
+          senderName: maintSenderName, senderAddress: maintSenderAddress, senderEmail: maintSenderEmail,
+          contactName: maintContactName, contactPhone: maintContactPhone, contactEmail: maintContactEmail,
+        }),
+      })
+      if (!res.ok) { const e = await res.json().catch(() => ({ error: 'Unknown' })); alert(`Failed: ${e.error}`); return }
+      const blob = await res.blob()
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      const url = URL.createObjectURL(blob)
+      setPreviewUrl(url)
+      setShowPreview(true)
+      setTimeout(() => previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+    } catch (e) {
+      alert(`Error: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  async function handleGenerateParts() {
+    setGenerating(true)
+    try {
+      if (!quoteNumberRef.current) {
+        const res = await fetch('/api/quotes/next-number?prefix=QPTS')
+        if (!res.ok) throw new Error('Failed to allocate quote number')
+        const { quoteNumber: qn } = await res.json() as { quoteNumber: string }
+        quoteNumberRef.current = qn
+        setQuoteNumber(qn)
+      }
+      const filled = partsItems.filter(it => it.item.trim())
+      const validDate = new Date(); validDate.setDate(validDate.getDate() + 30)
+      const validUntil = `${String(validDate.getDate()).padStart(2,'0')}/${String(validDate.getMonth()+1).padStart(2,'0')}/${validDate.getFullYear()}`
+      const res = await fetch('/api/quotes/parts/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quoteNumber: quoteNumberRef.current,
+          date: todayDisplay(), validUntil,
+          customerName: custName, customerAttn: custAttn,
+          customerAddress: custAddress, customerPostcode: custPostcode,
+          customerPhone: custPhone, customerEmail: custEmail,
+          lineItems: filled,
+          terms: partsTerms || DEFAULT_PARTS_TERMS,
+          endUser: partsEndUser || undefined,
+          senderName: partsSenderName, senderAddress: partsSenderAddress, senderEmail: partsSenderEmail,
+          contactName: partsContactName, contactPhone: partsContactPhone, contactEmail: partsContactEmail,
+        }),
+      })
+      if (!res.ok) { const e = await res.json().catch(() => ({ error: 'Unknown' })); alert(`Failed: ${e.error}`); return }
+      const blob = await res.blob()
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      const url = URL.createObjectURL(blob)
+      setPreviewUrl(url)
+      setShowPreview(true)
+      setTimeout(() => previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+    } catch (e) {
+      alert(`Error: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  async function handleGenerateGeneral() {
+    setGenerating(true)
+    try {
+      if (!quoteNumberRef.current) {
+        const res = await fetch('/api/quotes/next-number?prefix=QGEN')
+        if (!res.ok) throw new Error('Failed to allocate quote number')
+        const { quoteNumber: qn } = await res.json() as { quoteNumber: string }
+        quoteNumberRef.current = qn
+        setQuoteNumber(qn)
+      }
+      const filled = generalItems.filter(it => it.item.trim())
+      const validDate = new Date(); validDate.setDate(validDate.getDate() + 30)
+      const validUntil = `${String(validDate.getDate()).padStart(2,'0')}/${String(validDate.getMonth()+1).padStart(2,'0')}/${validDate.getFullYear()}`
+      const res = await fetch('/api/quotes/general/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quoteNumber: quoteNumberRef.current,
+          date: todayDisplay(), validUntil,
+          customerName: custName, customerAttn: custAttn,
+          customerAddress: custAddress, customerPostcode: custPostcode,
+          customerPhone: custPhone, customerEmail: custEmail,
+          lineItems: filled,
+          terms: generalTerms || DEFAULT_GENERAL_TERMS,
+          endUser: generalEndUser || undefined,
+          senderName: generalSenderName, senderAddress: generalSenderAddress, senderEmail: generalSenderEmail,
+          contactName: generalContactName, contactPhone: generalContactPhone, contactEmail: generalContactEmail,
+        }),
+      })
+      if (!res.ok) { const e = await res.json().catch(() => ({ error: 'Unknown' })); alert(`Failed: ${e.error}`); return }
+      const blob = await res.blob()
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      const url = URL.createObjectURL(blob)
+      setPreviewUrl(url)
+      setShowPreview(true)
+      setTimeout(() => previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+    } catch (e) {
+      alert(`Error: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  async function handleGeneratePvcFlex() {
+    setGenerating(true)
+    try {
+      if (!quoteNumberRef.current) {
+        const res = await fetch('/api/quotes/next-number?prefix=QPVC')
+        if (!res.ok) throw new Error('Failed to allocate quote number')
+        const { quoteNumber: qn } = await res.json() as { quoteNumber: string }
+        quoteNumberRef.current = qn
+        setQuoteNumber(qn)
+      }
+
+      // Dynamic import to avoid sending calculator code to all pages
+      const { calcPvcNewQuote, buildPvcDoorDescription, discountedSellPrice, autoRaisedHeadrailSize } =
+        await import('@/lib/pvc/pvcNewQuoteCalculator')
+
+      const discPct = parseFloat(pvcDiscountPct) || 0
+      const validDate = new Date(); validDate.setDate(validDate.getDate() + 30)
+      const validUntil = `${String(validDate.getDate()).padStart(2,'0')}/${String(validDate.getMonth()+1).padStart(2,'0')}/${validDate.getFullYear()}`
+
+      // Combine saved doors + active door (if filled)
+      const activeDoor: PvcFlexDoorItem | null = pvcW && pvcH ? {
+        id: 'active', openingW: pvcW, openingH: pvcH,
+        stripWidth: pvcStripW, thickness: pvcThick, grade: pvcGrade, profile: pvcProfile,
+        hanger: pvcHanger, supplyType: pvcSupply, mountingType: pvcMount,
+        sliding: pvcSliding, raisedHeadrail: pvcRaisedHR, qty: parseInt(pvcQtyStr) || 1,
+      } : null
+      const allPvcDoors = [...savedPvcDoors, ...(activeDoor ? [activeDoor] : [])]
+      const filledDoors = allPvcDoors.filter(d => d.openingW && d.openingH)
+      const doorLineItems = filledDoors.map((d, i) => {
+        const raisedHR = d.raisedHeadrail
+          ? autoRaisedHeadrailSize(parseFloat(d.openingW) || 0)
+          : 'NA' as const
+        const spec = {
+          openingW: parseFloat(d.openingW) || 0,
+          openingH: parseFloat(d.openingH) || 0,
+          stripWidth: d.stripWidth,
+          thickness: d.thickness,
+          grade: d.grade,
+          profile: d.profile,
+          hanger: d.hanger,
+          supplyType: d.supplyType,
+          mountingType: d.mountingType,
+          sliding: d.sliding,
+          raisedHeadrail: raisedHR,
+        }
+        const calc = calcPvcNewQuote(spec)
+        const unitPrice = discountedSellPrice(spec, calc, discPct)
+        return {
+          item: `Door ${i + 1}`,
+          description: buildPvcDoorDescription(spec, calc),
+          qty: d.qty,
+          unitPrice: Math.round(unitPrice * 100) / 100,
+          originalPrice: Math.round(calc.sellPrice * 100) / 100,
+        }
+      })
+
+      const res = await fetch('/api/quotes/pvc-flex/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quoteNumber: quoteNumberRef.current,
+          date: todayDisplay(), validUntil,
+          customerName: custName, customerAttn: custAttn,
+          customerAddress: custAddress, customerPostcode: custPostcode,
+          customerPhone: custPhone, customerEmail: custEmail,
+          doors: doorLineItems,
+          delivery:     parseFloat(pvcDelivery)     || undefined,
+          installation: parseFloat(pvcInstallation) || undefined,
+          discountPct:  discPct || undefined,
+          terms: pvcTerms || DEFAULT_PVC_TERMS,
+          endUser: pvcEndUser || undefined,
+          senderName: pvcSenderName, senderAddress: pvcSenderAddress, senderEmail: pvcSenderEmail,
+          contactName: pvcContactName, contactPhone: pvcContactPhone, contactEmail: pvcContactEmail,
+        }),
+      })
+      if (!res.ok) { const e = await res.json().catch(() => ({ error: 'Unknown' })); alert(`Failed: ${e.error}`); return }
+      const blob = await res.blob()
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      const url = URL.createObjectURL(blob)
+      setPreviewUrl(url)
+      setShowPreview(true)
+      setTimeout(() => previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+    } catch (e) {
+      alert(`Error: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
   // ── Derived values ──────────────────────────────────────────────────────────
   const qtyN      = parseFloat(qty) || 1
   const unitN     = parseFloat(unitPrice) || 0
@@ -704,8 +1065,12 @@ const autoDescLines = [
 
   const displayDesc = customDesc ?? autoDescLines.join('\n')
 
-  const isRapidDoor   = selected === 'INDUSTRIAL_RAPID_DOOR'
-  const showRightPanel = isRapidDoor && !!doorType
+  const isRapidDoor       = selected === 'INDUSTRIAL_RAPID_DOOR'
+  const isMaintenance     = selected === 'MAINTENANCE_SERVICE_REPAIR'
+  const isGeneral         = selected === 'GENERAL'
+  const isParts           = selected === 'PARTS'
+  const isPvcFlex         = selected === 'PVC_FLEX_SYSTEM'
+  const showRightPanel    = isRapidDoor && !!doorType
 
   const grandTotal = lineTotal + savedDoors.reduce((sum, d) => sum + d.lineTotal, 0)
 
@@ -824,7 +1189,7 @@ const autoDescLines = [
             equipHire: d.equipHire, accTravel: d.accTravel,
             lineTotal: d.lineTotal, customDesc: d.customDesc,
             colourCode: COLOUR_IMAGE_CODE[d.colour] ?? null,
-            scope: quoteScope || undefined,
+            scope: ((d as any).demolitionScope as string | undefined) || undefined,
           }
         }),
         {
@@ -842,7 +1207,7 @@ const autoDescLines = [
           delivery: delivN, installation: instN, demolition: demolN, equipHire: equipN, accTravel: travN,
           lineTotal, customDesc,
           colourCode: COLOUR_IMAGE_CODE[colour] ?? null,
-          scope: quoteScope || undefined,
+          scope: demolitionScope || undefined,
         },
       ]
 
@@ -1115,10 +1480,10 @@ const autoDescLines = [
       )}
 
       {/* ── Main two-column layout ─────────────────────────────────────────── */}
-      <div className={`flex gap-6 items-stretch ${showRightPanel ? '' : 'max-w-2xl'}`}>
+      <div className={`${showRightPanel ? 'flex gap-6 items-stretch' : (isMaintenance || isGeneral || isParts || isPvcFlex) ? 'block w-full' : 'max-w-2xl'}`}>
 
         {/* ── LEFT: form card ─────────────────────────────────────────────── */}
-        <div className="flex-1 min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm flex flex-col">
+        <div className={`${showRightPanel ? 'flex-1 min-w-0' : 'w-full'} rounded-2xl border border-slate-200 bg-white shadow-sm flex flex-col`}>
           <div className="border-b border-slate-100 px-6 py-5">
             <h2 className="text-base font-semibold text-slate-800">
               {savedDoors.length > 0 ? `Add Door ${savedDoors.length + 1}` : 'Start a New Quote'}
@@ -1154,6 +1519,1138 @@ const autoDescLines = [
                 </div>
               )
             })()}
+
+          </div>{/* ── close px-6 padded div — maintenance renders at card level below ── */}
+
+          {/* ── Maintenance / Repair form ──────────────────────────────── */}
+          {isMaintenance && (() => {
+              const maintSubtotal = maintItems.reduce((s, it) => s + it.qty * it.unitPrice, 0)
+              const fmtM = (n: number) => n === 0 ? '$0.00' : `$${n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              return (
+                <div className="space-y-0 divide-y divide-slate-100">
+
+                  {/* ── Sender / Company Info ── */}
+                  <div className="px-6 pt-5 pb-5">
+                    <div className="rounded-xl border border-slate-200 overflow-hidden">
+                      <div className="border-b border-slate-100 px-5 py-3 bg-slate-50">
+                        <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">From (Sender Details)</span>
+                      </div>
+                      <div className="px-5 py-4">
+                        <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                          {([
+                            ['Company',       maintSenderName,    setMaintSenderName,    'NBE AUSTRALIA'],
+                            ['Address',       maintSenderAddress, setMaintSenderAddress, '22A Humeside Dr, Campbellfield VIC 3061'],
+                            ['Company Email', maintSenderEmail,   setMaintSenderEmail,   'accountsreceivable@nbeaustralia.com.au'],
+                            ['Contact Name',  maintContactName,   setMaintContactName,   'Andrew Newton'],
+                            ['Contact Phone', maintContactPhone,  setMaintContactPhone,  '(04) 2705 5556'],
+                            ['Contact Email', maintContactEmail,  setMaintContactEmail,  'anewton@nbeaustralia.com.au'],
+                          ] as [string, string, (v: string) => void, string][]).map(([label, value, setter, placeholder]) => (
+                            <div key={label}>
+                              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">{label}</label>
+                              <input type="text" value={value} placeholder={placeholder} onChange={e => setter(e.target.value)}
+                                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 px-4 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Customer Details (inline for maintenance) ── */}
+                  <div className="px-6 pb-0 pt-5">
+                  <div className="rounded-xl border border-slate-200 overflow-hidden">
+                    <div className="border-b border-slate-100 px-5 py-3 flex items-center justify-between bg-slate-50">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">Customer Details</span>
+                        <span className="text-red-400 text-sm font-bold">*</span>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input type="checkbox" checked={custCanBeBlank} onChange={e => setCustCanBeBlank(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                        <span className="text-xs text-slate-500">Customer details can be blank</span>
+                      </label>
+                    </div>
+                    {custCanBeBlank && (
+                      <div className="mx-5 mt-3 flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+                        <span className="material-symbols-outlined text-[14px] text-amber-500">warning</span>
+                        <p className="text-xs text-amber-700">Quote will be generated without customer details. This is for internal/draft use only.</p>
+                      </div>
+                    )}
+                    <div className="px-5 py-4">
+                      <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                        {([
+                          ['Customer',  custName,     setCustName,     'Company or customer name', true],
+                          ['Attention', custAttn,     setCustAttn,     'Contact person',            false],
+                          ['Address',   custAddress,  setCustAddress,  'Street address',            true],
+                          ['Postcode',  custPostcode, setCustPostcode, '3000',                      false],
+                          ['Phone',     custPhone,    setCustPhone,    '(03) 9000 0000',            false],
+                          ['Email',     custEmail,    setCustEmail,    'contact@company.com.au',    false],
+                        ] as [string, string, (v: string) => void, string, boolean][]).map(([label, value, setter, placeholder, required]) => (
+                          <div key={label}>
+                            <label className={`mb-1.5 block text-xs font-semibold uppercase tracking-widest ${!custCanBeBlank && required && !value ? 'text-red-400' : 'text-slate-400'}`}>
+                              {label}{required && !custCanBeBlank && <span className="ml-0.5 text-red-400">*</span>}
+                            </label>
+                            <input type="text" value={value} placeholder={placeholder} onChange={e => setter(e.target.value)}
+                              className={`w-full rounded-xl border py-2.5 px-4 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:ring-2 focus:ring-indigo-500/20 ${!custCanBeBlank && required && !value ? 'border-red-300 focus:border-red-400 bg-white' : 'border-slate-200 bg-white focus:border-indigo-400'}`} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  </div>{/* end customer details px-6 wrapper */}
+
+                  {/* Line items table — full-width, no side padding */}
+                  <div className="border-t border-slate-100 rounded-b-2xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-slate-900 text-white text-left text-[10px] font-semibold uppercase tracking-wider">
+                          {/* Row 1: # | ITEM | DESCRIPTION(colspan=3 spans desc+width+height) | QTY | UNIT PRICE | TOTAL | + */}
+                          <tr className="border-b border-slate-700">
+                            <th rowSpan={2} className="px-3 py-2.5 w-8 align-middle">#</th>
+                            <th rowSpan={2} className="px-2 py-2.5 w-36 align-middle">Item</th>
+                            <th colSpan={3} className="px-2 pt-2.5 pb-0 text-center border-b border-slate-700">Description</th>
+                            <th rowSpan={2} className="px-2 py-2.5 w-12 text-center align-middle">Qty</th>
+                            <th rowSpan={2} className="px-2 py-2.5 w-24 text-right align-middle">Unit Price</th>
+                            <th rowSpan={2} className="px-2 py-2.5 w-24 text-right align-middle">Total</th>
+                            <th rowSpan={2} className="px-2 py-2.5 w-8 align-middle">
+                              <button type="button" onClick={() => setMaintItems(prev => [...prev, emptyMaintItem()])}
+                                title="Add row"
+                                className="flex items-center gap-0.5 rounded-md bg-white/15 hover:bg-white/30 px-1.5 py-1 text-[10px] font-semibold text-white transition mx-auto">
+                                <span className="material-symbols-outlined text-[13px]">add</span>
+                              </button>
+                            </th>
+                          </tr>
+                          {/* Row 2: sub-labels — [empty for desc text] | WIDTH | HEIGHT */}
+                          <tr className="border-b border-slate-600 text-[9px] text-slate-300 font-medium">
+                            <th className="px-2 pb-1.5" />{/* description text col — no sub-label */}
+                            <th className="px-2 pb-1.5 w-20 text-center">Width</th>
+                            <th className="px-2 pb-1.5 w-20 text-center">Height</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {maintItems.map((it, i) => (
+                            <tr key={i} className="border-b border-slate-100 hover:bg-slate-50/60">
+                              <td className="px-2 py-1.5 text-slate-400">{i + 1}</td>
+                              <td className="px-2 py-1.5">
+                                <input type="text" value={it.item} onChange={e => updateMaintItem(i, 'item', e.target.value)}
+                                  placeholder="Item name" className="w-full rounded border border-slate-200 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="text" value={it.description} onChange={e => updateMaintItem(i, 'description', e.target.value)}
+                                  placeholder="Description" className="w-full rounded border border-slate-200 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="text" value={it.width} onChange={e => updateMaintItem(i, 'width', e.target.value)}
+                                  placeholder="—" className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-center focus:border-indigo-400 focus:outline-none" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="text" value={it.height} onChange={e => updateMaintItem(i, 'height', e.target.value)}
+                                  placeholder="—" className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-center focus:border-indigo-400 focus:outline-none" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="number" min={1} value={it.qty} onChange={e => updateMaintItem(i, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
+                                  className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-center focus:border-indigo-400 focus:outline-none" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="number" min={0} step={0.01} value={it.unitPrice || ''} onChange={e => updateMaintItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                  placeholder="0.00" className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-right focus:border-indigo-400 focus:outline-none" />
+                              </td>
+                              <td className="px-2 py-1.5 text-right font-medium text-slate-700 tabular-nums">
+                                {it.qty * it.unitPrice > 0 ? fmtM(it.qty * it.unitPrice) : '—'}
+                              </td>
+                              <td className="px-1 py-1.5">
+                                <button type="button" onClick={() => setMaintItems(prev => prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i))}
+                                  className="rounded p-0.5 text-slate-300 hover:bg-red-50 hover:text-red-500">
+                                  <span className="material-symbols-outlined text-[14px]">close</span>
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {/* Totals */}
+                    <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 flex justify-end">
+                      <div className="w-48 space-y-1 text-xs">
+                        <div className="flex justify-between text-slate-600"><span>Subtotal</span><span className="tabular-nums font-medium">{fmtM(maintSubtotal)}</span></div>
+                        <div className="flex justify-between text-slate-500"><span>GST (10%)</span><span className="tabular-nums">{fmtM(maintSubtotal * 0.1)}</span></div>
+                        <div className="flex justify-between rounded-lg bg-slate-800 px-2.5 py-1.5 text-white font-semibold"><span>TOTAL</span><span className="tabular-nums">{fmtM(maintSubtotal * 1.1)}</span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* End User T&C selector */}
+                  <div className="px-6 pt-5">
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-slate-400">
+                        End User <span className="normal-case font-normal text-slate-400">— selects which T&amp;C document is appended</span>
+                      </label>
+                      <div className="grid grid-cols-3 gap-3">
+                        {(['CUSTOMER', 'DISTRIBUTOR', 'TENDER'] as const).map(type => (
+                          <button key={type} type="button"
+                            onClick={() => setMaintEndUser(prev => prev === type ? '' : type)}
+                            className={`flex items-center justify-center gap-2 rounded-xl border py-3 text-sm font-semibold transition ${
+                              maintEndUser === type
+                                ? 'border-indigo-500 bg-indigo-600 text-white shadow-sm'
+                                : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50'
+                            }`}>
+                            <span className="material-symbols-outlined text-[18px]">
+                              {type === 'CUSTOMER' ? 'person' : type === 'DISTRIBUTOR' ? 'local_shipping' : 'gavel'}
+                            </span>
+                            {type.charAt(0) + type.slice(1).toLowerCase()}
+                          </button>
+                        ))}
+                      </div>
+                      {!maintEndUser && (
+                        <p className="mt-1.5 text-[11px] text-slate-400 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[13px]">info</span>
+                          No T&amp;C will be appended if no end user is selected.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Quote Disclaimer */}
+                  <div className="px-6 pt-4 pb-2">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Quote Disclaimer</span>
+                        {!editingMaintTerms ? (
+                          <button type="button" onClick={() => { setTempMaintTerms(maintTerms || DEFAULT_MAINT_TERMS); setEditingMaintTerms(true) }}
+                            className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition">
+                            <span className="material-symbols-outlined text-[14px]">edit</span>Edit
+                          </button>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <button type="button" onClick={() => { setMaintTerms(tempMaintTerms); setEditingMaintTerms(false) }}
+                              className="flex items-center gap-1 rounded-lg bg-indigo-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-indigo-700 transition">
+                              <span className="material-symbols-outlined text-[13px]">check</span>Save
+                            </button>
+                            <button type="button" onClick={() => setEditingMaintTerms(false)}
+                              className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition">
+                              Cancel
+                            </button>
+                            {maintTerms && (
+                              <button type="button" onClick={() => { setMaintTerms(''); setEditingMaintTerms(false) }}
+                                className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-red-400 hover:bg-red-50 transition">
+                                Reset
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {editingMaintTerms ? (
+                        <textarea rows={4} value={tempMaintTerms} onChange={e => setTempMaintTerms(e.target.value)}
+                          className="w-full rounded-lg border border-indigo-300 bg-white px-3 py-2 text-[12px] text-slate-700 shadow-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 resize-y" />
+                      ) : (
+                        <p className="text-[12px] text-slate-500 leading-relaxed whitespace-pre-wrap">
+                          {maintTerms || DEFAULT_MAINT_TERMS}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Generate button */}
+                  <div className="px-6 pt-3 pb-6">
+                  <button type="button"
+                    disabled={generating || (!custCanBeBlank && !customerFilled)}
+                    onClick={handleGenerateMaintenance}
+                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    title={!custCanBeBlank && !customerFilled ? 'Customer name and address are required' : undefined}>
+                    {generating
+                      ? <><span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>Generating…</>
+                      : <><span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>{showPreview ? 'Regenerate Quote' : 'Generate Quote'}</>
+                    }
+                  </button>
+                  </div>
+                </div>
+              )
+          })()}
+
+          {/* ── Parts quote form ── */}
+          {isParts && (() => {
+              const partsSubtotal = partsItems.reduce((s, it) => s + it.qty * it.unitPrice, 0)
+              const fmtP = (n: number) => n === 0 ? '$0.00' : `$${n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              return (
+                <div className="space-y-0 divide-y divide-slate-100">
+
+                  {/* ── Sender / Company Info ── */}
+                  <div className="px-6 pt-5 pb-5">
+                    <div className="rounded-xl border border-slate-200 overflow-hidden">
+                      <div className="border-b border-slate-100 px-5 py-3 bg-slate-50">
+                        <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">From (Sender Details)</span>
+                      </div>
+                      <div className="px-5 py-4">
+                        <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                          {([
+                            ['Company',       partsSenderName,    setPartsSenderName,    'NBE AUSTRALIA'],
+                            ['Address',       partsSenderAddress, setPartsSenderAddress, '22A Humeside Dr, Campbellfield VIC 3061'],
+                            ['Company Email', partsSenderEmail,   setPartsSenderEmail,   'accountsreceivable@nbeaustralia.com.au'],
+                            ['Contact Name',  partsContactName,   setPartsContactName,   'Andrew Newton'],
+                            ['Contact Phone', partsContactPhone,  setPartsContactPhone,  '(04) 2705 5556'],
+                            ['Contact Email', partsContactEmail,  setPartsContactEmail,  'anewton@nbeaustralia.com.au'],
+                          ] as [string, string, (v: string) => void, string][]).map(([label, value, setter, placeholder]) => (
+                            <div key={label}>
+                              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">{label}</label>
+                              <input type="text" value={value} placeholder={placeholder} onChange={e => setter(e.target.value)}
+                                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 px-4 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Customer Details ── */}
+                  <div className="px-6 pb-0 pt-5">
+                  <div className="rounded-xl border border-slate-200 overflow-hidden">
+                    <div className="border-b border-slate-100 px-5 py-3 flex items-center justify-between bg-slate-50">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">Customer Details</span>
+                        <span className="text-red-400 text-sm font-bold">*</span>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input type="checkbox" checked={custCanBeBlank} onChange={e => setCustCanBeBlank(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                        <span className="text-xs text-slate-500">Customer details can be blank</span>
+                      </label>
+                    </div>
+                    {custCanBeBlank && (
+                      <div className="mx-5 mt-3 flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+                        <span className="material-symbols-outlined text-[14px] text-amber-500">warning</span>
+                        <p className="text-xs text-amber-700">Quote will be generated without customer details. This is for internal/draft use only.</p>
+                      </div>
+                    )}
+                    <div className="px-5 py-4">
+                      <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                        {([
+                          ['Customer',  custName,     setCustName,     'Company or customer name', true],
+                          ['Attention', custAttn,     setCustAttn,     'Contact person',            false],
+                          ['Address',   custAddress,  setCustAddress,  'Street address',            true],
+                          ['Postcode',  custPostcode, setCustPostcode, '3000',                      false],
+                          ['Phone',     custPhone,    setCustPhone,    '(03) 9000 0000',            false],
+                          ['Email',     custEmail,    setCustEmail,    'contact@company.com.au',    false],
+                        ] as [string, string, (v: string) => void, string, boolean][]).map(([label, value, setter, placeholder, required]) => (
+                          <div key={label}>
+                            <label className={`mb-1.5 block text-xs font-semibold uppercase tracking-widest ${!custCanBeBlank && required && !value ? 'text-red-400' : 'text-slate-400'}`}>
+                              {label}{required && !custCanBeBlank && <span className="ml-0.5 text-red-400">*</span>}
+                            </label>
+                            <input type="text" value={value} placeholder={placeholder} onChange={e => setter(e.target.value)}
+                              className={`w-full rounded-xl border py-2.5 px-4 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:ring-2 focus:ring-indigo-500/20 ${!custCanBeBlank && required && !value ? 'border-red-300 focus:border-red-400 bg-white' : 'border-slate-200 bg-white focus:border-indigo-400'}`} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  </div>
+
+                  {/* Line items table — full-width */}
+                  <div className="border-t border-slate-100 rounded-b-2xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-slate-900 text-white text-left text-[10px] font-semibold uppercase tracking-wider">
+                          <tr className="border-b border-slate-700">
+                            <th rowSpan={2} className="px-3 py-2.5 w-8 align-middle">#</th>
+                            <th rowSpan={2} className="px-2 py-2.5 w-36 align-middle">Item</th>
+                            <th colSpan={3} className="px-2 pt-2.5 pb-0 text-center border-b border-slate-700">Description</th>
+                            <th rowSpan={2} className="px-2 py-2.5 w-12 text-center align-middle">Qty</th>
+                            <th rowSpan={2} className="px-2 py-2.5 w-24 text-right align-middle">Unit Price</th>
+                            <th rowSpan={2} className="px-2 py-2.5 w-24 text-right align-middle">Total</th>
+                            <th rowSpan={2} className="px-2 py-2.5 w-8 align-middle">
+                              <button type="button" onClick={() => setPartsItems(prev => [...prev, emptyPartsItem()])}
+                                title="Add row"
+                                className="flex items-center gap-0.5 rounded-md bg-white/15 hover:bg-white/30 px-1.5 py-1 text-[10px] font-semibold text-white transition mx-auto">
+                                <span className="material-symbols-outlined text-[13px]">add</span>
+                              </button>
+                            </th>
+                          </tr>
+                          <tr className="border-b border-slate-600 text-[9px] text-slate-300 font-medium">
+                            <th className="px-2 pb-1.5" />
+                            <th className="px-2 pb-1.5 w-20 text-center">Width</th>
+                            <th className="px-2 pb-1.5 w-20 text-center">Height</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {partsItems.map((it, i) => (
+                            <tr key={i} className="border-b border-slate-100 hover:bg-slate-50/60">
+                              <td className="px-2 py-1.5 text-slate-400">{i + 1}</td>
+                              <td className="px-2 py-1.5">
+                                <input type="text" value={it.item} onChange={e => updatePartsItem(i, 'item', e.target.value)}
+                                  placeholder="Item name" className="w-full rounded border border-slate-200 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="text" value={it.description} onChange={e => updatePartsItem(i, 'description', e.target.value)}
+                                  placeholder="Description" className="w-full rounded border border-slate-200 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="text" value={it.width} onChange={e => updatePartsItem(i, 'width', e.target.value)}
+                                  placeholder="—" className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-center focus:border-indigo-400 focus:outline-none" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="text" value={it.height} onChange={e => updatePartsItem(i, 'height', e.target.value)}
+                                  placeholder="—" className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-center focus:border-indigo-400 focus:outline-none" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="number" min={1} value={it.qty} onChange={e => updatePartsItem(i, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
+                                  className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-center focus:border-indigo-400 focus:outline-none" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="number" min={0} step={0.01} value={it.unitPrice || ''} onChange={e => updatePartsItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                  placeholder="0.00" className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-right focus:border-indigo-400 focus:outline-none" />
+                              </td>
+                              <td className="px-2 py-1.5 text-right font-medium text-slate-700 tabular-nums">
+                                {it.qty * it.unitPrice > 0 ? fmtP(it.qty * it.unitPrice) : '—'}
+                              </td>
+                              <td className="px-1 py-1.5">
+                                <button type="button" onClick={() => setPartsItems(prev => prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i))}
+                                  className="rounded p-0.5 text-slate-300 hover:bg-red-50 hover:text-red-500">
+                                  <span className="material-symbols-outlined text-[14px]">close</span>
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {/* Totals */}
+                    <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 flex justify-end">
+                      <div className="w-48 space-y-1 text-xs">
+                        <div className="flex justify-between text-slate-600"><span>Subtotal</span><span className="tabular-nums font-medium">{fmtP(partsSubtotal)}</span></div>
+                        <div className="flex justify-between text-slate-500"><span>GST (10%)</span><span className="tabular-nums">{fmtP(partsSubtotal * 0.1)}</span></div>
+                        <div className="flex justify-between rounded-lg bg-slate-800 px-2.5 py-1.5 text-white font-semibold"><span>TOTAL</span><span className="tabular-nums">{fmtP(partsSubtotal * 1.1)}</span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* End User T&C selector */}
+                  <div className="px-6 pt-5">
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-slate-400">
+                        End User <span className="normal-case font-normal text-slate-400">— selects which T&amp;C document is appended</span>
+                      </label>
+                      <div className="grid grid-cols-3 gap-3">
+                        {(['CUSTOMER', 'DISTRIBUTOR', 'TENDER'] as const).map(type => (
+                          <button key={type} type="button"
+                            onClick={() => setPartsEndUser(prev => prev === type ? '' : type)}
+                            className={`flex items-center justify-center gap-2 rounded-xl border py-3 text-sm font-semibold transition ${
+                              partsEndUser === type
+                                ? 'border-indigo-500 bg-indigo-600 text-white shadow-sm'
+                                : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50'
+                            }`}>
+                            <span className="material-symbols-outlined text-[18px]">
+                              {type === 'CUSTOMER' ? 'person' : type === 'DISTRIBUTOR' ? 'local_shipping' : 'gavel'}
+                            </span>
+                            {type.charAt(0) + type.slice(1).toLowerCase()}
+                          </button>
+                        ))}
+                      </div>
+                      {!partsEndUser && (
+                        <p className="mt-1.5 text-[11px] text-slate-400 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[13px]">info</span>
+                          No T&amp;C will be appended if no end user is selected.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Quote Disclaimer */}
+                  <div className="px-6 pt-4 pb-2">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Quote Disclaimer</span>
+                        {!editingPartsTerms ? (
+                          <button type="button" onClick={() => { setTempPartsTerms(partsTerms || DEFAULT_PARTS_TERMS); setEditingPartsTerms(true) }}
+                            className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition">
+                            <span className="material-symbols-outlined text-[14px]">edit</span>Edit
+                          </button>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <button type="button" onClick={() => { setPartsTerms(tempPartsTerms); setEditingPartsTerms(false) }}
+                              className="flex items-center gap-1 rounded-lg bg-indigo-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-indigo-700 transition">
+                              <span className="material-symbols-outlined text-[13px]">check</span>Save
+                            </button>
+                            <button type="button" onClick={() => setEditingPartsTerms(false)}
+                              className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition">
+                              Cancel
+                            </button>
+                            {partsTerms && (
+                              <button type="button" onClick={() => { setPartsTerms(''); setEditingPartsTerms(false) }}
+                                className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-red-400 hover:bg-red-50 transition">
+                                Reset
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {editingPartsTerms ? (
+                        <textarea rows={4} value={tempPartsTerms} onChange={e => setTempPartsTerms(e.target.value)}
+                          className="w-full rounded-lg border border-indigo-300 bg-white px-3 py-2 text-[12px] text-slate-700 shadow-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 resize-y" />
+                      ) : (
+                        <p className="text-[12px] text-slate-500 leading-relaxed whitespace-pre-wrap">
+                          {partsTerms || DEFAULT_PARTS_TERMS}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Generate button */}
+                  <div className="px-6 pt-3 pb-6">
+                  <button type="button"
+                    disabled={generating || (!custCanBeBlank && !customerFilled)}
+                    onClick={handleGenerateParts}
+                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    title={!custCanBeBlank && !customerFilled ? 'Customer name and address are required' : undefined}>
+                    {generating
+                      ? <><span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>Generating…</>
+                      : <><span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>{showPreview ? 'Regenerate Quote' : 'Generate Quote'}</>
+                    }
+                  </button>
+                  </div>
+                </div>
+              )
+          })()}
+
+          {/* ── General quote form ── */}
+          {isGeneral && (() => {
+              const generalSubtotal = generalItems.reduce((s, it) => s + it.qty * it.unitPrice, 0)
+              const fmtG = (n: number) => n === 0 ? '$0.00' : `$${n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              return (
+                <div className="space-y-0 divide-y divide-slate-100">
+
+                  {/* ── Sender / Company Info ── */}
+                  <div className="px-6 pt-5 pb-5">
+                    <div className="rounded-xl border border-slate-200 overflow-hidden">
+                      <div className="border-b border-slate-100 px-5 py-3 bg-slate-50">
+                        <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">From (Sender Details)</span>
+                      </div>
+                      <div className="px-5 py-4">
+                        <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                          {([
+                            ['Company',       generalSenderName,    setGeneralSenderName,    'NBE AUSTRALIA'],
+                            ['Address',       generalSenderAddress, setGeneralSenderAddress, '22A Humeside Dr, Campbellfield VIC 3061'],
+                            ['Company Email', generalSenderEmail,   setGeneralSenderEmail,   'accountsreceivable@nbeaustralia.com.au'],
+                            ['Contact Name',  generalContactName,   setGeneralContactName,   'Andrew Newton'],
+                            ['Contact Phone', generalContactPhone,  setGeneralContactPhone,  '(04) 2705 5556'],
+                            ['Contact Email', generalContactEmail,  setGeneralContactEmail,  'anewton@nbeaustralia.com.au'],
+                          ] as [string, string, (v: string) => void, string][]).map(([label, value, setter, placeholder]) => (
+                            <div key={label}>
+                              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">{label}</label>
+                              <input type="text" value={value} placeholder={placeholder} onChange={e => setter(e.target.value)}
+                                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 px-4 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Customer Details ── */}
+                  <div className="px-6 pb-0 pt-5">
+                  <div className="rounded-xl border border-slate-200 overflow-hidden">
+                    <div className="border-b border-slate-100 px-5 py-3 flex items-center justify-between bg-slate-50">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">Customer Details</span>
+                        <span className="text-red-400 text-sm font-bold">*</span>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input type="checkbox" checked={custCanBeBlank} onChange={e => setCustCanBeBlank(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                        <span className="text-xs text-slate-500">Customer details can be blank</span>
+                      </label>
+                    </div>
+                    {custCanBeBlank && (
+                      <div className="mx-5 mt-3 flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+                        <span className="material-symbols-outlined text-[14px] text-amber-500">warning</span>
+                        <p className="text-xs text-amber-700">Quote will be generated without customer details. This is for internal/draft use only.</p>
+                      </div>
+                    )}
+                    <div className="px-5 py-4">
+                      <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                        {([
+                          ['Customer',  custName,     setCustName,     'Company or customer name', true],
+                          ['Attention', custAttn,     setCustAttn,     'Contact person',            false],
+                          ['Address',   custAddress,  setCustAddress,  'Street address',            true],
+                          ['Postcode',  custPostcode, setCustPostcode, '3000',                      false],
+                          ['Phone',     custPhone,    setCustPhone,    '(03) 9000 0000',            false],
+                          ['Email',     custEmail,    setCustEmail,    'contact@company.com.au',    false],
+                        ] as [string, string, (v: string) => void, string, boolean][]).map(([label, value, setter, placeholder, required]) => (
+                          <div key={label}>
+                            <label className={`mb-1.5 block text-xs font-semibold uppercase tracking-widest ${!custCanBeBlank && required && !value ? 'text-red-400' : 'text-slate-400'}`}>
+                              {label}{required && !custCanBeBlank && <span className="ml-0.5 text-red-400">*</span>}
+                            </label>
+                            <input type="text" value={value} placeholder={placeholder} onChange={e => setter(e.target.value)}
+                              className={`w-full rounded-xl border py-2.5 px-4 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:ring-2 focus:ring-indigo-500/20 ${!custCanBeBlank && required && !value ? 'border-red-300 focus:border-red-400 bg-white' : 'border-slate-200 bg-white focus:border-indigo-400'}`} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  </div>
+
+                  {/* Line items table — full-width */}
+                  <div className="border-t border-slate-100 rounded-b-2xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-slate-900 text-white text-left text-[10px] font-semibold uppercase tracking-wider">
+                          <tr className="border-b border-slate-700">
+                            <th rowSpan={2} className="px-3 py-2.5 w-8 align-middle">#</th>
+                            <th rowSpan={2} className="px-2 py-2.5 w-36 align-middle">Item</th>
+                            <th colSpan={3} className="px-2 pt-2.5 pb-0 text-center border-b border-slate-700">Description</th>
+                            <th rowSpan={2} className="px-2 py-2.5 w-12 text-center align-middle">Qty</th>
+                            <th rowSpan={2} className="px-2 py-2.5 w-24 text-right align-middle">Unit Price</th>
+                            <th rowSpan={2} className="px-2 py-2.5 w-24 text-right align-middle">Total</th>
+                            <th rowSpan={2} className="px-2 py-2.5 w-8 align-middle">
+                              <button type="button" onClick={() => setGeneralItems(prev => [...prev, emptyGeneralItem()])}
+                                title="Add row"
+                                className="flex items-center gap-0.5 rounded-md bg-white/15 hover:bg-white/30 px-1.5 py-1 text-[10px] font-semibold text-white transition mx-auto">
+                                <span className="material-symbols-outlined text-[13px]">add</span>
+                              </button>
+                            </th>
+                          </tr>
+                          <tr className="border-b border-slate-600 text-[9px] text-slate-300 font-medium">
+                            <th className="px-2 pb-1.5" />
+                            <th className="px-2 pb-1.5 w-20 text-center">Width</th>
+                            <th className="px-2 pb-1.5 w-20 text-center">Height</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {generalItems.map((it, i) => (
+                            <tr key={i} className="border-b border-slate-100 hover:bg-slate-50/60">
+                              <td className="px-2 py-1.5 text-slate-400">{i + 1}</td>
+                              <td className="px-2 py-1.5">
+                                <input type="text" value={it.item} onChange={e => updateGeneralItem(i, 'item', e.target.value)}
+                                  placeholder="Item name" className="w-full rounded border border-slate-200 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="text" value={it.description} onChange={e => updateGeneralItem(i, 'description', e.target.value)}
+                                  placeholder="Description" className="w-full rounded border border-slate-200 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="text" value={it.width} onChange={e => updateGeneralItem(i, 'width', e.target.value)}
+                                  placeholder="—" className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-center focus:border-indigo-400 focus:outline-none" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="text" value={it.height} onChange={e => updateGeneralItem(i, 'height', e.target.value)}
+                                  placeholder="—" className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-center focus:border-indigo-400 focus:outline-none" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="number" min={1} value={it.qty} onChange={e => updateGeneralItem(i, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
+                                  className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-center focus:border-indigo-400 focus:outline-none" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="number" min={0} step={0.01} value={it.unitPrice || ''} onChange={e => updateGeneralItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                  placeholder="0.00" className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-right focus:border-indigo-400 focus:outline-none" />
+                              </td>
+                              <td className="px-2 py-1.5 text-right font-medium text-slate-700 tabular-nums">
+                                {it.qty * it.unitPrice > 0 ? fmtG(it.qty * it.unitPrice) : '—'}
+                              </td>
+                              <td className="px-1 py-1.5">
+                                <button type="button" onClick={() => setGeneralItems(prev => prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i))}
+                                  className="rounded p-0.5 text-slate-300 hover:bg-red-50 hover:text-red-500">
+                                  <span className="material-symbols-outlined text-[14px]">close</span>
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {/* Totals */}
+                    <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 flex justify-end">
+                      <div className="w-48 space-y-1 text-xs">
+                        <div className="flex justify-between text-slate-600"><span>Subtotal</span><span className="tabular-nums font-medium">{fmtG(generalSubtotal)}</span></div>
+                        <div className="flex justify-between text-slate-500"><span>GST (10%)</span><span className="tabular-nums">{fmtG(generalSubtotal * 0.1)}</span></div>
+                        <div className="flex justify-between rounded-lg bg-slate-800 px-2.5 py-1.5 text-white font-semibold"><span>TOTAL</span><span className="tabular-nums">{fmtG(generalSubtotal * 1.1)}</span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* End User T&C selector */}
+                  <div className="px-6 pt-5">
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-slate-400">
+                        End User <span className="normal-case font-normal text-slate-400">— selects which T&amp;C document is appended</span>
+                      </label>
+                      <div className="grid grid-cols-3 gap-3">
+                        {(['CUSTOMER', 'DISTRIBUTOR', 'TENDER'] as const).map(type => (
+                          <button key={type} type="button"
+                            onClick={() => setGeneralEndUser(prev => prev === type ? '' : type)}
+                            className={`flex items-center justify-center gap-2 rounded-xl border py-3 text-sm font-semibold transition ${
+                              generalEndUser === type
+                                ? 'border-indigo-500 bg-indigo-600 text-white shadow-sm'
+                                : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50'
+                            }`}>
+                            <span className="material-symbols-outlined text-[18px]">
+                              {type === 'CUSTOMER' ? 'person' : type === 'DISTRIBUTOR' ? 'local_shipping' : 'gavel'}
+                            </span>
+                            {type.charAt(0) + type.slice(1).toLowerCase()}
+                          </button>
+                        ))}
+                      </div>
+                      {!generalEndUser && (
+                        <p className="mt-1.5 text-[11px] text-slate-400 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[13px]">info</span>
+                          No T&amp;C will be appended if no end user is selected.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Quote Disclaimer */}
+                  <div className="px-6 pt-4 pb-2">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Quote Disclaimer</span>
+                        {!editingGeneralTerms ? (
+                          <button type="button" onClick={() => { setTempGeneralTerms(generalTerms || DEFAULT_GENERAL_TERMS); setEditingGeneralTerms(true) }}
+                            className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition">
+                            <span className="material-symbols-outlined text-[14px]">edit</span>Edit
+                          </button>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <button type="button" onClick={() => { setGeneralTerms(tempGeneralTerms); setEditingGeneralTerms(false) }}
+                              className="flex items-center gap-1 rounded-lg bg-indigo-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-indigo-700 transition">
+                              <span className="material-symbols-outlined text-[13px]">check</span>Save
+                            </button>
+                            <button type="button" onClick={() => setEditingGeneralTerms(false)}
+                              className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition">
+                              Cancel
+                            </button>
+                            {generalTerms && (
+                              <button type="button" onClick={() => { setGeneralTerms(''); setEditingGeneralTerms(false) }}
+                                className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-red-400 hover:bg-red-50 transition">
+                                Reset
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {editingGeneralTerms ? (
+                        <textarea rows={4} value={tempGeneralTerms} onChange={e => setTempGeneralTerms(e.target.value)}
+                          className="w-full rounded-lg border border-indigo-300 bg-white px-3 py-2 text-[12px] text-slate-700 shadow-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 resize-y" />
+                      ) : (
+                        <p className="text-[12px] text-slate-500 leading-relaxed whitespace-pre-wrap">
+                          {generalTerms || DEFAULT_GENERAL_TERMS}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Generate button */}
+                  <div className="px-6 pt-3 pb-6">
+                  <button type="button"
+                    disabled={generating || (!custCanBeBlank && !customerFilled)}
+                    onClick={handleGenerateGeneral}
+                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    title={!custCanBeBlank && !customerFilled ? 'Customer name and address are required' : undefined}>
+                    {generating
+                      ? <><span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>Generating…</>
+                      : <><span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>{showPreview ? 'Regenerate Quote' : 'Generate Quote'}</>
+                    }
+                  </button>
+                  </div>
+                </div>
+              )
+          })()}
+
+          {/* ── PVC Flex System ─────────────────────────────────────────── */}
+          {isPvcFlex && (() => {
+            // Inline price preview calculator (mirrors pvcNewQuoteCalculator.ts)
+            const pvcCalcPreview = (w: number, h: number) => {
+              if (!w || !h) return null
+              const PVC_COST: Record<string, number> = { '100|2|Ambient':0.6552,'100|2|Freezer':0.6908,'150|2|Ambient':0.9828,'150|2|Freezer':1.0356,'200|2|Ambient':1.3104,'200|2|Freezer':1.3808,'200|3|Ambient':1.9656,'200|3|Freezer':2.0716,'300|3|Ambient':2.9484,'300|3|Freezer':3.1072,'400|3|Ambient':3.9312,'400|3|Freezer':4.142932 }
+              const HANGER: Record<string, number> = { '150|Galvanised':1.1158,'150|Stainless Steel':1.5358,'200|Galvanised':1.3347,'200|Stainless Steel':1.87475,'300|Galvanised':2.51265,'300|Stainless Steel':2.73265 }
+              const HEADRAIL: Record<string, number> = { 'Galvanised':7.4267,'Stainless Steel':16.08 }
+              const SLIDING: Record<string, number> = { 'NA':0,'Single':372.63,'Dual':846.82 }
+              const pitch = pvcStripW === 100 ? 150 : pvcStripW - 50
+              const nStrips = Math.ceil((w + 50) / pitch)
+              const cutLen = h + 40
+              const pvcLen = nStrips * cutLen / 1000
+              const coverage = (nStrips * pitch + 50) / 1000
+              const inc = Math.ceil(coverage / 3)
+              const pvcCost = pvcSupply !== 'Headrail Only' ? pvcLen * 1.05 * (PVC_COST[`${pvcStripW}|${pvcThick}|${pvcGrade}`] ?? 0) : 0
+              const hW = pvcStripW === 100 ? 150 : pvcStripW === 400 ? 300 : pvcStripW
+              const hangerCost = pvcSupply !== 'Headrail Only' ? nStrips * (HANGER[`${hW}|${pvcHanger}`] ?? 0) : 0
+              const headrailCost = pvcSupply !== 'Strip Curtain Only' ? coverage * 1.20 * (HEADRAIL[pvcHanger] ?? 0) : 0
+              const raisedCost = pvcRaisedHR ? (w >= 4500 ? 305.84 : 229.84) : 0
+              const slidingCost = SLIDING[pvcSliding] ?? 0
+              const pkg = inc * 6
+              let labour = 15 / 60
+              if (pvcSupply !== 'Headrail Only') labour += nStrips * 3 / 60
+              if (pvcSupply !== 'Strip Curtain Only') labour += inc * 12.5 / 60
+              if (pvcSliding !== 'NA') labour += inc * 12.5 / 60
+              if (pvcRaisedHR) labour += w >= 4500 ? 6 : 3.5
+              const disc = parseFloat(pvcDiscountPct) || 0
+              const matSell = (pvcCost + hangerCost + headrailCost) * 3
+              const nonMatSell = (raisedCost + slidingCost + pkg + labour * 75) * 3
+              const unitPrice = matSell * (1 - disc / 100) + nonMatSell
+              return { unitPrice: Math.round(unitPrice * 100) / 100, nStrips, coverage: Math.round(coverage * 100) / 100 }
+            }
+            const pvcCalcSaved = (d: PvcFlexDoorItem) => {
+              const w = parseFloat(d.openingW) || 0; const h = parseFloat(d.openingH) || 0
+              if (!w || !h) return null
+              const PVC_COST: Record<string, number> = { '100|2|Ambient':0.6552,'100|2|Freezer':0.6908,'150|2|Ambient':0.9828,'150|2|Freezer':1.0356,'200|2|Ambient':1.3104,'200|2|Freezer':1.3808,'200|3|Ambient':1.9656,'200|3|Freezer':2.0716,'300|3|Ambient':2.9484,'300|3|Freezer':3.1072,'400|3|Ambient':3.9312,'400|3|Freezer':4.142932 }
+              const HANGER: Record<string, number> = { '150|Galvanised':1.1158,'150|Stainless Steel':1.5358,'200|Galvanised':1.3347,'200|Stainless Steel':1.87475,'300|Galvanised':2.51265,'300|Stainless Steel':2.73265 }
+              const HEADRAIL: Record<string, number> = { 'Galvanised':7.4267,'Stainless Steel':16.08 }
+              const SLIDING: Record<string, number> = { 'NA':0,'Single':372.63,'Dual':846.82 }
+              const pitch = d.stripWidth === 100 ? 150 : d.stripWidth - 50
+              const nStrips = Math.ceil((w + 50) / pitch)
+              const coverage = (nStrips * pitch + 50) / 1000
+              const inc = Math.ceil(coverage / 3)
+              const pvcCost = d.supplyType !== 'Headrail Only' ? (nStrips * (h + 40) / 1000) * 1.05 * (PVC_COST[`${d.stripWidth}|${d.thickness}|${d.grade}`] ?? 0) : 0
+              const hW = d.stripWidth === 100 ? 150 : d.stripWidth === 400 ? 300 : d.stripWidth
+              const hangerCost = d.supplyType !== 'Headrail Only' ? nStrips * (HANGER[`${hW}|${d.hanger}`] ?? 0) : 0
+              const headrailCost = d.supplyType !== 'Strip Curtain Only' ? coverage * 1.20 * (HEADRAIL[d.hanger] ?? 0) : 0
+              const raisedCost = d.raisedHeadrail ? (w >= 4500 ? 305.84 : 229.84) : 0
+              const slidingCost = SLIDING[d.sliding] ?? 0; const pkg = inc * 6
+              let labour = 15 / 60
+              if (d.supplyType !== 'Headrail Only') labour += nStrips * 3 / 60
+              if (d.supplyType !== 'Strip Curtain Only') labour += inc * 12.5 / 60
+              if (d.sliding !== 'NA') labour += inc * 12.5 / 60
+              if (d.raisedHeadrail) labour += w >= 4500 ? 6 : 3.5
+              const disc = parseFloat(pvcDiscountPct) || 0
+              const matSell = (pvcCost + hangerCost + headrailCost) * 3
+              const nonMatSell = (raisedCost + slidingCost + pkg + labour * 75) * 3
+              const unitPrice = matSell * (1 - disc / 100) + nonMatSell
+              return Math.round(unitPrice * 100) / 100
+            }
+            const pvcDiscN = parseFloat(pvcDiscountPct) || 0
+            const pvcDelivN = parseFloat(pvcDelivery) || 0
+            const pvcInstN = parseFloat(pvcInstallation) || 0
+            const activeWn = parseFloat(pvcW) || 0; const activeHn = parseFloat(pvcH) || 0
+            const activePreview = pvcCalcPreview(activeWn, activeHn)
+            const savedDoorsSubtotal = savedPvcDoors.reduce((s, d) => { const p = pvcCalcSaved(d); return s + (p ? p * d.qty : 0) }, 0)
+            const activeSubtotal = activePreview && activeWn && activeHn ? activePreview.unitPrice * (parseInt(pvcQtyStr) || 1) : 0
+            const pvcGrandTotal = savedDoorsSubtotal + activeSubtotal + pvcDelivN + pvcInstN
+            const hasAnyDoor = savedPvcDoors.length > 0 || (!!pvcW && !!pvcH)
+            const canGeneratePvc = !generating && hasAnyDoor && (custCanBeBlank || customerFilled)
+            return (
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+
+                {/* ── Sender Details ── */}
+                <div className="px-6 pt-6 pb-4 border-b border-slate-100">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-4">Sender Details</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div><label className={LABEL_CLS}>Company Name</label><input type="text" value={pvcSenderName} onChange={e => setPvcSenderName(e.target.value)} className={INPUT_CLS} /></div>
+                    <div><label className={LABEL_CLS}>Address</label><input type="text" value={pvcSenderAddress} onChange={e => setPvcSenderAddress(e.target.value)} className={INPUT_CLS} /></div>
+                    <div><label className={LABEL_CLS}>Email</label><input type="text" value={pvcSenderEmail} onChange={e => setPvcSenderEmail(e.target.value)} className={INPUT_CLS} /></div>
+                    <div><label className={LABEL_CLS}>Contact Name</label><input type="text" value={pvcContactName} onChange={e => setPvcContactName(e.target.value)} className={INPUT_CLS} /></div>
+                    <div><label className={LABEL_CLS}>Contact Phone</label><input type="text" value={pvcContactPhone} onChange={e => setPvcContactPhone(e.target.value)} className={INPUT_CLS} /></div>
+                    <div><label className={LABEL_CLS}>Contact Email</label><input type="text" value={pvcContactEmail} onChange={e => setPvcContactEmail(e.target.value)} className={INPUT_CLS} /></div>
+                  </div>
+                </div>
+
+                {/* ── Customer Details ── */}
+                <div className="px-6 py-4 border-b border-slate-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Customer Details</h3>
+                    <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer select-none">
+                      <input type="checkbox" checked={custCanBeBlank} onChange={e => setCustCanBeBlank(e.target.checked)} className="rounded" />
+                      Can be blank
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div><label className={custCanBeBlank ? LABEL_CLS : LABEL_REQ_CLS}>Customer / Company Name</label><input type="text" value={custName} onChange={e => setCustName(e.target.value)} className={INPUT_CLS} /></div>
+                    <div><label className={LABEL_CLS}>Attention (Contact Person)</label><input type="text" value={custAttn} onChange={e => setCustAttn(e.target.value)} className={INPUT_CLS} /></div>
+                    <div><label className={custCanBeBlank ? LABEL_CLS : LABEL_REQ_CLS}>Site / Postal Address</label><input type="text" value={custAddress} onChange={e => setCustAddress(e.target.value)} className={INPUT_CLS} /></div>
+                    <div><label className={LABEL_CLS}>Postcode</label><input type="text" value={custPostcode} onChange={e => setCustPostcode(e.target.value)} className={INPUT_CLS} /></div>
+                    <div><label className={LABEL_CLS}>Phone</label><input type="text" value={custPhone} onChange={e => setCustPhone(e.target.value)} className={INPUT_CLS} /></div>
+                    <div><label className={LABEL_CLS}>Email</label><input type="text" value={custEmail} onChange={e => setCustEmail(e.target.value)} className={INPUT_CLS} /></div>
+                  </div>
+                </div>
+
+                {/* ── Saved door chips ── */}
+                {savedPvcDoors.length > 0 && (
+                  <div className="px-6 pt-4 pb-2 flex flex-wrap gap-2 items-center border-b border-slate-100">
+                    <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Doors in this quote:</span>
+                    {savedPvcDoors.map((d, i) => {
+                      const price = pvcCalcSaved(d)
+                      return (
+                        <div key={d.id} className="flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 pl-3 pr-2 py-1">
+                          <span className="text-xs font-semibold text-teal-700">Door {i + 1}</span>
+                          <span className="text-[10px] text-teal-600">{d.openingW}×{d.openingH}mm · {d.stripWidth}mm</span>
+                          {price && <span className="text-[10px] text-teal-500 font-mono">${price.toLocaleString('en-AU', { minimumFractionDigits: 2 })}</span>}
+                          <button type="button" onClick={() => editSavedPvcDoor(d.id)} title="Edit" className="ml-0.5 text-teal-400 hover:text-teal-700 transition">
+                            <span className="material-symbols-outlined text-[14px]">edit</span>
+                          </button>
+                          <button type="button" onClick={() => removeSavedPvcDoor(d.id)} title="Remove" className="text-teal-300 hover:text-red-500 transition">
+                            <span className="material-symbols-outlined text-[14px]">close</span>
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* ── Active door form (rapid-door style) ── */}
+                <div className="px-6 py-5 border-b border-slate-100 space-y-5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                      {savedPvcDoors.length > 0 ? `Door ${savedPvcDoors.length + 1} Specification` : 'Door Specification'}
+                    </h3>
+                    <span className="text-[11px] text-slate-400">Price auto-calculated from dimensions &amp; specs</span>
+                  </div>
+
+                  {/* Opening dimensions + Qty */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className={LABEL_REQ_CLS}>Opening Width <span className="normal-case font-normal after:content-none">(mm)</span></label>
+                      <input type="number" min={0} placeholder="e.g. 2000" value={pvcW} onChange={e => setPvcW(e.target.value)} className={INPUT_CLS} />
+                    </div>
+                    <div>
+                      <label className={LABEL_REQ_CLS}>Opening Height <span className="normal-case font-normal after:content-none">(mm)</span></label>
+                      <input type="number" min={0} placeholder="e.g. 2500" value={pvcH} onChange={e => setPvcH(e.target.value)} className={INPUT_CLS} />
+                    </div>
+                    <div>
+                      <label className={LABEL_CLS}>Qty</label>
+                      <input type="number" min={1} value={pvcQtyStr} onChange={e => setPvcQtyStr(e.target.value)} className={INPUT_CLS} />
+                    </div>
+                  </div>
+
+                  {/* Strip Width + Thickness */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className={LABEL_REQ_CLS}>Strip Width</label>
+                      <SelectWrapper>
+                        <select value={pvcStripW} onChange={e => { const sw = Number(e.target.value); setPvcStripW(sw); if (sw >= 300) setPvcThick(3); else if (sw < 200) setPvcThick(2) }} className={SELECT_CLS}>
+                          <option value={100}>100 mm</option>
+                          <option value={150}>150 mm</option>
+                          <option value={200}>200 mm</option>
+                          <option value={300}>300 mm</option>
+                          <option value={400}>400 mm</option>
+                        </select>
+                      </SelectWrapper>
+                    </div>
+                    <div>
+                      <label className={LABEL_REQ_CLS}>Thickness</label>
+                      <SelectWrapper>
+                        <select value={pvcThick} onChange={e => setPvcThick(Number(e.target.value))} className={SELECT_CLS}>
+                          {(pvcStripW === 200 ? [2, 3] : pvcStripW >= 300 ? [3] : [2]).map(t => (
+                            <option key={t} value={t}>{t} mm</option>
+                          ))}
+                        </select>
+                      </SelectWrapper>
+                    </div>
+                  </div>
+
+                  {/* Grade + Profile */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className={LABEL_REQ_CLS}>Grade</label>
+                      <SelectWrapper>
+                        <select value={pvcGrade} onChange={e => { const g = e.target.value as 'Ambient'|'Freezer'; setPvcGrade(g); if (g === 'Freezer') setPvcProfile('Ribbed') }} className={SELECT_CLS}>
+                          <option value="Ambient">Ambient</option>
+                          <option value="Freezer">Freezer</option>
+                        </select>
+                      </SelectWrapper>
+                    </div>
+                    <div>
+                      <label className={LABEL_REQ_CLS}>Profile</label>
+                      <SelectWrapper>
+                        <select value={pvcProfile} onChange={e => setPvcProfile(e.target.value as 'Ribbed'|'Flat'|'Coloured')} className={SELECT_CLS}>
+                          <option value="Ribbed">Ribbed</option>
+                          {pvcGrade !== 'Freezer' && <option value="Flat">Flat</option>}
+                          {pvcGrade !== 'Freezer' && (pvcStripW === 100 || pvcStripW === 200) && <option value="Coloured">Coloured</option>}
+                        </select>
+                      </SelectWrapper>
+                    </div>
+                  </div>
+
+                  {/* Hanger Material + Supply Type */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className={LABEL_REQ_CLS}>Hanger &amp; Headrail Material</label>
+                      <SelectWrapper>
+                        <select value={pvcHanger} onChange={e => setPvcHanger(e.target.value as 'Galvanised'|'Stainless Steel')} className={SELECT_CLS}>
+                          <option value="Galvanised">Galvanised</option>
+                          <option value="Stainless Steel">Stainless Steel</option>
+                        </select>
+                      </SelectWrapper>
+                    </div>
+                    <div>
+                      <label className={LABEL_REQ_CLS}>Supply Type</label>
+                      <SelectWrapper>
+                        <select value={pvcSupply} onChange={e => setPvcSupply(e.target.value as 'Complete Door'|'Strip Curtain Only'|'Headrail Only')} className={SELECT_CLS}>
+                          <option value="Complete Door">Complete Door (strips + headrail)</option>
+                          <option value="Strip Curtain Only">Strip Curtain Only</option>
+                          <option value="Headrail Only">Headrail Only</option>
+                        </select>
+                      </SelectWrapper>
+                    </div>
+                  </div>
+
+                  {/* Mounting Type + Sliding System */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className={LABEL_CLS}>Mounting Type</label>
+                      <SelectWrapper>
+                        <select value={pvcMount} onChange={e => setPvcMount(e.target.value as 'Face Fixed'|'Soffit Fixed')} className={SELECT_CLS}>
+                          <option value="Face Fixed">Face Fixed</option>
+                          <option value="Soffit Fixed">Soffit Fixed</option>
+                        </select>
+                      </SelectWrapper>
+                    </div>
+                    <div>
+                      <label className={LABEL_CLS}>Sliding System</label>
+                      <SelectWrapper>
+                        <select value={pvcSliding} onChange={e => setPvcSliding(e.target.value as 'NA'|'Single'|'Dual')} className={SELECT_CLS}>
+                          <option value="NA">None</option>
+                          <option value="Single">Single Sliding</option>
+                          <option value="Dual">Dual Sliding</option>
+                        </select>
+                      </SelectWrapper>
+                    </div>
+                  </div>
+
+                  {/* Raised Headrail */}
+                  <label className="flex items-center gap-3 cursor-pointer select-none">
+                    <input type="checkbox" checked={pvcRaisedHR} onChange={e => setPvcRaisedHR(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                    <span className="text-sm font-medium text-slate-700">Raised Headrail Structure</span>
+                    <span className="text-xs text-slate-400">(auto-selects M or L based on opening width)</span>
+                  </label>
+
+                  {/* Calculated unit price badge */}
+                  {activePreview && (
+                    <div className="flex items-center gap-4 rounded-xl border border-teal-200 bg-teal-50 px-5 py-3">
+                      <span className="material-symbols-outlined text-teal-500 text-xl">calculate</span>
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-widest text-teal-600">Calculated Unit Price</p>
+                        <p className="text-2xl font-bold text-teal-700">${activePreview.unitPrice.toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
+                      </div>
+                      <div className="ml-auto text-right text-xs text-teal-500">
+                        <p>{activePreview.nStrips} strips · {activePreview.coverage}m rail</p>
+                        {pvcDiscN > 0 && <p className="font-medium">{pvcDiscN}% material discount applied</p>}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lock & Add Another button — always visible */}
+                  <button type="button" onClick={lockAndAddPvcDoor} disabled={!pvcW || !pvcH}
+                    className="inline-flex items-center gap-2 rounded-xl border border-dashed border-teal-400 px-5 py-2.5 text-sm font-medium text-teal-700 hover:bg-teal-50 transition disabled:opacity-40 disabled:cursor-not-allowed">
+                    <span className="material-symbols-outlined text-[18px]">add_circle</span>
+                    Lock Door {savedPvcDoors.length + 1} &amp; Add Another Door
+                  </button>
+                </div>
+
+                {/* ── Quote Settings ── */}
+                <div className="px-6 py-5 border-b border-slate-100 space-y-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Quote Settings</h3>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className={LABEL_CLS}>
+                        Discount % on Material
+                        <Tip text="Applies to PVC strip + hanger + headrail costs only. Does NOT apply to installation, delivery, sliding systems, raised headrail, packaging or labour." />
+                      </label>
+                      <div className="relative">
+                        <input type="number" min="0" max="100" step="1" value={pvcDiscountPct} onChange={e => setPvcDiscountPct(e.target.value)} placeholder="0" className={INPUT_CLS + ' pr-8'} />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-semibold">%</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className={LABEL_CLS}>Installation Fee ($)</label>
+                      <input type="number" min="0" value={pvcInstallation} onChange={e => setPvcInstallation(e.target.value)} placeholder="0.00" className={INPUT_CLS} />
+                    </div>
+                    <div>
+                      <label className={LABEL_CLS}>Delivery Fee ($)</label>
+                      <input type="number" min="0" value={pvcDelivery} onChange={e => setPvcDelivery(e.target.value)} placeholder="0.00" className={INPUT_CLS} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Quote Total ── */}
+                <div className="px-6 py-4 border-b border-slate-100">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">Quote Total</h3>
+                  <div className="rounded-xl overflow-hidden border border-slate-200">
+                    <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-200">
+                      <span className="text-sm text-slate-500">Subtotal (ex GST)</span>
+                      <span className="font-semibold text-slate-800 font-mono">${pvcGrandTotal.toLocaleString('en-AU', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-200">
+                      <span className="text-sm text-slate-500">GST (10%)</span>
+                      <span className="text-slate-600 font-mono">${(pvcGrandTotal * 0.1).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-5 py-4 bg-indigo-600">
+                      <span className="text-sm font-bold text-indigo-100 uppercase tracking-wide">Total inc. GST</span>
+                      <span className="text-2xl font-bold text-white font-mono">${(pvcGrandTotal * 1.1).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── T&C End User ── */}
+                <div className="px-6 py-4 border-b border-slate-100">
+                  <label className={LABEL_CLS}>Terms & Conditions — End User Type</label>
+                  <div className="flex gap-3 flex-wrap">
+                    {(['CUSTOMER','DISTRIBUTOR','TENDER'] as const).map(eu => (
+                      <button key={eu} type="button"
+                        onClick={() => setPvcEndUser(prev => prev === eu ? '' : eu)}
+                        className={`rounded-xl border px-4 py-2 text-xs font-semibold transition ${pvcEndUser === eu ? 'border-teal-500 bg-teal-50 text-teal-700' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'}`}>
+                        {eu}
+                      </button>
+                    ))}
+                    {!pvcEndUser && (
+                      <p className="flex items-center gap-1 text-[11px] text-slate-400 self-center">
+                        <span className="material-symbols-outlined text-[13px]">info</span>
+                        No T&amp;C will be appended if no end user is selected.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Quote Disclaimer ── */}
+                <div className="px-6 pt-4 pb-2">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Quote Disclaimer</span>
+                      {!editingPvcTerms ? (
+                        <button type="button" onClick={() => { setTempPvcTerms(pvcTerms || DEFAULT_PVC_TERMS); setEditingPvcTerms(true) }}
+                          className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition">
+                          <span className="material-symbols-outlined text-[13px]">edit</span>Edit
+                        </button>
+                      ) : (
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => { setPvcTerms(tempPvcTerms); setEditingPvcTerms(false) }}
+                            className="flex items-center gap-1 rounded-lg bg-indigo-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-indigo-700 transition">
+                            <span className="material-symbols-outlined text-[13px]">check</span>Save
+                          </button>
+                          <button type="button" onClick={() => setEditingPvcTerms(false)}
+                            className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition">
+                            <span className="material-symbols-outlined text-[13px]">close</span>Cancel
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {editingPvcTerms ? (
+                      <textarea rows={4} value={tempPvcTerms} onChange={e => setTempPvcTerms(e.target.value)}
+                        className="w-full rounded-lg border border-indigo-300 bg-white px-3 py-2 text-[12px] text-slate-700 shadow-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 resize-y" />
+                    ) : (
+                      <p className="text-[12px] text-slate-500 leading-relaxed whitespace-pre-wrap">
+                        {pvcTerms || DEFAULT_PVC_TERMS}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Generate button ── */}
+                <div className="px-6 pt-3 pb-6">
+                  <button type="button"
+                    disabled={!canGeneratePvc}
+                    onClick={handleGeneratePvcFlex}
+                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    title={!hasAnyDoor ? 'Enter at least one door opening size' : (!custCanBeBlank && !customerFilled) ? 'Customer name and address are required' : undefined}>
+                    {generating
+                      ? <><span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>Generating…</>
+                      : <><span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>{showPreview ? 'Regenerate Quote' : 'Generate Quote'}</>
+                    }
+                  </button>
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* ── Rapid door / other type fields — back inside px-6 padding ── */}
+          {!isMaintenance && !isGeneral && !isParts && !isPvcFlex && (
+          <div className="px-6 pb-6 space-y-5">
 
             {/* Door Type + Door Model — two columns */}
             {isRapidDoor && (
@@ -1350,6 +2847,7 @@ const autoDescLines = [
               </div>
             )}
           </div>
+          )}{/* end !isMaintenance && !isGeneral && !isParts wrapper */}
         </div>
 
         {/* ── RIGHT: door preview + pricing ─────────────────────────────────── */}
@@ -1659,7 +3157,14 @@ const autoDescLines = [
               <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Demolition</p>
               <div className="rounded-xl border border-slate-200 overflow-hidden">
                 <button type="button"
-                  onClick={() => { setDemolitionEnabled(v => !v); if (demolitionEnabled) { setDemolition(''); setDemolitionScope('') } }}
+                  onClick={() => {
+                    if (demolitionEnabled) {
+                      setDemolitionEnabled(false); setDemolition(''); setDemolitionScope('')
+                    } else {
+                      setDemolitionEnabled(true)
+                      if (!demolitionScope) setDemolitionScope('Remove the existing Door.')
+                    }
+                  }}
                   className={`flex w-full items-center justify-between gap-2 px-4 py-3 text-sm font-semibold transition ${demolitionEnabled ? 'bg-orange-500 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-[18px]">construction</span>
@@ -1836,37 +3341,6 @@ const autoDescLines = [
                 )}
               </div>}
 
-              {/* Demolition Scope of Works — only shown when demolition cost is entered */}
-              {parseFloat(demolition) > 0 && <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Demolition Scope of Works</span>
-                  {!editingScope ? (
-                    <button type="button" onClick={() => { setTempScope(quoteScope || DEFAULT_SCOPE); setEditingScope(true) }}
-                      className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition">
-                      <span className="material-symbols-outlined text-[14px]">edit</span>Edit
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-1">
-                      <button type="button" onClick={() => { saveScope(quoteNumber, tempScope); setEditingScope(false) }}
-                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-emerald-600 hover:bg-emerald-50 transition">
-                        <span className="material-symbols-outlined text-[14px]">check</span>Save
-                      </button>
-                      <button type="button" onClick={() => setEditingScope(false)}
-                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200 transition">
-                        <span className="material-symbols-outlined text-[14px]">close</span>Cancel
-                      </button>
-                    </div>
-                  )}
-                </div>
-                {editingScope ? (
-                  <textarea rows={3} value={tempScope} onChange={e => setTempScope(e.target.value)}
-                    className="w-full rounded-lg border border-indigo-300 bg-white px-3 py-2 text-[12px] text-slate-700 shadow-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 resize-y" />
-                ) : (
-                  <p className="text-[12px] text-slate-500 leading-relaxed whitespace-pre-wrap">
-                    {quoteScope || DEFAULT_SCOPE}
-                  </p>
-                )}
-              </div>}
             </div>
 
             {/* Action buttons */}
