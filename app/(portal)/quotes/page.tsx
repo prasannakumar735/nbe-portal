@@ -2215,7 +2215,7 @@ const autoDescLines = [
                                       )}
                                       {col.key === 'unitPrice' && (
                                         <input type="number" min={0} step={0.01} value={it.unitPrice || ''} onChange={e => updateMaintItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
-                                          placeholder="0.00" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-right text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                          placeholder="0.00" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-right text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                                       )}
                                       {col.key === 'total' && (
                                         <div className="text-right">
@@ -2223,7 +2223,7 @@ const autoDescLines = [
                                           <p className="text-[10px] text-slate-400 mt-0.5">Auto: qty × unit</p>
                                           <input type="number" min={0} step={0.01} value={it.overridePrice} onChange={e => updateMaintItem(i, 'overridePrice', e.target.value)}
                                             placeholder="Override $"
-                                            className={`mt-1 w-full rounded-lg border px-2 py-1 text-xs text-right outline-none focus:ring-1 transition ${it.overridePrice ? 'border-amber-400 bg-amber-50 text-amber-800 focus:border-amber-400 focus:ring-amber-500/20' : 'border-slate-200 bg-slate-50 text-slate-600 focus:border-indigo-400 focus:ring-indigo-500/20'}`} />
+                                            className={`mt-1 w-full rounded-lg border px-2 py-1 text-xs text-right outline-none focus:ring-1 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${it.overridePrice ? 'border-amber-400 bg-amber-50 text-amber-800 focus:border-amber-400 focus:ring-amber-500/20' : 'border-slate-200 bg-slate-50 text-slate-600 focus:border-indigo-400 focus:ring-indigo-500/20'}`} />
                                           {it.overridePrice && <p className="text-[10px] text-amber-500 mt-0.5">overridden</p>}
                                         </div>
                                       )}
@@ -2610,7 +2610,7 @@ const autoDescLines = [
                                       )}
                                       {col.key === 'unitPrice' && (
                                         <input type="number" min={0} step={0.01} value={it.unitPrice || ''} onChange={e => updatePartsItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
-                                          placeholder="0.00" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-right text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                          placeholder="0.00" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-right text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                                       )}
                                       {col.key === 'total' && (
                                         <div className="text-right">
@@ -2618,7 +2618,7 @@ const autoDescLines = [
                                           <p className="text-[10px] text-slate-400 mt-0.5">Auto: qty × unit</p>
                                           <input type="number" min={0} step={0.01} value={it.overridePrice} onChange={e => updatePartsItem(i, 'overridePrice', e.target.value)}
                                             placeholder="Override $"
-                                            className={`mt-1 w-full rounded-lg border px-2 py-1 text-xs text-right outline-none focus:ring-1 transition ${it.overridePrice ? 'border-amber-400 bg-amber-50 text-amber-800 focus:border-amber-400 focus:ring-amber-500/20' : 'border-slate-200 bg-slate-50 text-slate-600 focus:border-indigo-400 focus:ring-indigo-500/20'}`} />
+                                            className={`mt-1 w-full rounded-lg border px-2 py-1 text-xs text-right outline-none focus:ring-1 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${it.overridePrice ? 'border-amber-400 bg-amber-50 text-amber-800 focus:border-amber-400 focus:ring-amber-500/20' : 'border-slate-200 bg-slate-50 text-slate-600 focus:border-indigo-400 focus:ring-indigo-500/20'}`} />
                                           {it.overridePrice && <p className="text-[10px] text-amber-500 mt-0.5">overridden</p>}
                                         </div>
                                       )}
@@ -3018,7 +3018,7 @@ const autoDescLines = [
                                       )}
                                       {col.key === 'unitPrice' && (
                                         <input type="number" min={0} step={0.01} value={it.unitPrice || ''} onChange={e => updateGeneralItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
-                                          placeholder="0.00" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-right text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                          placeholder="0.00" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-right text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                                       )}
                                       {col.key === 'total' && (
                                         <div className="text-right">
@@ -3026,7 +3026,7 @@ const autoDescLines = [
                                           <p className="text-[10px] text-slate-400 mt-0.5">Auto: qty × unit</p>
                                           <input type="number" min={0} step={0.01} value={it.overridePrice} onChange={e => updateGeneralItem(i, 'overridePrice', e.target.value)}
                                             placeholder="Override $"
-                                            className={`mt-1 w-full rounded-lg border px-2 py-1 text-xs text-right outline-none focus:ring-1 transition ${it.overridePrice ? 'border-amber-400 bg-amber-50 text-amber-800 focus:border-amber-400 focus:ring-amber-500/20' : 'border-slate-200 bg-slate-50 text-slate-600 focus:border-indigo-400 focus:ring-indigo-500/20'}`} />
+                                            className={`mt-1 w-full rounded-lg border px-2 py-1 text-xs text-right outline-none focus:ring-1 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${it.overridePrice ? 'border-amber-400 bg-amber-50 text-amber-800 focus:border-amber-400 focus:ring-amber-500/20' : 'border-slate-200 bg-slate-50 text-slate-600 focus:border-indigo-400 focus:ring-indigo-500/20'}`} />
                                           {it.overridePrice && <p className="text-[10px] text-amber-500 mt-0.5">overridden</p>}
                                         </div>
                                       )}
