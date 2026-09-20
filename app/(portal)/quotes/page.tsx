@@ -317,6 +317,18 @@ export default function NewQuotesPage() {
   const [tempGeneralTerms,    setTempGeneralTerms]    = useState('')
   const [generalEndUser,      setGeneralEndUser]      = useState<'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER' | ''>('CUSTOMER')
 
+  // General quote — save state
+  const generalQuoteIdRef     = useRef<string | null>(null)
+  const generalQuoteNumberRef = useRef<string | null>(null)
+  const [generalSaveMsg,       setGeneralSaveMsg]       = useState<{ ok: boolean; text: string } | null>(null)
+  type GeneralRecentRow = {
+    id: string; quote_number: string; customer_name: string | null
+    site_address: string | null; service_date: string; total: number
+    workflow_status: string; form_snapshot: Record<string, unknown> | null; updated_at: string
+  }
+  const [recentGeneralQuotes,  setRecentGeneralQuotes]  = useState<GeneralRecentRow[]>([])
+  const [recentGeneralLoading, setRecentGeneralLoading] = useState(false)
+
   // General quote — editable sender / company info
   const [generalSenderName,    setGeneralSenderName]    = useState('NBE AUSTRALIA')
   const [generalSenderAddress, setGeneralSenderAddress] = useState('22A Humeside Dr, Campbellfield VIC 3061, Australia')
@@ -339,6 +351,27 @@ export default function NewQuotesPage() {
   const [partsContactName,   setPartsContactName]   = useState('Andrew Newton')
   const [partsContactPhone,  setPartsContactPhone]  = useState('(04) 2705 5556')
   const [partsContactEmail,  setPartsContactEmail]  = useState('anewton@nbeaustralia.com.au')
+
+  // Shared type for saved quote rows (maintenance & parts)
+  type SavedQuoteRow = {
+    id: string; quote_number: string; customer_name: string | null
+    site_address: string | null; service_date: string; total: number
+    workflow_status: string; form_snapshot: Record<string, unknown> | null; updated_at: string
+  }
+
+  // Maintenance quote — save state
+  const maintQuoteIdRef     = useRef<string | null>(null)
+  const maintQuoteNumberRef = useRef<string | null>(null)
+  const [maintSaveMsg,       setMaintSaveMsg]       = useState<{ ok: boolean; text: string } | null>(null)
+  const [recentMaintQuotes,  setRecentMaintQuotes]  = useState<SavedQuoteRow[]>([])
+  const [recentMaintLoading, setRecentMaintLoading] = useState(false)
+
+  // Parts quote — save state
+  const partsQuoteIdRef     = useRef<string | null>(null)
+  const partsQuoteNumberRef = useRef<string | null>(null)
+  const [partsSaveMsg,       setPartsSaveMsg]       = useState<{ ok: boolean; text: string } | null>(null)
+  const [recentPartsQuotes,  setRecentPartsQuotes]  = useState<SavedQuoteRow[]>([])
+  const [recentPartsLoading, setRecentPartsLoading] = useState(false)
 
   function loadNotesFromStorage(qn: string) {
     try {
@@ -405,6 +438,11 @@ export default function NewQuotesPage() {
   }
 
   useEffect(() => { loadRecentQuotes() }, [])
+  useEffect(() => {
+    if (selected === 'GENERAL') loadRecentGeneralQuotes()
+    if (selected === 'MAINTENANCE_SERVICE_REPAIR') loadRecentMaintQuotes()
+    if (selected === 'PARTS') loadRecentPartsQuotes()
+  }, [selected])
 
   // Logged-in user email (for CC self option)
   const [loggedInEmail, setLoggedInEmail] = useState('')
@@ -883,7 +921,10 @@ The quote includes all relevant specifications and pricing as discussed. Please 
         if (!res.ok) throw new Error('Failed to allocate quote number')
         const { quoteNumber: qn } = await res.json() as { quoteNumber: string }
         quoteNumberRef.current = qn
+        maintQuoteNumberRef.current = qn
         setQuoteNumber(qn)
+      } else {
+        maintQuoteNumberRef.current = quoteNumberRef.current
       }
       const filled = maintItems.filter(it => it.item.trim())
       const validDate = new Date(); validDate.setDate(validDate.getDate() + 30)
@@ -926,7 +967,10 @@ The quote includes all relevant specifications and pricing as discussed. Please 
         if (!res.ok) throw new Error('Failed to allocate quote number')
         const { quoteNumber: qn } = await res.json() as { quoteNumber: string }
         quoteNumberRef.current = qn
+        partsQuoteNumberRef.current = qn
         setQuoteNumber(qn)
+      } else {
+        partsQuoteNumberRef.current = quoteNumberRef.current
       }
       const filled = partsItems.filter(it => it.item.trim())
       const validDate = new Date(); validDate.setDate(validDate.getDate() + 30)
@@ -961,6 +1005,176 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     }
   }
 
+  // ── Maintenance save/load ─────────────────────────────────────────────────
+
+  function buildMaintSnapshot() {
+    return {
+      maintItems, maintTerms, maintEndUser,
+      maintSenderName, maintSenderAddress, maintSenderEmail,
+      maintContactName, maintContactPhone, maintContactEmail,
+      custName, custAttn, custAddress, custPostcode, custPhone, custEmail, custCanBeBlank,
+    }
+  }
+
+  async function handleSaveMaintenance() {
+    setMaintSaveMsg(null)
+    try {
+      if (!maintQuoteNumberRef.current) {
+        const r = await fetch('/api/quotes/next-number?prefix=QREP')
+        if (!r.ok) throw new Error('Failed to allocate quote number')
+        const { quoteNumber: qn } = await r.json() as { quoteNumber: string }
+        maintQuoteNumberRef.current = qn
+        quoteNumberRef.current = qn
+        setQuoteNumber(qn)
+      }
+      const qn = maintQuoteNumberRef.current!
+      const subtotal = maintItems.reduce((s, it) => s + it.unitPrice * it.qty, 0)
+      const validDate = new Date(); validDate.setDate(validDate.getDate() + 30)
+      const validUntil = `${String(validDate.getDate()).padStart(2,'0')}/${String(validDate.getMonth()+1).padStart(2,'0')}/${validDate.getFullYear()}`
+
+      const res = await fetch('/api/quotes/maintenance/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quoteId: maintQuoteIdRef.current ?? undefined,
+          quoteNumber: qn, date: todayDisplay(), validUntil,
+          customerName: custName, customerAddress: custAddress,
+          subtotal, endUser: maintEndUser || undefined,
+          formSnapshot: buildMaintSnapshot(),
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Save failed')
+      if (json.quoteId && !maintQuoteIdRef.current) maintQuoteIdRef.current = json.quoteId
+      setMaintSaveMsg({ ok: true, text: `Saved as ${qn}` })
+      loadRecentMaintQuotes()
+    } catch (e) {
+      setMaintSaveMsg({ ok: false, text: e instanceof Error ? e.message : 'Save failed' })
+    }
+  }
+
+  function loadRecentMaintQuotes() {
+    setRecentMaintLoading(true)
+    fetch('/api/quotes/maintenance/list?limit=10')
+      .then(r => r.json())
+      .then(j => { if (j.ok) setRecentMaintQuotes(j.data) })
+      .catch(() => {})
+      .finally(() => setRecentMaintLoading(false))
+  }
+
+  function loadMaintQuote(row: SavedQuoteRow) {
+    const snap = row.form_snapshot
+    if (!snap) return
+    maintQuoteIdRef.current     = row.id
+    maintQuoteNumberRef.current = row.quote_number
+    quoteNumberRef.current      = row.quote_number
+    setQuoteNumber(row.quote_number)
+    setShowPreview(false); setPreviewUrl(null); setMaintSaveMsg(null)
+    if (snap.maintItems)          setMaintItems(snap.maintItems as typeof maintItems)
+    if (snap.maintTerms !== undefined) setMaintTerms(snap.maintTerms as string)
+    if (snap.maintEndUser)        setMaintEndUser(snap.maintEndUser as typeof maintEndUser)
+    if (snap.maintSenderName)     setMaintSenderName(snap.maintSenderName as string)
+    if (snap.maintSenderAddress)  setMaintSenderAddress(snap.maintSenderAddress as string)
+    if (snap.maintSenderEmail)    setMaintSenderEmail(snap.maintSenderEmail as string)
+    if (snap.maintContactName)    setMaintContactName(snap.maintContactName as string)
+    if (snap.maintContactPhone)   setMaintContactPhone(snap.maintContactPhone as string)
+    if (snap.maintContactEmail)   setMaintContactEmail(snap.maintContactEmail as string)
+    if (snap.custName !== undefined)     setCustName(snap.custName as string)
+    if (snap.custAttn !== undefined)     setCustAttn(snap.custAttn as string)
+    if (snap.custAddress !== undefined)  setCustAddress(snap.custAddress as string)
+    if (snap.custPostcode !== undefined) setCustPostcode(snap.custPostcode as string)
+    if (snap.custPhone !== undefined)    setCustPhone(snap.custPhone as string)
+    if (snap.custEmail !== undefined)    setCustEmail(snap.custEmail as string)
+    if (snap.custCanBeBlank !== undefined) setCustCanBeBlank(snap.custCanBeBlank as boolean)
+    setSelected('MAINTENANCE_SERVICE_REPAIR')
+    setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100)
+  }
+
+  // ── Parts save/load ───────────────────────────────────────────────────────
+
+  function buildPartsSnapshot() {
+    return {
+      partsItems, partsTerms, partsEndUser,
+      partsSenderName, partsSenderAddress, partsSenderEmail,
+      partsContactName, partsContactPhone, partsContactEmail,
+      custName, custAttn, custAddress, custPostcode, custPhone, custEmail, custCanBeBlank,
+    }
+  }
+
+  async function handleSaveParts() {
+    setPartsSaveMsg(null)
+    try {
+      if (!partsQuoteNumberRef.current) {
+        const r = await fetch('/api/quotes/next-number?prefix=QPTS')
+        if (!r.ok) throw new Error('Failed to allocate quote number')
+        const { quoteNumber: qn } = await r.json() as { quoteNumber: string }
+        partsQuoteNumberRef.current = qn
+        quoteNumberRef.current = qn
+        setQuoteNumber(qn)
+      }
+      const qn = partsQuoteNumberRef.current!
+      const subtotal = partsItems.reduce((s, it) => s + it.unitPrice * it.qty, 0)
+      const validDate = new Date(); validDate.setDate(validDate.getDate() + 30)
+      const validUntil = `${String(validDate.getDate()).padStart(2,'0')}/${String(validDate.getMonth()+1).padStart(2,'0')}/${validDate.getFullYear()}`
+
+      const res = await fetch('/api/quotes/parts/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quoteId: partsQuoteIdRef.current ?? undefined,
+          quoteNumber: qn, date: todayDisplay(), validUntil,
+          customerName: custName, customerAddress: custAddress,
+          subtotal, endUser: partsEndUser || undefined,
+          formSnapshot: buildPartsSnapshot(),
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Save failed')
+      if (json.quoteId && !partsQuoteIdRef.current) partsQuoteIdRef.current = json.quoteId
+      setPartsSaveMsg({ ok: true, text: `Saved as ${qn}` })
+      loadRecentPartsQuotes()
+    } catch (e) {
+      setPartsSaveMsg({ ok: false, text: e instanceof Error ? e.message : 'Save failed' })
+    }
+  }
+
+  function loadRecentPartsQuotes() {
+    setRecentPartsLoading(true)
+    fetch('/api/quotes/parts/list?limit=10')
+      .then(r => r.json())
+      .then(j => { if (j.ok) setRecentPartsQuotes(j.data) })
+      .catch(() => {})
+      .finally(() => setRecentPartsLoading(false))
+  }
+
+  function loadPartsQuote(row: SavedQuoteRow) {
+    const snap = row.form_snapshot
+    if (!snap) return
+    partsQuoteIdRef.current     = row.id
+    partsQuoteNumberRef.current = row.quote_number
+    quoteNumberRef.current      = row.quote_number
+    setQuoteNumber(row.quote_number)
+    setShowPreview(false); setPreviewUrl(null); setPartsSaveMsg(null)
+    if (snap.partsItems)          setPartsItems(snap.partsItems as typeof partsItems)
+    if (snap.partsTerms !== undefined) setPartsTerms(snap.partsTerms as string)
+    if (snap.partsEndUser)        setPartsEndUser(snap.partsEndUser as typeof partsEndUser)
+    if (snap.partsSenderName)     setPartsSenderName(snap.partsSenderName as string)
+    if (snap.partsSenderAddress)  setPartsSenderAddress(snap.partsSenderAddress as string)
+    if (snap.partsSenderEmail)    setPartsSenderEmail(snap.partsSenderEmail as string)
+    if (snap.partsContactName)    setPartsContactName(snap.partsContactName as string)
+    if (snap.partsContactPhone)   setPartsContactPhone(snap.partsContactPhone as string)
+    if (snap.partsContactEmail)   setPartsContactEmail(snap.partsContactEmail as string)
+    if (snap.custName !== undefined)     setCustName(snap.custName as string)
+    if (snap.custAttn !== undefined)     setCustAttn(snap.custAttn as string)
+    if (snap.custAddress !== undefined)  setCustAddress(snap.custAddress as string)
+    if (snap.custPostcode !== undefined) setCustPostcode(snap.custPostcode as string)
+    if (snap.custPhone !== undefined)    setCustPhone(snap.custPhone as string)
+    if (snap.custEmail !== undefined)    setCustEmail(snap.custEmail as string)
+    if (snap.custCanBeBlank !== undefined) setCustCanBeBlank(snap.custCanBeBlank as boolean)
+    setSelected('PARTS')
+    setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100)
+  }
+
   async function handleGenerateGeneral() {
     setGenerating(true)
     try {
@@ -969,7 +1183,10 @@ The quote includes all relevant specifications and pricing as discussed. Please 
         if (!res.ok) throw new Error('Failed to allocate quote number')
         const { quoteNumber: qn } = await res.json() as { quoteNumber: string }
         quoteNumberRef.current = qn
+        generalQuoteNumberRef.current = qn
         setQuoteNumber(qn)
+      } else {
+        generalQuoteNumberRef.current = quoteNumberRef.current
       }
       const filled = generalItems.filter(it => it.item.trim() || it.unitPrice > 0)
       const validDate = new Date(); validDate.setDate(validDate.getDate() + 30)
@@ -1006,6 +1223,117 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     } finally {
       setGenerating(false)
     }
+  }
+
+  // ── General quote save/load ────────────────────────────────────────────────
+
+  function buildGeneralSnapshot() {
+    return {
+      generalItems, generalColDefs,
+      showGeneralDiscount, generalDiscountPct, generalDiscountColor,
+      generalTerms, generalEndUser,
+      generalSenderName, generalSenderAddress, generalSenderEmail,
+      generalContactName, generalContactPhone, generalContactEmail,
+      custName, custAttn, custAddress, custPostcode, custPhone, custEmail, custCanBeBlank,
+    }
+  }
+
+  async function handleSaveGeneral() {
+    setGeneralSaveMsg(null)
+    try {
+      if (!generalQuoteNumberRef.current) {
+        // Allocate a quote number if not yet generated
+        const r = await fetch('/api/quotes/next-number?prefix=QGEN')
+        if (!r.ok) throw new Error('Failed to allocate quote number')
+        const { quoteNumber: qn } = await r.json() as { quoteNumber: string }
+        generalQuoteNumberRef.current = qn
+        setQuoteNumber(qn)
+      }
+      const qn = generalQuoteNumberRef.current!
+      const subtotal = generalItems.reduce((s, it) => {
+        const price = it.overridePrice ? parseFloat(it.overridePrice) || 0 : it.unitPrice
+        const disc  = parseFloat(it.discount ?? '') || 0
+        return s + price * (1 - disc / 100) * it.qty
+      }, 0)
+      const discPct = showGeneralDiscount ? (parseFloat(generalDiscountPct) || 0) : 0
+      const validDate = new Date(); validDate.setDate(validDate.getDate() + 30)
+      const validUntil = `${String(validDate.getDate()).padStart(2,'0')}/${String(validDate.getMonth()+1).padStart(2,'0')}/${validDate.getFullYear()}`
+
+      const res = await fetch('/api/quotes/general/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quoteId:         generalQuoteIdRef.current ?? undefined,
+          quoteNumber:     qn,
+          date:            todayDisplay(),
+          validUntil,
+          customerName:    custName,
+          customerAttn:    custAttn,
+          customerAddress: custAddress,
+          customerPostcode:custPostcode,
+          customerPhone:   custPhone,
+          customerEmail:   custEmail,
+          subtotal,
+          discountPct:     discPct,
+          endUser:         generalEndUser || undefined,
+          formSnapshot:    buildGeneralSnapshot(),
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Save failed')
+      if (json.quoteId && !generalQuoteIdRef.current) generalQuoteIdRef.current = json.quoteId
+      setGeneralSaveMsg({ ok: true, text: `Saved as ${qn}` })
+      // Refresh recent list
+      loadRecentGeneralQuotes()
+    } catch (e) {
+      setGeneralSaveMsg({ ok: false, text: e instanceof Error ? e.message : 'Save failed' })
+    }
+  }
+
+  function loadRecentGeneralQuotes() {
+    setRecentGeneralLoading(true)
+    fetch('/api/quotes/general/list?limit=10')
+      .then(r => r.json())
+      .then(j => { if (j.ok) setRecentGeneralQuotes(j.data) })
+      .catch(() => {})
+      .finally(() => setRecentGeneralLoading(false))
+  }
+
+  function loadGeneralQuote(row: GeneralRecentRow) {
+    const snap = row.form_snapshot
+    if (!snap) return
+    // Restore quote identifiers
+    generalQuoteIdRef.current     = row.id
+    generalQuoteNumberRef.current = row.quote_number
+    setQuoteNumber(row.quote_number)
+    setShowPreview(false)
+    setPreviewUrl(null)
+    setGeneralSaveMsg(null)
+    // Restore full form state from snapshot
+    if (snap.generalItems)           setGeneralItems(snap.generalItems as typeof generalItems)
+    if (snap.generalColDefs)         setGeneralColDefs(snap.generalColDefs as typeof generalColDefs)
+    if (snap.showGeneralDiscount !== undefined) setShowGeneralDiscount(snap.showGeneralDiscount as boolean)
+    if (snap.generalDiscountPct)     setGeneralDiscountPct(snap.generalDiscountPct as string)
+    if (snap.generalDiscountColor)   setGeneralDiscountColor(snap.generalDiscountColor as string)
+    if (snap.generalTerms !== undefined) setGeneralTerms(snap.generalTerms as string)
+    if (snap.generalEndUser)         setGeneralEndUser(snap.generalEndUser as typeof generalEndUser)
+    if (snap.generalSenderName)      setGeneralSenderName(snap.generalSenderName as string)
+    if (snap.generalSenderAddress)   setGeneralSenderAddress(snap.generalSenderAddress as string)
+    if (snap.generalSenderEmail)     setGeneralSenderEmail(snap.generalSenderEmail as string)
+    if (snap.generalContactName)     setGeneralContactName(snap.generalContactName as string)
+    if (snap.generalContactPhone)    setGeneralContactPhone(snap.generalContactPhone as string)
+    if (snap.generalContactEmail)    setGeneralContactEmail(snap.generalContactEmail as string)
+    // Customer fields
+    if (snap.custName !== undefined) setCustName(snap.custName as string)
+    if (snap.custAttn !== undefined) setCustAttn(snap.custAttn as string)
+    if (snap.custAddress !== undefined) setCustAddress(snap.custAddress as string)
+    if (snap.custPostcode !== undefined) setCustPostcode(snap.custPostcode as string)
+    if (snap.custPhone !== undefined) setCustPhone(snap.custPhone as string)
+    if (snap.custEmail !== undefined) setCustEmail(snap.custEmail as string)
+    if (snap.custCanBeBlank !== undefined) setCustCanBeBlank(snap.custCanBeBlank as boolean)
+    // Switch to General tab and scroll to top
+    setSelected('GENERAL')
+    setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100)
   }
 
   async function handleGeneratePvcFlex() {
@@ -2536,7 +2864,7 @@ const autoDescLines = [
           {/* ── General Quote Preview ───────────────────────────────────── */}
           {isGeneral && showPreview && previewUrl && (
             <div ref={previewRef} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-              <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+              <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-3">
                   <span className="material-symbols-outlined text-indigo-600 text-xl">picture_as_pdf</span>
                   <div>
@@ -2544,11 +2872,16 @@ const autoDescLines = [
                     {quoteNumber && <p className="text-xs text-slate-400">{quoteNumber}</p>}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <button type="button" onClick={handleEditQuote}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50">
                     <span className="material-symbols-outlined text-[16px]">edit</span>
                     Edit Quote
+                  </button>
+                  <button type="button" onClick={handleSaveGeneral}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 shadow-sm transition hover:bg-emerald-100">
+                    <span className="material-symbols-outlined text-[16px]">save</span>
+                    {generalQuoteIdRef.current ? 'Update' : 'Save Quote'}
                   </button>
                   <button type="button" onClick={handleDownload}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 shadow-sm transition hover:bg-indigo-100">
@@ -2562,7 +2895,68 @@ const autoDescLines = [
                   </button>
                 </div>
               </div>
+              {generalSaveMsg && (
+                <div className={`px-6 py-2 text-sm font-medium flex items-center gap-2 ${generalSaveMsg.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+                  <span className="material-symbols-outlined text-[16px]">{generalSaveMsg.ok ? 'check_circle' : 'error'}</span>
+                  {generalSaveMsg.text}
+                </div>
+              )}
               <iframe src={previewUrl} className="w-full border-0" style={{ height: '900px' }} title="Quote Preview" />
+            </div>
+          )}
+
+          {/* ── Recent General Quotes ────────────────────────────────────── */}
+          {isGeneral && (
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+              <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-slate-400 text-xl">history</span>
+                  <h2 className="text-base font-semibold text-slate-800">Recent General Quotes</h2>
+                </div>
+                <button type="button" onClick={loadRecentGeneralQuotes}
+                  className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100 transition">
+                  <span className="material-symbols-outlined text-[14px]">refresh</span>Refresh
+                </button>
+              </div>
+              {recentGeneralLoading ? (
+                <div className="px-6 py-8 text-center text-sm text-slate-400">Loading…</div>
+              ) : recentGeneralQuotes.length === 0 ? (
+                <div className="px-6 py-8 text-center text-sm text-slate-400">No saved general quotes yet. Generate and save a quote to see it here.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3 text-left">Quote No.</th>
+                        <th className="px-4 py-3 text-left">Customer</th>
+                        <th className="px-4 py-3 text-left">Address</th>
+                        <th className="px-4 py-3 text-left">Date</th>
+                        <th className="px-4 py-3 text-right">Total (inc GST)</th>
+                        <th className="px-4 py-3 text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {recentGeneralQuotes.map(q => (
+                        <tr key={q.id} className="hover:bg-slate-50/60 transition">
+                          <td className="px-4 py-3 font-mono text-xs text-indigo-600">{q.quote_number}</td>
+                          <td className="px-4 py-3 text-slate-800">{q.customer_name || '—'}</td>
+                          <td className="px-4 py-3 text-slate-500 truncate max-w-[180px]">{q.site_address || '—'}</td>
+                          <td className="px-4 py-3 text-slate-500">{q.service_date}</td>
+                          <td className="px-4 py-3 text-right font-medium text-slate-800">
+                            {q.total > 0 ? `$${q.total.toLocaleString('en-AU', { minimumFractionDigits: 2 })}` : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <button type="button" onClick={() => loadGeneralQuote(q)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition">
+                              <span className="material-symbols-outlined text-[13px]">edit</span>Open &amp; Edit
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
@@ -3712,8 +4106,7 @@ const autoDescLines = [
       {/* ── Quotation Preview ──────────────────────────────────────────────── */}
       {!isGeneral && showPreview && previewUrl && (
         <div ref={previewRef} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          {/* Preview header */}
-          <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+          <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
               <span className="material-symbols-outlined text-indigo-600 text-xl">picture_as_pdf</span>
               <div>
@@ -3721,12 +4114,26 @@ const autoDescLines = [
                 {quoteNumber && <p className="text-xs text-slate-400">{quoteNumber}</p>}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button type="button" onClick={handleEditQuote}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50">
                 <span className="material-symbols-outlined text-[16px]">edit</span>
                 Edit Quote
               </button>
+              {isMaintenance && (
+                <button type="button" onClick={handleSaveMaintenance}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 shadow-sm transition hover:bg-emerald-100">
+                  <span className="material-symbols-outlined text-[16px]">save</span>
+                  {maintQuoteIdRef.current ? 'Update' : 'Save Quote'}
+                </button>
+              )}
+              {isParts && (
+                <button type="button" onClick={handleSaveParts}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 shadow-sm transition hover:bg-emerald-100">
+                  <span className="material-symbols-outlined text-[16px]">save</span>
+                  {partsQuoteIdRef.current ? 'Update' : 'Save Quote'}
+                </button>
+              )}
               <button type="button" onClick={handleDownload}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 shadow-sm transition hover:bg-indigo-100">
                 <span className="material-symbols-outlined text-[16px]">download</span>
@@ -3739,15 +4146,135 @@ const autoDescLines = [
               </button>
             </div>
           </div>
-          {/* PDF iframe */}
-          <iframe
-            src={previewUrl}
-            className="w-full border-0"
-            style={{ height: '900px' }}
-            title="Quote Preview"
-          />
+          {(isMaintenance && maintSaveMsg) && (
+            <div className={`px-6 py-2 text-sm font-medium flex items-center gap-2 ${maintSaveMsg.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+              <span className="material-symbols-outlined text-[16px]">{maintSaveMsg.ok ? 'check_circle' : 'error'}</span>
+              {maintSaveMsg.text}
+            </div>
+          )}
+          {(isParts && partsSaveMsg) && (
+            <div className={`px-6 py-2 text-sm font-medium flex items-center gap-2 ${partsSaveMsg.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+              <span className="material-symbols-outlined text-[16px]">{partsSaveMsg.ok ? 'check_circle' : 'error'}</span>
+              {partsSaveMsg.text}
+            </div>
+          )}
+          <iframe src={previewUrl} className="w-full border-0" style={{ height: '900px' }} title="Quote Preview" />
         </div>
       )}
+
+      {/* ── Recent Maintenance Quotes ───────────────────────────────────────── */}
+      {isMaintenance && (() => {
+        const RecentTable = ({ rows, loading, onOpen, onRefresh }: { rows: SavedQuoteRow[]; loading: boolean; onOpen: (r: SavedQuoteRow) => void; onRefresh: () => void; label: string }) => (
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-slate-400 text-xl">history</span>
+                <h2 className="text-base font-semibold text-slate-800">Recent Maintenance / Repair Quotes</h2>
+              </div>
+              <button type="button" onClick={onRefresh} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100 transition">
+                <span className="material-symbols-outlined text-[14px]">refresh</span>Refresh
+              </button>
+            </div>
+            {loading ? (
+              <div className="px-6 py-8 text-center text-sm text-slate-400">Loading…</div>
+            ) : rows.length === 0 ? (
+              <div className="px-6 py-8 text-center text-sm text-slate-400">No saved quotes yet.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Quote No.</th>
+                      <th className="px-4 py-3 text-left">Customer</th>
+                      <th className="px-4 py-3 text-left">Address</th>
+                      <th className="px-4 py-3 text-left">Date</th>
+                      <th className="px-4 py-3 text-right">Total (inc GST)</th>
+                      <th className="px-4 py-3 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {rows.map(q => (
+                      <tr key={q.id} className="hover:bg-slate-50/60 transition">
+                        <td className="px-4 py-3 font-mono text-xs text-indigo-600">{q.quote_number}</td>
+                        <td className="px-4 py-3 text-slate-800">{q.customer_name || '—'}</td>
+                        <td className="px-4 py-3 text-slate-500 truncate max-w-[180px]">{q.site_address || '—'}</td>
+                        <td className="px-4 py-3 text-slate-500">{q.service_date}</td>
+                        <td className="px-4 py-3 text-right font-medium text-slate-800">
+                          {q.total > 0 ? `$${q.total.toLocaleString('en-AU', { minimumFractionDigits: 2 })}` : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button type="button" onClick={() => onOpen(q)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition">
+                            <span className="material-symbols-outlined text-[13px]">edit</span>Open &amp; Edit
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )
+        return <RecentTable rows={recentMaintQuotes} loading={recentMaintLoading} onOpen={loadMaintQuote} onRefresh={loadRecentMaintQuotes} label="Maintenance / Repair" />
+      })()}
+
+      {/* ── Recent Parts Quotes ─────────────────────────────────────────────── */}
+      {isParts && (() => {
+        const RecentTable = ({ rows, loading, onOpen, onRefresh }: { rows: SavedQuoteRow[]; loading: boolean; onOpen: (r: SavedQuoteRow) => void; onRefresh: () => void }) => (
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-slate-400 text-xl">history</span>
+                <h2 className="text-base font-semibold text-slate-800">Recent Parts Quotes</h2>
+              </div>
+              <button type="button" onClick={onRefresh} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100 transition">
+                <span className="material-symbols-outlined text-[14px]">refresh</span>Refresh
+              </button>
+            </div>
+            {loading ? (
+              <div className="px-6 py-8 text-center text-sm text-slate-400">Loading…</div>
+            ) : rows.length === 0 ? (
+              <div className="px-6 py-8 text-center text-sm text-slate-400">No saved quotes yet.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Quote No.</th>
+                      <th className="px-4 py-3 text-left">Customer</th>
+                      <th className="px-4 py-3 text-left">Address</th>
+                      <th className="px-4 py-3 text-left">Date</th>
+                      <th className="px-4 py-3 text-right">Total (inc GST)</th>
+                      <th className="px-4 py-3 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {rows.map(q => (
+                      <tr key={q.id} className="hover:bg-slate-50/60 transition">
+                        <td className="px-4 py-3 font-mono text-xs text-indigo-600">{q.quote_number}</td>
+                        <td className="px-4 py-3 text-slate-800">{q.customer_name || '—'}</td>
+                        <td className="px-4 py-3 text-slate-500 truncate max-w-[180px]">{q.site_address || '—'}</td>
+                        <td className="px-4 py-3 text-slate-500">{q.service_date}</td>
+                        <td className="px-4 py-3 text-right font-medium text-slate-800">
+                          {q.total > 0 ? `$${q.total.toLocaleString('en-AU', { minimumFractionDigits: 2 })}` : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button type="button" onClick={() => onOpen(q)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition">
+                            <span className="material-symbols-outlined text-[13px]">edit</span>Open &amp; Edit
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )
+        return <RecentTable rows={recentPartsQuotes} loading={recentPartsLoading} onOpen={loadPartsQuote} onRefresh={loadRecentPartsQuotes} />
+      })()}
 
       {/* ── Email Modal ────────────────────────────────────────────────────── */}
       {showEmailModal && (
