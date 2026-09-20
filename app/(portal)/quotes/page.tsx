@@ -723,12 +723,18 @@ The quote includes all relevant specifications and pricing as discussed. Please 
   const emptyMaintItem = (): MaintItem => ({ item: '', description: '', width: '', height: '', qty: 1, unitPrice: 0 })
   const [maintItems, setMaintItems] = useState<MaintItem[]>(() => Array.from({ length: 5 }, emptyMaintItem))
 
-  type GeneralItem = { item: string; description: string; width: string; height: string; qty: number; unitPrice: number }
-  const emptyGeneralItem = (): GeneralItem => ({ item: '', description: '', width: '', height: '', qty: 1, unitPrice: 0 })
-  const [generalItems, setGeneralItems] = useState<GeneralItem[]>(() => Array.from({ length: 5 }, emptyGeneralItem))
+  type GeneralItem = { sno: string; item: string; description: string; width: string; height: string; qty: number; unitPrice: number; notes: string; overridePrice: string; discount: string }
+  const emptyGeneralItem = (i = 0): GeneralItem => ({ sno: String(i + 1), item: '', description: '', width: '', height: '', qty: 1, unitPrice: 0, notes: '', overridePrice: '', discount: '' })
+  const [generalItems, setGeneralItems] = useState<GeneralItem[]>(() => Array.from({ length: 5 }, (_, i) => emptyGeneralItem(i)))
+  const [generalCols, setGeneralCols] = useState({ width: true, height: true, notes: false, override: false, discount: false })
+  const [showGeneralDiscount, setShowGeneralDiscount] = useState(false)
+  const [generalDiscountPct, setGeneralDiscountPct] = useState('')
 
   function updateGeneralItem<K extends keyof GeneralItem>(i: number, key: K, val: GeneralItem[K]) {
     setGeneralItems(prev => prev.map((it, idx) => idx === i ? { ...it, [key]: val } : it))
+  }
+  function toggleGeneralCol(col: keyof typeof generalCols) {
+    setGeneralCols(prev => ({ ...prev, [col]: !prev[col] }))
   }
 
   type PartsItem = { item: string; description: string; width: string; height: string; qty: number; unitPrice: number }
@@ -2012,8 +2018,15 @@ const autoDescLines = [
 
           {/* ── General quote form ── */}
           {isGeneral && (() => {
-              const generalSubtotal = generalItems.reduce((s, it) => s + it.qty * it.unitPrice, 0)
               const fmtG = (n: number) => n === 0 ? '$0.00' : `$${n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              const rowTotal = (it: GeneralItem) => {
+                const base = it.overridePrice !== '' ? (parseFloat(it.overridePrice) || 0) : it.qty * it.unitPrice
+                const disc = parseFloat(it.discount) || 0
+                return base * (1 - disc / 100)
+              }
+              const generalSubtotal = generalItems.reduce((s, it) => s + rowTotal(it), 0)
+              const discPct = parseFloat(generalDiscountPct) || 0
+              const generalAfterDiscount = generalSubtotal * (1 - discPct / 100)
               return (
                 <div className="space-y-0 divide-y divide-slate-100">
 
@@ -2088,74 +2101,169 @@ const autoDescLines = [
                   </div>
 
                   {/* ── Line Items ── */}
-                  <div className="px-6 pt-5 pb-4">
-                    {/* Column header bar */}
-                    <div className="grid grid-cols-[2rem_1fr_3fr_5rem_7rem_7rem_2rem] gap-x-3 px-3 mb-1.5">
-                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 text-center">#</span>
-                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Item</span>
-                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Description</span>
-                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 text-center">Qty</span>
-                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 text-right">Unit Price</span>
-                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 text-right">Total</span>
-                      <span />
+                  <div className="px-6 pt-5 pb-4 space-y-3">
+
+                    {/* Column toggle bar */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mr-1">Show columns:</span>
+                      {([
+                        ['width',    'Width'],
+                        ['height',   'Height'],
+                        ['notes',    'Notes'],
+                        ['override', 'Override $'],
+                        ['discount', 'Discount %'],
+                      ] as [keyof typeof generalCols, string][]).map(([col, label]) => (
+                        <button key={col} type="button" onClick={() => toggleGeneralCol(col)}
+                          className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition ${
+                            generalCols[col]
+                              ? 'border-indigo-400 bg-indigo-50 text-indigo-700'
+                              : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300'
+                          }`}>
+                          <span className="material-symbols-outlined text-[12px]">{generalCols[col] ? 'check_circle' : 'add_circle'}</span>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Column header row */}
+                    <div className="flex items-center gap-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                      <span className="w-7 shrink-0 text-center" title="Editable">#</span>
+                      <span className="w-36 shrink-0">Item</span>
+                      <span className="flex-1">Description</span>
+                      {generalCols.width    && <span className="w-20 shrink-0 text-center">Width</span>}
+                      {generalCols.height   && <span className="w-20 shrink-0 text-center">Height</span>}
+                      <span className="w-16 shrink-0 text-center">Qty</span>
+                      <span className="w-24 shrink-0 text-right">Unit Price</span>
+                      {generalCols.override && <span className="w-24 shrink-0 text-right">Override $</span>}
+                      {generalCols.discount && <span className="w-20 shrink-0 text-center">Disc %</span>}
+                      <span className="w-24 shrink-0 text-right">Total</span>
+                      <span className="w-7 shrink-0" />
                     </div>
 
                     {/* Row cards */}
                     <div className="space-y-2">
-                      {generalItems.map((it, i) => (
-                        <div key={i} className="grid grid-cols-[2rem_1fr_3fr_5rem_7rem_7rem_2rem] gap-x-3 items-start rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm hover:border-slate-300 transition">
-                          {/* # */}
-                          <span className="text-sm font-semibold text-slate-400 text-center pt-2">{i + 1}</span>
-                          {/* Item */}
-                          <input type="text" value={it.item} onChange={e => updateGeneralItem(i, 'item', e.target.value)}
-                            placeholder="Item name"
-                            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition" />
-                          {/* Description — resizable textarea */}
-                          <textarea value={it.description} onChange={e => updateGeneralItem(i, 'description', e.target.value)}
-                            placeholder="Description"
-                            rows={2}
-                            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition resize-y min-h-[2.5rem]" />
-                          {/* Qty */}
-                          <input type="number" min={1} value={it.qty} onChange={e => updateGeneralItem(i, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
-                            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-center text-slate-800 outline-none focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition" />
-                          {/* Unit Price */}
-                          <input type="number" min={0} step={0.01} value={it.unitPrice || ''} onChange={e => updateGeneralItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
-                            placeholder="0.00"
-                            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right text-slate-800 outline-none focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition" />
-                          {/* Total */}
-                          <div className="flex items-center justify-end pt-2 font-semibold text-sm tabular-nums text-slate-700">
-                            {it.qty * it.unitPrice > 0 ? fmtG(it.qty * it.unitPrice) : <span className="text-slate-300">—</span>}
+                      {generalItems.map((it, i) => {
+                        const rt = rowTotal(it)
+                        return (
+                          <div key={i} className="rounded-xl border border-slate-200 bg-white shadow-sm hover:border-indigo-200 transition">
+                            {/* Main row */}
+                            <div className="flex items-start gap-2 px-3 py-3">
+                              <input type="text" value={it.sno} onChange={e => updateGeneralItem(i, 'sno', e.target.value)}
+                                title="S.No (editable)"
+                                className="w-7 shrink-0 rounded-md border border-transparent bg-transparent px-0.5 py-2 text-sm font-semibold text-slate-400 text-center outline-none hover:border-slate-200 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition" />
+                              <input type="text" value={it.item} onChange={e => updateGeneralItem(i, 'item', e.target.value)}
+                                placeholder="Item name"
+                                className="w-36 shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition" />
+                              <textarea value={it.description} onChange={e => updateGeneralItem(i, 'description', e.target.value)}
+                                placeholder="Description"
+                                rows={2}
+                                className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition resize-y min-h-[2.5rem]" />
+                              {generalCols.width && (
+                                <input type="text" value={it.width} onChange={e => updateGeneralItem(i, 'width', e.target.value)}
+                                  placeholder="—"
+                                  className="w-20 shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-sm text-center text-slate-800 outline-none focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition" />
+                              )}
+                              {generalCols.height && (
+                                <input type="text" value={it.height} onChange={e => updateGeneralItem(i, 'height', e.target.value)}
+                                  placeholder="—"
+                                  className="w-20 shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-sm text-center text-slate-800 outline-none focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition" />
+                              )}
+                              <input type="number" min={1} value={it.qty} onChange={e => updateGeneralItem(i, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
+                                className="w-16 shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-sm text-center text-slate-800 outline-none focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition" />
+                              <input type="number" min={0} step={0.01} value={it.unitPrice || ''} onChange={e => updateGeneralItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                placeholder="0.00"
+                                className="w-24 shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-sm text-right text-slate-800 outline-none focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition" />
+                              {generalCols.override && (
+                                <div className="w-24 shrink-0 space-y-0.5">
+                                  <input type="number" min={0} step={0.01} value={it.overridePrice} onChange={e => updateGeneralItem(i, 'overridePrice', e.target.value)}
+                                    placeholder="Auto"
+                                    className={`w-full rounded-lg border px-2 py-2 text-sm text-right outline-none focus:ring-2 focus:ring-amber-500/20 transition ${it.overridePrice ? 'border-amber-400 bg-amber-50 text-amber-800 focus:border-amber-400' : 'border-slate-200 bg-slate-50 text-slate-800 focus:border-indigo-400'}`} />
+                                  {it.overridePrice && <p className="text-[10px] text-amber-500 text-right">overridden</p>}
+                                </div>
+                              )}
+                              {generalCols.discount && (
+                                <div className="w-20 shrink-0 relative">
+                                  <input type="number" min={0} max={100} step={1} value={it.discount} onChange={e => updateGeneralItem(i, 'discount', e.target.value)}
+                                    placeholder="0"
+                                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 pr-6 text-sm text-center text-slate-800 outline-none focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">%</span>
+                                </div>
+                              )}
+                              <div className="w-24 shrink-0 flex items-center justify-end pt-2 font-semibold text-sm tabular-nums text-slate-700">
+                                {rt > 0 ? fmtG(rt) : <span className="text-slate-300">—</span>}
+                              </div>
+                              <button type="button" onClick={() => setGeneralItems(prev => prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i))}
+                                className="w-7 shrink-0 mt-1.5 rounded-lg p-1 text-slate-300 hover:bg-red-50 hover:text-red-500 transition">
+                                <span className="material-symbols-outlined text-[16px]">close</span>
+                              </button>
+                            </div>
+                            {/* Notes sub-row */}
+                            {generalCols.notes && (
+                              <div className="border-t border-slate-100 px-3 pb-2.5 pt-2 flex items-start gap-2">
+                                <span className="material-symbols-outlined text-[14px] text-slate-400 mt-1.5 ml-9">sticky_note_2</span>
+                                <textarea value={it.notes} onChange={e => updateGeneralItem(i, 'notes', e.target.value)}
+                                  placeholder="Add notes for this line item…"
+                                  rows={1}
+                                  className="flex-1 rounded-lg border border-slate-200 bg-slate-50/60 px-2.5 py-1.5 text-xs text-slate-600 placeholder-slate-300 outline-none focus:border-indigo-300 focus:bg-white focus:ring-1 focus:ring-indigo-500/20 transition resize-y" />
+                              </div>
+                            )}
                           </div>
-                          {/* Remove */}
-                          <button type="button" onClick={() => setGeneralItems(prev => prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i))}
-                            className="mt-1.5 rounded-lg p-1 text-slate-300 hover:bg-red-50 hover:text-red-500 transition">
-                            <span className="material-symbols-outlined text-[16px]">close</span>
-                          </button>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
 
-                    {/* Add Row button */}
-                    <button type="button" onClick={() => setGeneralItems(prev => [...prev, emptyGeneralItem()])}
-                      className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 py-2.5 text-sm font-medium text-slate-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50/40 transition">
+                    {/* Add Row */}
+                    <button type="button" onClick={() => setGeneralItems(prev => [...prev, emptyGeneralItem(prev.length)])}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 py-2.5 text-sm font-medium text-slate-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50/40 transition">
                       <span className="material-symbols-outlined text-[18px]">add</span>
                       Add Row
                     </button>
 
+                    {/* Discount section (quote-level) */}
+                    <div className="rounded-xl border border-slate-200 overflow-hidden">
+                      <button type="button" onClick={() => setShowGeneralDiscount(p => !p)}
+                        className="flex w-full items-center justify-between px-4 py-2.5 bg-slate-50 hover:bg-slate-100 transition text-left">
+                        <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">Quote-Level Discount</span>
+                        <span className="material-symbols-outlined text-[16px] text-slate-400">{showGeneralDiscount ? 'expand_less' : 'expand_more'}</span>
+                      </button>
+                      {showGeneralDiscount && (
+                        <div className="px-4 py-3 flex items-center gap-4">
+                          <label className="text-sm text-slate-600">Discount applied to subtotal</label>
+                          <div className="relative w-28">
+                            <input type="number" min={0} max={100} step={1} value={generalDiscountPct} onChange={e => setGeneralDiscountPct(e.target.value)}
+                              placeholder="0"
+                              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 pr-8 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-sm">%</span>
+                          </div>
+                          {discPct > 0 && (
+                            <span className="text-xs text-indigo-600 font-medium">
+                              Saving {fmtG(generalSubtotal * discPct / 100)} off subtotal
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     {/* Totals */}
-                    <div className="mt-4 flex justify-end">
-                      <div className="w-64 rounded-xl overflow-hidden border border-slate-200">
+                    <div className="flex justify-end">
+                      <div className="w-72 rounded-xl overflow-hidden border border-slate-200">
                         <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
-                          <span className="text-sm text-slate-500">Subtotal</span>
+                          <span className="text-sm text-slate-500">Subtotal (ex discount)</span>
                           <span className="tabular-nums font-semibold text-slate-800">{fmtG(generalSubtotal)}</span>
                         </div>
+                        {discPct > 0 && (
+                          <div className="flex items-center justify-between px-4 py-2.5 bg-green-50 border-b border-green-100">
+                            <span className="text-sm text-green-700">Discount ({discPct}%)</span>
+                            <span className="tabular-nums text-green-700 font-medium">−{fmtG(generalSubtotal * discPct / 100)}</span>
+                          </div>
+                        )}
                         <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
                           <span className="text-sm text-slate-500">GST (10%)</span>
-                          <span className="tabular-nums text-slate-600">{fmtG(generalSubtotal * 0.1)}</span>
+                          <span className="tabular-nums text-slate-600">{fmtG(generalAfterDiscount * 0.1)}</span>
                         </div>
                         <div className="flex items-center justify-between px-4 py-3 bg-indigo-600">
-                          <span className="text-sm font-bold text-indigo-100 uppercase tracking-wide">Total</span>
-                          <span className="tabular-nums font-bold text-xl text-white">{fmtG(generalSubtotal * 1.1)}</span>
+                          <span className="text-sm font-bold text-indigo-100 uppercase tracking-wide">Total inc. GST</span>
+                          <span className="tabular-nums font-bold text-xl text-white">{fmtG(generalAfterDiscount * 1.1)}</span>
                         </div>
                       </div>
                     </div>
