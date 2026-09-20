@@ -260,7 +260,7 @@ export async function generatePartsQuotePdf(input: PartsQuotePdfInput): Promise<
   const descW   = descCol ? descCol.w - 8 : 100
 
   const filledItems = input.lineItems.filter(it => it.item.trim() || it.unitPrice > 0)
-  const MIN_ROWS = Math.max(filledItems.length + 3, 15)
+  const MIN_ROWS = Math.max(filledItems.length + 2, 5)
   let rowsDrawn = 0
 
   filledItems.forEach((item, i) => {
