@@ -833,6 +833,16 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     setMaintItems(prev => prev.map((it, idx) => idx === i ? { ...it, [key]: val } : it))
   }
 
+  // Maintenance discount
+  const [showMaintDiscount, setShowMaintDiscount] = useState(true)
+  const [maintDiscountPct, setMaintDiscountPct] = useState('')
+  const [maintDiscountColor, setMaintDiscountColor] = useState('#1a7a30')
+
+  // Parts discount
+  const [showPartsDiscount, setShowPartsDiscount] = useState(true)
+  const [partsDiscountPct, setPartsDiscountPct] = useState('')
+  const [partsDiscountColor, setPartsDiscountColor] = useState('#1a7a30')
+
   // Maintenance — column defs
   type QuoteColDef = GeneralColDef
   const [maintColDefs, setMaintColDefs] = useState<QuoteColDef[]>([
@@ -1001,6 +1011,8 @@ The quote includes all relevant specifications and pricing as discussed. Please 
           customerPhone: custPhone, customerEmail: custEmail,
           lineItems: filled.map(it => ({ ...it, extras: it.extras ?? {} })),
           visibleColumns: maintVisCols,
+          discountPct: showMaintDiscount ? (parseFloat(maintDiscountPct) || undefined) : undefined,
+          discountColor: (showMaintDiscount && parseFloat(maintDiscountPct) > 0) ? maintDiscountColor : undefined,
           terms: maintTerms || DEFAULT_MAINT_TERMS,
           endUser: maintEndUser || undefined,
           senderName: maintSenderName, senderAddress: maintSenderAddress, senderEmail: maintSenderEmail,
@@ -1049,6 +1061,8 @@ The quote includes all relevant specifications and pricing as discussed. Please 
           customerPhone: custPhone, customerEmail: custEmail,
           lineItems: filled.map(it => ({ ...it, extras: it.extras ?? {} })),
           visibleColumns: partsVisCols,
+          discountPct: showPartsDiscount ? (parseFloat(partsDiscountPct) || undefined) : undefined,
+          discountColor: (showPartsDiscount && parseFloat(partsDiscountPct) > 0) ? partsDiscountColor : undefined,
           terms: partsTerms || DEFAULT_PARTS_TERMS,
           endUser: partsEndUser || undefined,
           senderName: partsSenderName, senderAddress: partsSenderAddress, senderEmail: partsSenderEmail,
@@ -1974,6 +1988,8 @@ const autoDescLines = [
           {isMaintenance && (() => {
               const maintRowTotalFn = (it: MaintItem) => { const base = it.overridePrice ? parseFloat(it.overridePrice) || 0 : it.qty * it.unitPrice; const disc = it.discount ? parseFloat(it.discount) || 0 : 0; return disc > 0 ? base * (1 - disc / 100) : base }
               const maintSubtotal = maintItems.reduce((s, it) => s + maintRowTotalFn(it), 0)
+              const discPctM = showMaintDiscount ? (parseFloat(maintDiscountPct) || 0) : 0
+              const maintAfterDiscount = maintSubtotal * (1 - discPctM / 100)
               const fmtM = (n: number) => n === 0 ? '$0.00' : `$${n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
               return (
                 <div className="space-y-0 divide-y divide-slate-100">
@@ -2263,13 +2279,67 @@ const autoDescLines = [
                       </button>
                     </div>
 
-                    {/* Totals */}
+                    {/* Discount */}
                     <div className="px-6 pt-4">
-                      <div className="flex justify-end">
-                        <div className="w-56 space-y-1.5 text-sm">
-                          <div className="flex justify-between text-slate-600 px-1"><span>Subtotal</span><span className="tabular-nums font-medium">{fmtM(maintSubtotal)}</span></div>
-                          <div className="flex justify-between text-slate-500 px-1"><span>GST (10%)</span><span className="tabular-nums">{fmtM(maintSubtotal * 0.1)}</span></div>
-                          <div className="flex justify-between rounded-xl bg-slate-800 px-3 py-2 text-white font-semibold"><span>TOTAL</span><span className="tabular-nums">{fmtM(maintSubtotal * 1.1)}</span></div>
+                      <div className="rounded-xl border border-slate-200 overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-3 bg-slate-50">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-slate-700">Discount</span>
+                            {discPctM > 0 && showMaintDiscount && (
+                              <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">{discPctM}% off</span>
+                            )}
+                          </div>
+                          <button type="button" role="switch" aria-checked={showMaintDiscount}
+                            onClick={() => setShowMaintDiscount(p => !p)}
+                            className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${showMaintDiscount ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ${showMaintDiscount ? 'translate-x-4' : 'translate-x-0'}`} />
+                          </button>
+                        </div>
+                        {showMaintDiscount && (
+                          <div className="px-4 py-3 border-t border-slate-100 bg-white flex flex-wrap items-center gap-4">
+                            <label className="text-sm text-slate-600">Discount (%)</label>
+                            <div className="relative w-28">
+                              <input type="number" min={0} max={100} step={1} value={maintDiscountPct} onChange={e => setMaintDiscountPct(e.target.value)}
+                                placeholder="0"
+                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 pr-7 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-sm">%</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 border-l border-slate-200 pl-4">
+                              <span className="text-[11px] text-slate-500 uppercase tracking-wide font-medium">PDF colour</span>
+                              <input type="color" value={maintDiscountColor} onChange={e => setMaintDiscountColor(e.target.value)} title="Discount text colour in PDF"
+                                className="h-6 w-8 cursor-pointer rounded border border-slate-200 p-0.5" />
+                              <span className="text-[11px] text-slate-400 font-mono">{maintDiscountColor}</span>
+                            </div>
+                            {discPctM > 0 && (
+                              <span className="text-sm font-medium" style={{ color: maintDiscountColor }}>
+                                Saving {fmtM(maintSubtotal * discPctM / 100)}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Totals */}
+                    <div className="px-6 pt-4 flex justify-end">
+                      <div className="w-72 rounded-xl overflow-hidden border border-slate-200">
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+                          <span className="text-sm text-slate-500">Subtotal</span>
+                          <span className="tabular-nums font-semibold text-slate-800">{fmtM(maintSubtotal)}</span>
+                        </div>
+                        {discPctM > 0 && (
+                          <div className="flex items-center justify-between px-4 py-2.5 bg-green-50 border-b border-green-100">
+                            <span className="text-sm text-green-700">Discount ({discPctM}%)</span>
+                            <span className="tabular-nums text-green-700 font-medium">−{fmtM(maintSubtotal * discPctM / 100)}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+                          <span className="text-sm text-slate-500">GST (10%)</span>
+                          <span className="tabular-nums text-slate-600">{fmtM(maintAfterDiscount * 0.1)}</span>
+                        </div>
+                        <div className="flex items-center justify-between px-4 py-3 bg-indigo-600">
+                          <span className="text-sm font-bold text-indigo-100 uppercase tracking-wide">Total inc. GST</span>
+                          <span className="tabular-nums font-bold text-xl text-white">{fmtM(maintAfterDiscount * 1.1)}</span>
                         </div>
                       </div>
                     </div>
@@ -2369,6 +2439,8 @@ const autoDescLines = [
           {isParts && (() => {
               const partsRowTotalFn = (it: PartsItem) => { const base = it.overridePrice ? parseFloat(it.overridePrice) || 0 : it.qty * it.unitPrice; const disc = it.discount ? parseFloat(it.discount) || 0 : 0; return disc > 0 ? base * (1 - disc / 100) : base }
               const partsSubtotal = partsItems.reduce((s, it) => s + partsRowTotalFn(it), 0)
+              const discPctP = showPartsDiscount ? (parseFloat(partsDiscountPct) || 0) : 0
+              const partsAfterDiscount = partsSubtotal * (1 - discPctP / 100)
               const fmtP = (n: number) => n === 0 ? '$0.00' : `$${n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
               return (
                 <div className="space-y-0 divide-y divide-slate-100">
@@ -2658,13 +2730,67 @@ const autoDescLines = [
                       </button>
                     </div>
 
-                    {/* Totals */}
+                    {/* Discount */}
                     <div className="px-6 pt-4">
-                      <div className="flex justify-end">
-                        <div className="w-56 space-y-1.5 text-sm">
-                          <div className="flex justify-between text-slate-600 px-1"><span>Subtotal</span><span className="tabular-nums font-medium">{fmtP(partsSubtotal)}</span></div>
-                          <div className="flex justify-between text-slate-500 px-1"><span>GST (10%)</span><span className="tabular-nums">{fmtP(partsSubtotal * 0.1)}</span></div>
-                          <div className="flex justify-between rounded-xl bg-slate-800 px-3 py-2 text-white font-semibold"><span>TOTAL</span><span className="tabular-nums">{fmtP(partsSubtotal * 1.1)}</span></div>
+                      <div className="rounded-xl border border-slate-200 overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-3 bg-slate-50">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-slate-700">Discount</span>
+                            {discPctP > 0 && showPartsDiscount && (
+                              <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">{discPctP}% off</span>
+                            )}
+                          </div>
+                          <button type="button" role="switch" aria-checked={showPartsDiscount}
+                            onClick={() => setShowPartsDiscount(p => !p)}
+                            className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${showPartsDiscount ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ${showPartsDiscount ? 'translate-x-4' : 'translate-x-0'}`} />
+                          </button>
+                        </div>
+                        {showPartsDiscount && (
+                          <div className="px-4 py-3 border-t border-slate-100 bg-white flex flex-wrap items-center gap-4">
+                            <label className="text-sm text-slate-600">Discount (%)</label>
+                            <div className="relative w-28">
+                              <input type="number" min={0} max={100} step={1} value={partsDiscountPct} onChange={e => setPartsDiscountPct(e.target.value)}
+                                placeholder="0"
+                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 pr-7 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-sm">%</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 border-l border-slate-200 pl-4">
+                              <span className="text-[11px] text-slate-500 uppercase tracking-wide font-medium">PDF colour</span>
+                              <input type="color" value={partsDiscountColor} onChange={e => setPartsDiscountColor(e.target.value)} title="Discount text colour in PDF"
+                                className="h-6 w-8 cursor-pointer rounded border border-slate-200 p-0.5" />
+                              <span className="text-[11px] text-slate-400 font-mono">{partsDiscountColor}</span>
+                            </div>
+                            {discPctP > 0 && (
+                              <span className="text-sm font-medium" style={{ color: partsDiscountColor }}>
+                                Saving {fmtP(partsSubtotal * discPctP / 100)}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Totals */}
+                    <div className="px-6 pt-4 flex justify-end">
+                      <div className="w-72 rounded-xl overflow-hidden border border-slate-200">
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+                          <span className="text-sm text-slate-500">Subtotal</span>
+                          <span className="tabular-nums font-semibold text-slate-800">{fmtP(partsSubtotal)}</span>
+                        </div>
+                        {discPctP > 0 && (
+                          <div className="flex items-center justify-between px-4 py-2.5 bg-green-50 border-b border-green-100">
+                            <span className="text-sm text-green-700">Discount ({discPctP}%)</span>
+                            <span className="tabular-nums text-green-700 font-medium">−{fmtP(partsSubtotal * discPctP / 100)}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+                          <span className="text-sm text-slate-500">GST (10%)</span>
+                          <span className="tabular-nums text-slate-600">{fmtP(partsAfterDiscount * 0.1)}</span>
+                        </div>
+                        <div className="flex items-center justify-between px-4 py-3 bg-indigo-600">
+                          <span className="text-sm font-bold text-indigo-100 uppercase tracking-wide">Total inc. GST</span>
+                          <span className="tabular-nums font-bold text-xl text-white">{fmtP(partsAfterDiscount * 1.1)}</span>
                         </div>
                       </div>
                     </div>

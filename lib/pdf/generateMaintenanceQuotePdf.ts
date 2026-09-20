@@ -35,6 +35,8 @@ export type MaintenanceQuotePdfInput = {
   customerEmail:    string
   lineItems:        MaintenanceLineItem[]
   visibleColumns?:  MaintColSpec[]
+  discountPct?:     number
+  discountColor?:   string
   terms?:           string
   endUser?:         'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER'
   senderName?:      string
@@ -317,25 +319,44 @@ export async function generateMaintenanceQuotePdf(input: MaintenanceQuotePdfInpu
     const base = it.overridePrice ? parseFloat(it.overridePrice) || 0 : it.qty * it.unitPrice
     return s + base
   }, 0)
+  const discPct   = input.discountPct ?? 0
+  const afterDisc = grandTotal * (1 - discPct / 100)
   const bankY = y
 
   t(page, 'BANK DETAILS',                             ML, bankY - 14, bold, 8, DARK)
   t(page, 'Account Name: NBE Australia Pty Ltd',      ML, bankY - 26, reg,  8, DARK)
   t(page, 'BSB: 013-525  |  Account No.: 3473-93755', ML, bankY - 38, reg,  8, DARK)
 
-  const totBoxW    = 170
+  const totBoxW     = 170
   const totValRight = ML + CW
-  const totLabelX  = ML + CW - totBoxW + 8
+  const totLabelX   = ML + CW - totBoxW + 8
+  const ROW_STEP    = 16
 
-  t(page,      'Subtotal',              totLabelX,    bankY,      reg,  9, DARK)
-  tRight(page, grandTotal > 0 ? fmtAUD(grandTotal) : '-', totValRight, bankY, reg, 9, DARK)
-  t(page,      'GST (10%)',             totLabelX,    bankY - 14, reg,  9, DARK)
-  tRight(page, grandTotal > 0 ? fmtAUD(grandTotal * 0.1) : '-', totValRight, bankY - 14, reg, 9, DARK)
+  const hexToRgb = (hex: string) => {
+    const m = hex.replace('#','').match(/.{2}/g)
+    return m ? rgb(parseInt(m[0],16)/255, parseInt(m[1],16)/255, parseInt(m[2],16)/255) : rgb(0, 0.45, 0.1)
+  }
+  const DISC_COLOR = input.discountColor ? hexToRgb(input.discountColor) : rgb(0, 0.45, 0.1)
 
-  const totBoxY = bankY - 48
-  drawRect(page, ML + CW - totBoxW, totBoxY, totBoxW, 22, BLACK)
-  t(page,      'TOTAL',                           ML + CW - totBoxW + 8, totBoxY + 6, bold, 10, WHITE)
-  tRight(page, grandTotal > 0 ? fmtAUD(grandTotal * 1.1) : '$  -', ML + CW - 4, totBoxY + 6, bold, 10, WHITE)
+  t(page,      'Subtotal',                              totLabelX,   bankY,            reg, 9, DARK)
+  tRight(page, grandTotal > 0 ? fmtAUD(grandTotal) : '-', totValRight, bankY,          reg, 9, DARK)
+
+  let offsetY = ROW_STEP
+  if (discPct > 0) {
+    const saving = grandTotal * discPct / 100
+    t(page,      `Discount (${discPct}%)`,              totLabelX,   bankY - offsetY,  reg, 9, DISC_COLOR)
+    tRight(page, `-${fmtAUD(saving)}`,                  totValRight, bankY - offsetY,  reg, 9, DISC_COLOR)
+    offsetY += ROW_STEP
+  }
+
+  t(page,      'GST (10%)',                             totLabelX,   bankY - offsetY,  reg, 9, DARK)
+  tRight(page, afterDisc > 0 ? fmtAUD(afterDisc * 0.1) : '-', totValRight, bankY - offsetY, reg, 9, DARK)
+  offsetY += ROW_STEP
+
+  const totBoxY = bankY - offsetY - 10
+  drawRect(page, ML + CW - totBoxW, totBoxY, totBoxW, 24, BLACK)
+  t(page,      'TOTAL',                           ML + CW - totBoxW + 8, totBoxY + 7, bold, 10, WHITE)
+  tRight(page, afterDisc > 0 ? fmtAUD(afterDisc * 1.1) : '$  -', ML + CW - 4, totBoxY + 7, bold, 10, WHITE)
 
   // ── FOOTER TERMS ─────────────────────────────────────────────────────────
   const DEFAULT_TERMS = 'This quotation is based on the NBE Standard Door comprising a galvanized frame, PVC curtain (900 g/m²), and a zinc-coated control box (RAL 7035). Optional extras (e.g. powder coating, light curtain, remote control, radar, traffic light, induction loop, contactless exit button) are available at additional cost. All other matters shall be subject to our standard Terms and Conditions (T&C). The electrical scope is limited to the connection between the control panel and the doors only. Power supply and isolator shall be provided by others.'
