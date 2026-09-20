@@ -2087,80 +2087,76 @@ const autoDescLines = [
                   </div>
                   </div>
 
-                  {/* Line items table — full-width */}
-                  <div className="border-t border-slate-100 rounded-b-2xl overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead className="bg-slate-900 text-white text-left text-[10px] font-semibold uppercase tracking-wider">
-                          <tr className="border-b border-slate-700">
-                            <th rowSpan={2} className="px-3 py-2.5 w-8 align-middle">#</th>
-                            <th rowSpan={2} className="px-2 py-2.5 w-36 align-middle">Item</th>
-                            <th colSpan={3} className="px-2 pt-2.5 pb-0 text-center border-b border-slate-700">Description</th>
-                            <th rowSpan={2} className="px-2 py-2.5 w-12 text-center align-middle">Qty</th>
-                            <th rowSpan={2} className="px-2 py-2.5 w-24 text-right align-middle">Unit Price</th>
-                            <th rowSpan={2} className="px-2 py-2.5 w-24 text-right align-middle">Total</th>
-                            <th rowSpan={2} className="px-2 py-2.5 w-8 align-middle">
-                              <button type="button" onClick={() => setGeneralItems(prev => [...prev, emptyGeneralItem()])}
-                                title="Add row"
-                                className="flex items-center gap-0.5 rounded-md bg-white/15 hover:bg-white/30 px-1.5 py-1 text-[10px] font-semibold text-white transition mx-auto">
-                                <span className="material-symbols-outlined text-[13px]">add</span>
-                              </button>
-                            </th>
-                          </tr>
-                          <tr className="border-b border-slate-600 text-[9px] text-slate-300 font-medium">
-                            <th className="px-2 pb-1.5" />
-                            <th className="px-2 pb-1.5 w-20 text-center">Width</th>
-                            <th className="px-2 pb-1.5 w-20 text-center">Height</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {generalItems.map((it, i) => (
-                            <tr key={i} className="border-b border-slate-100 hover:bg-slate-50/60">
-                              <td className="px-2 py-1.5 text-slate-400">{i + 1}</td>
-                              <td className="px-2 py-1.5">
-                                <input type="text" value={it.item} onChange={e => updateGeneralItem(i, 'item', e.target.value)}
-                                  placeholder="Item name" className="w-full rounded border border-slate-200 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none" />
-                              </td>
-                              <td className="px-2 py-1.5">
-                                <input type="text" value={it.description} onChange={e => updateGeneralItem(i, 'description', e.target.value)}
-                                  placeholder="Description" className="w-full rounded border border-slate-200 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none" />
-                              </td>
-                              <td className="px-2 py-1.5">
-                                <input type="text" value={it.width} onChange={e => updateGeneralItem(i, 'width', e.target.value)}
-                                  placeholder="—" className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-center focus:border-indigo-400 focus:outline-none" />
-                              </td>
-                              <td className="px-2 py-1.5">
-                                <input type="text" value={it.height} onChange={e => updateGeneralItem(i, 'height', e.target.value)}
-                                  placeholder="—" className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-center focus:border-indigo-400 focus:outline-none" />
-                              </td>
-                              <td className="px-2 py-1.5">
-                                <input type="number" min={1} value={it.qty} onChange={e => updateGeneralItem(i, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
-                                  className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-center focus:border-indigo-400 focus:outline-none" />
-                              </td>
-                              <td className="px-2 py-1.5">
-                                <input type="number" min={0} step={0.01} value={it.unitPrice || ''} onChange={e => updateGeneralItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
-                                  placeholder="0.00" className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-right focus:border-indigo-400 focus:outline-none" />
-                              </td>
-                              <td className="px-2 py-1.5 text-right font-medium text-slate-700 tabular-nums">
-                                {it.qty * it.unitPrice > 0 ? fmtG(it.qty * it.unitPrice) : '—'}
-                              </td>
-                              <td className="px-1 py-1.5">
-                                <button type="button" onClick={() => setGeneralItems(prev => prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i))}
-                                  className="rounded p-0.5 text-slate-300 hover:bg-red-50 hover:text-red-500">
-                                  <span className="material-symbols-outlined text-[14px]">close</span>
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                  {/* ── Line Items ── */}
+                  <div className="px-6 pt-5 pb-4">
+                    {/* Column header bar */}
+                    <div className="grid grid-cols-[2rem_1fr_3fr_5rem_7rem_7rem_2rem] gap-x-3 px-3 mb-1.5">
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 text-center">#</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Item</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Description</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 text-center">Qty</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 text-right">Unit Price</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 text-right">Total</span>
+                      <span />
                     </div>
+
+                    {/* Row cards */}
+                    <div className="space-y-2">
+                      {generalItems.map((it, i) => (
+                        <div key={i} className="grid grid-cols-[2rem_1fr_3fr_5rem_7rem_7rem_2rem] gap-x-3 items-start rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm hover:border-slate-300 transition">
+                          {/* # */}
+                          <span className="text-sm font-semibold text-slate-400 text-center pt-2">{i + 1}</span>
+                          {/* Item */}
+                          <input type="text" value={it.item} onChange={e => updateGeneralItem(i, 'item', e.target.value)}
+                            placeholder="Item name"
+                            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition" />
+                          {/* Description — resizable textarea */}
+                          <textarea value={it.description} onChange={e => updateGeneralItem(i, 'description', e.target.value)}
+                            placeholder="Description"
+                            rows={2}
+                            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition resize-y min-h-[2.5rem]" />
+                          {/* Qty */}
+                          <input type="number" min={1} value={it.qty} onChange={e => updateGeneralItem(i, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-center text-slate-800 outline-none focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition" />
+                          {/* Unit Price */}
+                          <input type="number" min={0} step={0.01} value={it.unitPrice || ''} onChange={e => updateGeneralItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
+                            placeholder="0.00"
+                            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-right text-slate-800 outline-none focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition" />
+                          {/* Total */}
+                          <div className="flex items-center justify-end pt-2 font-semibold text-sm tabular-nums text-slate-700">
+                            {it.qty * it.unitPrice > 0 ? fmtG(it.qty * it.unitPrice) : <span className="text-slate-300">—</span>}
+                          </div>
+                          {/* Remove */}
+                          <button type="button" onClick={() => setGeneralItems(prev => prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i))}
+                            className="mt-1.5 rounded-lg p-1 text-slate-300 hover:bg-red-50 hover:text-red-500 transition">
+                            <span className="material-symbols-outlined text-[16px]">close</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Add Row button */}
+                    <button type="button" onClick={() => setGeneralItems(prev => [...prev, emptyGeneralItem()])}
+                      className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 py-2.5 text-sm font-medium text-slate-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50/40 transition">
+                      <span className="material-symbols-outlined text-[18px]">add</span>
+                      Add Row
+                    </button>
+
                     {/* Totals */}
-                    <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 flex justify-end">
-                      <div className="w-48 space-y-1 text-xs">
-                        <div className="flex justify-between text-slate-600"><span>Subtotal</span><span className="tabular-nums font-medium">{fmtG(generalSubtotal)}</span></div>
-                        <div className="flex justify-between text-slate-500"><span>GST (10%)</span><span className="tabular-nums">{fmtG(generalSubtotal * 0.1)}</span></div>
-                        <div className="flex justify-between rounded-lg bg-slate-800 px-2.5 py-1.5 text-white font-semibold"><span>TOTAL</span><span className="tabular-nums">{fmtG(generalSubtotal * 1.1)}</span></div>
+                    <div className="mt-4 flex justify-end">
+                      <div className="w-64 rounded-xl overflow-hidden border border-slate-200">
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+                          <span className="text-sm text-slate-500">Subtotal</span>
+                          <span className="tabular-nums font-semibold text-slate-800">{fmtG(generalSubtotal)}</span>
+                        </div>
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+                          <span className="text-sm text-slate-500">GST (10%)</span>
+                          <span className="tabular-nums text-slate-600">{fmtG(generalSubtotal * 0.1)}</span>
+                        </div>
+                        <div className="flex items-center justify-between px-4 py-3 bg-indigo-600">
+                          <span className="text-sm font-bold text-indigo-100 uppercase tracking-wide">Total</span>
+                          <span className="tabular-nums font-bold text-xl text-white">{fmtG(generalSubtotal * 1.1)}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
