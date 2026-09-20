@@ -10,13 +10,18 @@ const WHITE = rgb(1,     1,     1)
 const BLACK = rgb(0,     0,     0)
 
 export type PartsLineItem = {
-  item:         string
-  description?: string
-  width?:       string
-  height?:      string
-  qty:          number
-  unitPrice:    number
+  item:           string
+  description?:   string
+  width?:         string
+  height?:        string
+  qty:            number
+  unitPrice:      number
+  notes?:         string
+  overridePrice?: string
+  extras?:        Record<string, string>
 }
+
+export type PartsColSpec = { key: string; label: string; width?: number }
 
 export type PartsQuotePdfInput = {
   quoteNumber:      string
@@ -29,6 +34,7 @@ export type PartsQuotePdfInput = {
   customerPhone:    string
   customerEmail:    string
   lineItems:        PartsLineItem[]
+  visibleColumns?:  PartsColSpec[]
   terms?:           string
   endUser?:         'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER'
   senderName?:      string
@@ -182,59 +188,123 @@ export async function generatePartsQuotePdf(input: PartsQuotePdfInput): Promise<
   y -= custRows.length * 14 + 16
 
   // ── LINE ITEMS TABLE ──────────────────────────────────────────────────────
-  const cNo      = ML
-  const cNoW     = 22
-  const cItem    = ML + cNoW
-  const cItemW   = 100
-  const cDesc    = cItem + cItemW
-  const cWidthX  = cDesc + 130
-  const cWidthW  = 42
-  const cHeightX = cWidthX + cWidthW
-  const cHeightW = 42
-  const cQtyX    = cHeightX + cHeightW
-  const cQtyW    = 28
-  const cUpRight  = ML + CW - 60
-  const cTotRight = ML + CW
+  const sanitise = (s: string) => s.replace(/[\r\n]+/g, ' ').replace(/[^\x20-\xFF]/g, ' ').trim()
+
+  const DEFAULT_COLS: PartsColSpec[] = [
+    { key: 'sno', label: 'S.No' }, { key: 'item', label: 'Item' },
+    { key: 'description', label: 'Description' }, { key: 'width', label: 'Width' },
+    { key: 'height', label: 'Height' }, { key: 'qty', label: 'Qty' },
+    { key: 'unitPrice', label: 'Unit Price' }, { key: 'total', label: 'Total' },
+  ]
+  const visCols = input.visibleColumns ?? DEFAULT_COLS
+
+  const FIXED_W: Record<string, number> = {
+    sno: 22, item: 80, width: 42, height: 42, qty: 28, unitPrice: 65, total: 65,
+  }
+  const EXTRA_W = 55
+
+  const allHaveWidth = visCols.every(c => c.width != null)
+  let rawWidths: number[]
+  if (allHaveWidth) {
+    const rawTotal = visCols.reduce((s, c) => s + c.width!, 0)
+    const scale = CW / rawTotal
+    rawWidths = visCols.map(c => Math.max(16, c.width! * scale))
+  } else {
+    const fixedTotal = visCols.reduce((s, c) => c.key === 'description' ? s : s + (FIXED_W[c.key] ?? EXTRA_W), 0)
+    const fallbackDescW = visCols.some(c => c.key === 'description') ? Math.max(60, CW - fixedTotal) : 0
+    rawWidths = visCols.map(c => c.key === 'description' ? fallbackDescW : (FIXED_W[c.key] ?? EXTRA_W))
+  }
+
+  type ColGeo = { key: string; label: string; x: number; w: number; align: 'left' | 'center' | 'right' }
+  const cols: ColGeo[] = []
+  let cx = ML
+  for (let ci = 0; ci < visCols.length; ci++) {
+    const c = visCols[ci]
+    const w = rawWidths[ci]
+    const align: 'left' | 'center' | 'right' =
+      c.key === 'unitPrice' || c.key === 'total' ? 'right' :
+      c.key === 'sno' || c.key === 'description' || c.key === 'item' ? 'left' : 'center'
+    cols.push({ key: c.key, label: c.label, x: cx, w, align })
+    cx += w
+  }
 
   const TH = 20
   drawRect(page, ML, y - TH, CW, TH, BLACK)
-  t(page,       'NO',          cNo + 2,   y - 13, bold, 8, WHITE)
-  t(page,       'ITEM',        cItem,     y - 13, bold, 8, WHITE)
-  tCenter(page, 'DESCRIPTION', cDesc, (cHeightX + cHeightW - cDesc), y - 13, bold, 8, WHITE)
-  tCenter(page, 'QTY',         cQtyX,    cQtyW, y - 13, bold, 8, WHITE)
-  tRight(page,  'UNIT PRICE',  cUpRight,         y - 13, bold, 8, WHITE)
-  tRight(page,  'TOTAL',       cTotRight - 4,    y - 13, bold, 8, WHITE)
+  cols.forEach(col => {
+    const label = col.key === 'sno' ? 'NO' : col.key === 'unitPrice' ? 'UNIT PRICE' : col.label.toUpperCase()
+    if (col.align === 'right') tRight(page, label, col.x + col.w - 4, y - 13, bold, 8, WHITE)
+    else if (col.align === 'center') tCenter(page, label, col.x, col.w, y - 13, bold, 8, WHITE)
+    else t(page, label, col.x + (col.key === 'sno' ? 2 : 0), y - 13, bold, 8, WHITE)
+  })
   y -= TH
 
   const SH = 14
-  t(page,       '#',      cNo + 2,   y - 9,  reg, 8, BLACK)
-  tCenter(page, 'WIDTH',  cWidthX,   cWidthW, y - 9, reg, 8, BLACK)
-  tCenter(page, 'HEIGHT', cHeightX,  cHeightW,y - 9, reg, 8, BLACK)
-  tCenter(page, '#',      cQtyX,     cQtyW,   y - 9, reg, 8, BLACK)
-  tRight(page,  '$',      cUpRight,           y - 9, reg, 8, BLACK)
-  tRight(page,  '$$',     cTotRight - 4,      y - 9, reg, 8, BLACK)
-  y -= SH
+  const subLabels: Record<string, string> = { sno: '#', width: 'WIDTH', height: 'HEIGHT', qty: '#', unitPrice: '$', total: '$$' }
+  let hasSubRow = false
+  cols.forEach(col => {
+    const sub = subLabels[col.key]
+    if (!sub) return
+    hasSubRow = true
+    if (col.align === 'right') tRight(page, sub, col.x + col.w - 4, y - 9, reg, 8, BLACK)
+    else if (col.align === 'center') tCenter(page, sub, col.x, col.w, y - 9, reg, 8, BLACK)
+    else t(page, sub, col.x + 2, y - 9, reg, 8, BLACK)
+  })
+  if (hasSubRow) y -= SH
   drawHLine(page, ML, y, CW, 1.2, DARK)
   y -= 2
 
-  const ROW_H = 18
-  const MIN_ROWS = 15
+  const ROW_H  = 18
+  const LINE_H = 11
+  const descCol = cols.find(c => c.key === 'description')
+  const hasDesc = descCol != null
+  const descW   = descCol ? descCol.w - 8 : 100
 
-  input.lineItems.forEach((item, i) => {
+  const filledItems = input.lineItems.filter(it => it.item.trim() || it.unitPrice > 0)
+  const MIN_ROWS = Math.max(filledItems.length + 3, 15)
+  let rowsDrawn = 0
+
+  filledItems.forEach((item, i) => {
+    const effective = item.overridePrice ? parseFloat(item.overridePrice) || 0 : item.qty * item.unitPrice
+    const rawDesc   = sanitise(item.description ?? '')
+    const descLines = hasDesc && rawDesc ? wrapText(rawDesc, reg, 9, descW) : []
+    const rowH      = descLines.length > 1 ? descLines.length * LINE_H + 8 : ROW_H
+
+    if (item.notes?.trim()) {
+      const noteLines = wrapText(sanitise(item.notes), reg, 8.5, CW - 24)
+      const noteH = noteLines.length * 10 + 8
+      page.drawRectangle({ x: ML, y: y - noteH + 2, width: CW, height: noteH, color: rgb(0.93, 0.95, 1) })
+      noteLines.forEach((line, li) => { t(page, line, ML + 8, y - 9 - li * 10, reg, 8.5, GREY) })
+      y -= noteH
+    }
+
     drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
-    const total = item.qty * item.unitPrice
-    t(page,       String(i + 1),          cNo + 2,           y - 12, reg, 10, BLACK)
-    t(page,       item.item,              cItem,             y - 12, reg, 10, BLACK)
-    t(page,       item.description ?? '', cDesc,             y - 12, reg, 10, BLACK)
-    tCenter(page, item.width  ?? '',      cWidthX,  cWidthW, y - 12, reg, 10, BLACK)
-    tCenter(page, item.height ?? '',      cHeightX, cHeightW,y - 12, reg, 10, BLACK)
-    tCenter(page, String(item.qty),       cQtyX,    cQtyW,   y - 12, reg, 10, BLACK)
-    tRight(page,  item.unitPrice > 0 ? fmtAUD(item.unitPrice) : '-', cUpRight,  y - 12, reg, 10, BLACK)
-    tRight(page,  total > 0 ? fmtAUD(total) : '-',                   cTotRight, y - 12, reg, 10, BLACK)
-    y -= ROW_H
+
+    cols.forEach(col => {
+      let val = ''
+      switch (col.key) {
+        case 'sno':         val = String(i + 1); break
+        case 'item':        val = sanitise(item.item); break
+        case 'width':       val = sanitise(item.width ?? ''); break
+        case 'height':      val = sanitise(item.height ?? ''); break
+        case 'qty':         val = String(item.qty); break
+        case 'unitPrice':   val = item.unitPrice > 0 ? fmtAUD(item.unitPrice) : '-'; break
+        case 'total':       val = effective > 0 ? fmtAUD(effective) : '-'; break
+        case 'description': {
+          descLines.forEach((line, li) => { t(page, line, col.x, y - 12 - li * LINE_H, reg, 9, BLACK) })
+          return
+        }
+        default: val = sanitise(item.extras?.[col.key] ?? ''); break
+      }
+      if (col.align === 'right') tRight(page, val, col.x + col.w - 4, y - 12, reg, 10, BLACK)
+      else if (col.align === 'center') tCenter(page, val, col.x, col.w, y - 12, reg, 10, BLACK)
+      else t(page, val, col.x + (col.key === 'sno' ? 2 : 0), y - 12, reg, 10, BLACK)
+    })
+
+    y -= rowH
+    rowsDrawn++
   })
 
-  const fillerCount = Math.max(0, MIN_ROWS - input.lineItems.length)
+  const fillerCount = Math.max(0, MIN_ROWS - rowsDrawn)
   for (let i = 0; i < fillerCount; i++) {
     drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
     y -= ROW_H
@@ -243,7 +313,10 @@ export async function generatePartsQuotePdf(input: PartsQuotePdfInput): Promise<
   y -= 16
 
   // ── TOTALS + BANK DETAILS ─────────────────────────────────────────────────
-  const grandTotal = input.lineItems.reduce((s, it) => s + it.qty * it.unitPrice, 0)
+  const grandTotal = filledItems.reduce((s, it) => {
+    const base = it.overridePrice ? parseFloat(it.overridePrice) || 0 : it.qty * it.unitPrice
+    return s + base
+  }, 0)
   const bankY = y
 
   t(page, 'BANK DETAILS',                             ML, bankY - 14, bold, 8, DARK)

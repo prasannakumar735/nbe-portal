@@ -756,14 +756,15 @@ The quote includes all relevant specifications and pricing as discussed. Please 
   // Cleanup blob URL on unmount
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
 
-  // ── Maintenance / Repair state ───────────────────────────────────────────────
-  type MaintItem = { item: string; description: string; width: string; height: string; qty: number; unitPrice: number }
-  const emptyMaintItem = (): MaintItem => ({ item: '', description: '', width: '', height: '', qty: 1, unitPrice: 0 })
-  const [maintItems, setMaintItems] = useState<MaintItem[]>(() => Array.from({ length: 5 }, emptyMaintItem))
-
   type GeneralNoteStyle = { bold: boolean; italic: boolean; color: string; bgColor: string; fontSize: string }
-  type GeneralItem = { sno: string; item: string; description: string; width: string; height: string; qty: number; unitPrice: number; notes: string; noteStyle: GeneralNoteStyle; overridePrice: string; discount: string; extras: Record<string, string> }
   const defaultNoteStyle = (): GeneralNoteStyle => ({ bold: false, italic: false, color: '#374151', bgColor: '#eff6ff', fontSize: '12' })
+
+  // ── Maintenance / Repair state ───────────────────────────────────────────────
+  type MaintItem = { sno: string; item: string; description: string; width: string; height: string; qty: number; unitPrice: number; notes: string; noteStyle: GeneralNoteStyle; overridePrice: string; discount: string; extras: Record<string, string> }
+  const emptyMaintItem = (i = 0): MaintItem => ({ sno: String(i + 1), item: '', description: '', width: '', height: '', qty: 1, unitPrice: 0, notes: '', noteStyle: defaultNoteStyle(), overridePrice: '', discount: '', extras: {} })
+  const [maintItems, setMaintItems] = useState<MaintItem[]>(() => Array.from({ length: 5 }, (_, i) => emptyMaintItem(i)))
+
+  type GeneralItem = { sno: string; item: string; description: string; width: string; height: string; qty: number; unitPrice: number; notes: string; noteStyle: GeneralNoteStyle; overridePrice: string; discount: string; extras: Record<string, string> }
   const emptyGeneralItem = (i = 0): GeneralItem => ({ sno: String(i + 1), item: '', description: '', width: '', height: '', qty: 1, unitPrice: 0, notes: '', noteStyle: defaultNoteStyle(), overridePrice: '', discount: '', extras: {} })
   const [generalItems, setGeneralItems] = useState<GeneralItem[]>(() => Array.from({ length: 5 }, (_, i) => emptyGeneralItem(i)))
 
@@ -820,9 +821,9 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     setGeneralColDefs(prev => prev.filter(c => c.key !== key))
   }
 
-  type PartsItem = { item: string; description: string; width: string; height: string; qty: number; unitPrice: number }
-  const emptyPartsItem = (): PartsItem => ({ item: '', description: '', width: '', height: '', qty: 1, unitPrice: 0 })
-  const [partsItems, setPartsItems] = useState<PartsItem[]>(() => Array.from({ length: 5 }, emptyPartsItem))
+  type PartsItem = { sno: string; item: string; description: string; width: string; height: string; qty: number; unitPrice: number; notes: string; noteStyle: GeneralNoteStyle; overridePrice: string; discount: string; extras: Record<string, string> }
+  const emptyPartsItem = (i = 0): PartsItem => ({ sno: String(i + 1), item: '', description: '', width: '', height: '', qty: 1, unitPrice: 0, notes: '', noteStyle: defaultNoteStyle(), overridePrice: '', discount: '', extras: {} })
+  const [partsItems, setPartsItems] = useState<PartsItem[]>(() => Array.from({ length: 5 }, (_, i) => emptyPartsItem(i)))
 
   function updatePartsItem<K extends keyof PartsItem>(i: number, key: K, val: PartsItem[K]) {
     setPartsItems(prev => prev.map((it, idx) => idx === i ? { ...it, [key]: val } : it))
@@ -831,6 +832,65 @@ The quote includes all relevant specifications and pricing as discussed. Please 
   function updateMaintItem<K extends keyof MaintItem>(i: number, key: K, val: MaintItem[K]) {
     setMaintItems(prev => prev.map((it, idx) => idx === i ? { ...it, [key]: val } : it))
   }
+
+  // Maintenance — column defs
+  type QuoteColDef = GeneralColDef
+  const [maintColDefs, setMaintColDefs] = useState<QuoteColDef[]>([
+    { key: 'sno',         label: 'S.No',       visible: true, width: 52  },
+    { key: 'item',        label: 'Item',        visible: true, width: 110 },
+    { key: 'description', label: 'Description', visible: true, width: 220 },
+    { key: 'width',       label: 'Width',       visible: true, width: 75  },
+    { key: 'height',      label: 'Height',      visible: true, width: 75  },
+    { key: 'qty',         label: 'Qty',         visible: true, width: 65  },
+    { key: 'unitPrice',   label: 'Unit Price',  visible: true, width: 110 },
+    { key: 'total',       label: 'Total',       visible: true, width: 100 },
+  ])
+  const [maintNotesOpen, setMaintNotesOpen] = useState<Set<number>>(new Set())
+  const [maintDragColKey, setMaintDragColKey] = useState<string | null>(null)
+  const [maintEditingColKey, setMaintEditingColKey] = useState<string | null>(null)
+  const [addingMaintCol, setAddingMaintCol] = useState(false)
+  const [newMaintColName, setNewMaintColName] = useState('')
+
+  function toggleMaintCol(key: string) { setMaintColDefs(prev => prev.map(c => c.key === key ? { ...c, visible: !c.visible } : c)) }
+  function renameMaintCol(key: string, label: string) { setMaintColDefs(prev => prev.map(c => c.key === key ? { ...c, label } : c)) }
+  function reorderMaintCols(fromKey: string, toKey: string) {
+    if (fromKey === toKey) return
+    setMaintColDefs(prev => { const a = [...prev]; const fi = a.findIndex(c => c.key === fromKey); const ti = a.findIndex(c => c.key === toKey); const [m] = a.splice(fi, 1); a.splice(ti, 0, m); return a })
+  }
+  function addMaintCol(label: string) {
+    const key = `extra_${Date.now()}`
+    setMaintColDefs(prev => { const a = [...prev]; a.splice(a.findIndex(c => c.key === 'total'), 0, { key, label, visible: true, width: 100 }); return a })
+  }
+  function removeMaintCol(key: string) { setMaintColDefs(prev => prev.filter(c => c.key !== key)) }
+
+  // Parts — column defs
+  const [partsColDefs, setPartsColDefs] = useState<QuoteColDef[]>([
+    { key: 'sno',         label: 'S.No',       visible: true, width: 52  },
+    { key: 'item',        label: 'Item',        visible: true, width: 110 },
+    { key: 'description', label: 'Description', visible: true, width: 220 },
+    { key: 'width',       label: 'Width',       visible: true, width: 75  },
+    { key: 'height',      label: 'Height',      visible: true, width: 75  },
+    { key: 'qty',         label: 'Qty',         visible: true, width: 65  },
+    { key: 'unitPrice',   label: 'Unit Price',  visible: true, width: 110 },
+    { key: 'total',       label: 'Total',       visible: true, width: 100 },
+  ])
+  const [partsNotesOpen, setPartsNotesOpen] = useState<Set<number>>(new Set())
+  const [partsDragColKey, setPartsDragColKey] = useState<string | null>(null)
+  const [partsEditingColKey, setPartsEditingColKey] = useState<string | null>(null)
+  const [addingPartsCol, setAddingPartsCol] = useState(false)
+  const [newPartsColName, setNewPartsColName] = useState('')
+
+  function togglePartsCol(key: string) { setPartsColDefs(prev => prev.map(c => c.key === key ? { ...c, visible: !c.visible } : c)) }
+  function renamePartsCol(key: string, label: string) { setPartsColDefs(prev => prev.map(c => c.key === key ? { ...c, label } : c)) }
+  function reorderPartsCols(fromKey: string, toKey: string) {
+    if (fromKey === toKey) return
+    setPartsColDefs(prev => { const a = [...prev]; const fi = a.findIndex(c => c.key === fromKey); const ti = a.findIndex(c => c.key === toKey); const [m] = a.splice(fi, 1); a.splice(ti, 0, m); return a })
+  }
+  function addPartsCol(label: string) {
+    const key = `extra_${Date.now()}`
+    setPartsColDefs(prev => { const a = [...prev]; a.splice(a.findIndex(c => c.key === 'total'), 0, { key, label, visible: true, width: 100 }); return a })
+  }
+  function removePartsCol(key: string) { setPartsColDefs(prev => prev.filter(c => c.key !== key)) }
 
   // ── PVC Flex System state ────────────────────────────────────────────────────
   type PvcFlexDoorItem = {
@@ -926,7 +986,8 @@ The quote includes all relevant specifications and pricing as discussed. Please 
       } else {
         maintQuoteNumberRef.current = quoteNumberRef.current
       }
-      const filled = maintItems.filter(it => it.item.trim())
+      const filled = maintItems.filter(it => it.item.trim() || it.unitPrice > 0)
+      const maintVisCols = maintColDefs.filter(c => c.visible).map(c => ({ key: c.key, label: c.label, width: c.width }))
       const validDate = new Date(); validDate.setDate(validDate.getDate() + 30)
       const validUntil = `${String(validDate.getDate()).padStart(2,'0')}/${String(validDate.getMonth()+1).padStart(2,'0')}/${validDate.getFullYear()}`
       const res = await fetch('/api/quotes/maintenance/pdf', {
@@ -938,7 +999,8 @@ The quote includes all relevant specifications and pricing as discussed. Please 
           customerName: custName, customerAttn: custAttn,
           customerAddress: custAddress, customerPostcode: custPostcode,
           customerPhone: custPhone, customerEmail: custEmail,
-          lineItems: filled,
+          lineItems: filled.map(it => ({ ...it, extras: it.extras ?? {} })),
+          visibleColumns: maintVisCols,
           terms: maintTerms || DEFAULT_MAINT_TERMS,
           endUser: maintEndUser || undefined,
           senderName: maintSenderName, senderAddress: maintSenderAddress, senderEmail: maintSenderEmail,
@@ -972,7 +1034,8 @@ The quote includes all relevant specifications and pricing as discussed. Please 
       } else {
         partsQuoteNumberRef.current = quoteNumberRef.current
       }
-      const filled = partsItems.filter(it => it.item.trim())
+      const filled = partsItems.filter(it => it.item.trim() || it.unitPrice > 0)
+      const partsVisCols = partsColDefs.filter(c => c.visible).map(c => ({ key: c.key, label: c.label, width: c.width }))
       const validDate = new Date(); validDate.setDate(validDate.getDate() + 30)
       const validUntil = `${String(validDate.getDate()).padStart(2,'0')}/${String(validDate.getMonth()+1).padStart(2,'0')}/${validDate.getFullYear()}`
       const res = await fetch('/api/quotes/parts/pdf', {
@@ -984,7 +1047,8 @@ The quote includes all relevant specifications and pricing as discussed. Please 
           customerName: custName, customerAttn: custAttn,
           customerAddress: custAddress, customerPostcode: custPostcode,
           customerPhone: custPhone, customerEmail: custEmail,
-          lineItems: filled,
+          lineItems: filled.map(it => ({ ...it, extras: it.extras ?? {} })),
+          visibleColumns: partsVisCols,
           terms: partsTerms || DEFAULT_PARTS_TERMS,
           endUser: partsEndUser || undefined,
           senderName: partsSenderName, senderAddress: partsSenderAddress, senderEmail: partsSenderEmail,
@@ -1908,7 +1972,8 @@ const autoDescLines = [
 
           {/* ── Maintenance / Repair form ──────────────────────────────── */}
           {isMaintenance && (() => {
-              const maintSubtotal = maintItems.reduce((s, it) => s + it.qty * it.unitPrice, 0)
+              const maintRowTotalFn = (it: MaintItem) => { const base = it.overridePrice ? parseFloat(it.overridePrice) || 0 : it.qty * it.unitPrice; const disc = it.discount ? parseFloat(it.discount) || 0 : 0; return disc > 0 ? base * (1 - disc / 100) : base }
+              const maintSubtotal = maintItems.reduce((s, it) => s + maintRowTotalFn(it), 0)
               const fmtM = (n: number) => n === 0 ? '$0.00' : `$${n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
               return (
                 <div className="space-y-0 divide-y divide-slate-100">
@@ -1983,85 +2048,234 @@ const autoDescLines = [
                   </div>
                   </div>{/* end customer details px-6 wrapper */}
 
-                  {/* Line items table — full-width, no side padding */}
-                  <div className="border-t border-slate-100 rounded-b-2xl overflow-hidden">
+                  {/* ── Line Items (dynamic columns) ── */}
+                  {(() => {
+                    const maintRowTotal = (it: MaintItem) => {
+                      const base = it.overridePrice ? parseFloat(it.overridePrice) || 0 : it.qty * it.unitPrice
+                      const disc = it.discount ? parseFloat(it.discount) || 0 : 0
+                      return disc > 0 ? base * (1 - disc / 100) : base
+                    }
+                    return (
+                  <div className="pt-4 pb-2">
+                    {/* Column visibility toggles + Add Column */}
+                    <div className="px-6 mb-3 flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mr-1">Columns:</span>
+                      {maintColDefs.map(col => (
+                        <span key={col.key} className="inline-flex items-center gap-0.5">
+                          <button type="button" onClick={() => toggleMaintCol(col.key)}
+                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition ${col.visible ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300'}`}>
+                            <span className="material-symbols-outlined text-[11px]">{col.visible ? 'visibility' : 'visibility_off'}</span>
+                            {col.label}
+                          </button>
+                          {col.key.startsWith('extra_') && (
+                            <button type="button" onClick={() => removeMaintCol(col.key)}
+                              title="Remove column"
+                              className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-100 text-red-400 hover:bg-red-200 transition text-[10px] font-bold">×</button>
+                          )}
+                        </span>
+                      ))}
+                      {addingMaintCol ? (
+                        <span className="inline-flex items-center gap-1">
+                          <input autoFocus value={newMaintColName} onChange={e => setNewMaintColName(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter' && newMaintColName.trim()) { addMaintCol(newMaintColName.trim()); setNewMaintColName(''); setAddingMaintCol(false) } else if (e.key === 'Escape') { setNewMaintColName(''); setAddingMaintCol(false) } }}
+                            placeholder="Column name…"
+                            className="rounded-lg border border-indigo-300 bg-white px-2 py-0.5 text-xs text-slate-800 outline-none focus:ring-1 focus:ring-indigo-400 w-28" />
+                          <button type="button" onClick={() => { if (newMaintColName.trim()) { addMaintCol(newMaintColName.trim()); setNewMaintColName('') } setAddingMaintCol(false) }}
+                            className="rounded-lg bg-indigo-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-indigo-700 transition">Add</button>
+                          <button type="button" onClick={() => { setNewMaintColName(''); setAddingMaintCol(false) }}
+                            className="rounded-lg border border-slate-200 px-2 py-0.5 text-xs text-slate-500 hover:bg-slate-50 transition">Cancel</button>
+                        </span>
+                      ) : (
+                        <button type="button" onClick={() => setAddingMaintCol(true)}
+                          className="inline-flex items-center gap-1 rounded-full border border-dashed border-indigo-300 px-2.5 py-0.5 text-xs font-medium text-indigo-500 hover:bg-indigo-50 transition">
+                          <span className="material-symbols-outlined text-[11px]">add</span>
+                          Add Column
+                        </button>
+                      )}
+                      <span className="ml-1 text-[10px] text-slate-400">Drag headers to reorder · Double-click to rename</span>
+                    </div>
+
+                    {/* Table */}
                     <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead className="bg-slate-900 text-white text-left text-[10px] font-semibold uppercase tracking-wider">
-                          {/* Row 1: # | ITEM | DESCRIPTION(colspan=3 spans desc+width+height) | QTY | UNIT PRICE | TOTAL | + */}
-                          <tr className="border-b border-slate-700">
-                            <th rowSpan={2} className="px-3 py-2.5 w-8 align-middle">#</th>
-                            <th rowSpan={2} className="px-2 py-2.5 w-36 align-middle">Item</th>
-                            <th colSpan={3} className="px-2 pt-2.5 pb-0 text-center border-b border-slate-700">Description</th>
-                            <th rowSpan={2} className="px-2 py-2.5 w-12 text-center align-middle">Qty</th>
-                            <th rowSpan={2} className="px-2 py-2.5 w-24 text-right align-middle">Unit Price</th>
-                            <th rowSpan={2} className="px-2 py-2.5 w-24 text-right align-middle">Total</th>
-                            <th rowSpan={2} className="px-2 py-2.5 w-8 align-middle">
-                              <button type="button" onClick={() => setMaintItems(prev => [...prev, emptyMaintItem()])}
-                                title="Add row"
-                                className="flex items-center gap-0.5 rounded-md bg-white/15 hover:bg-white/30 px-1.5 py-1 text-[10px] font-semibold text-white transition mx-auto">
-                                <span className="material-symbols-outlined text-[13px]">add</span>
-                              </button>
-                            </th>
-                          </tr>
-                          {/* Row 2: sub-labels — [empty for desc text] | WIDTH | HEIGHT */}
-                          <tr className="border-b border-slate-600 text-[9px] text-slate-300 font-medium">
-                            <th className="px-2 pb-1.5" />{/* description text col — no sub-label */}
-                            <th className="px-2 pb-1.5 w-20 text-center">Width</th>
-                            <th className="px-2 pb-1.5 w-20 text-center">Height</th>
+                      <table className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: `${maintColDefs.filter(c => c.visible).reduce((s, c) => s + c.width, 0) + 112}px`, minWidth: '100%' }}>
+                        <thead>
+                          <tr className="bg-slate-900 text-white text-left text-[10px] font-semibold uppercase tracking-wider select-none">
+                            {maintColDefs.filter(c => c.visible).map(col => (
+                              <th key={col.key}
+                                style={{ width: col.width, minWidth: col.width, position: 'relative' }}
+                                draggable
+                                onDragStart={() => setMaintDragColKey(col.key)}
+                                onDragOver={e => e.preventDefault()}
+                                onDrop={() => { if (maintDragColKey) reorderMaintCols(maintDragColKey, col.key); setMaintDragColKey(null) }}
+                                className={`px-3 py-3 cursor-grab active:cursor-grabbing transition ${maintDragColKey === col.key ? 'opacity-50' : ''} ${col.key === 'sno' || col.key === 'qty' || col.key === 'width' || col.key === 'height' ? 'text-center' : col.key === 'unitPrice' || col.key === 'total' ? 'text-right' : ''}`}>
+                                <span className="inline-flex items-center gap-1 truncate">
+                                  <span className="material-symbols-outlined text-[10px] text-white/40 shrink-0">drag_indicator</span>
+                                  {maintEditingColKey === col.key ? (
+                                    <input autoFocus defaultValue={col.label}
+                                      onBlur={e => { renameMaintCol(col.key, e.target.value || col.label); setMaintEditingColKey(null) }}
+                                      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                                      onClick={e => e.stopPropagation()}
+                                      className="bg-white/10 border-b border-white/40 text-white text-[10px] font-semibold uppercase tracking-wider outline-none w-20 px-0.5" />
+                                  ) : (
+                                    <span onDoubleClick={e => { e.stopPropagation(); setMaintEditingColKey(col.key) }} title="Double-click to rename" className="truncate">{col.label}</span>
+                                  )}
+                                </span>
+                                <div draggable={false} title="Drag to resize"
+                                  className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-white/20 transition"
+                                  onMouseDown={e => {
+                                    e.preventDefault(); e.stopPropagation()
+                                    const startX = e.clientX; const startW = col.width
+                                    const onMove = (me: MouseEvent) => {
+                                      const newW = Math.max(40, startW + me.clientX - startX)
+                                      setMaintColDefs(prev => prev.map(c => c.key === col.key ? { ...c, width: newW } : c))
+                                    }
+                                    const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+                                    window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp)
+                                  }} />
+                              </th>
+                            ))}
+                            <th className="px-3 py-3 text-center" style={{ width: 112, minWidth: 112 }}>Action</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {maintItems.map((it, i) => (
-                            <tr key={i} className="border-b border-slate-100 hover:bg-slate-50/60">
-                              <td className="px-2 py-1.5 text-slate-400">{i + 1}</td>
-                              <td className="px-2 py-1.5">
-                                <input type="text" value={it.item} onChange={e => updateMaintItem(i, 'item', e.target.value)}
-                                  placeholder="Item name" className="w-full rounded border border-slate-200 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none" />
-                              </td>
-                              <td className="px-2 py-1.5">
-                                <input type="text" value={it.description} onChange={e => updateMaintItem(i, 'description', e.target.value)}
-                                  placeholder="Description" className="w-full rounded border border-slate-200 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none" />
-                              </td>
-                              <td className="px-2 py-1.5">
-                                <input type="text" value={it.width} onChange={e => updateMaintItem(i, 'width', e.target.value)}
-                                  placeholder="—" className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-center focus:border-indigo-400 focus:outline-none" />
-                              </td>
-                              <td className="px-2 py-1.5">
-                                <input type="text" value={it.height} onChange={e => updateMaintItem(i, 'height', e.target.value)}
-                                  placeholder="—" className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-center focus:border-indigo-400 focus:outline-none" />
-                              </td>
-                              <td className="px-2 py-1.5">
-                                <input type="number" min={1} value={it.qty} onChange={e => updateMaintItem(i, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
-                                  className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-center focus:border-indigo-400 focus:outline-none" />
-                              </td>
-                              <td className="px-2 py-1.5">
-                                <input type="number" min={0} step={0.01} value={it.unitPrice || ''} onChange={e => updateMaintItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
-                                  placeholder="0.00" className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-right focus:border-indigo-400 focus:outline-none" />
-                              </td>
-                              <td className="px-2 py-1.5 text-right font-medium text-slate-700 tabular-nums">
-                                {it.qty * it.unitPrice > 0 ? fmtM(it.qty * it.unitPrice) : '—'}
-                              </td>
-                              <td className="px-1 py-1.5">
-                                <button type="button" onClick={() => setMaintItems(prev => prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i))}
-                                  className="rounded p-0.5 text-slate-300 hover:bg-red-50 hover:text-red-500">
-                                  <span className="material-symbols-outlined text-[14px]">close</span>
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
+                          {maintItems.map((it, i) => {
+                            const rt = maintRowTotal(it)
+                            const notesOpen = maintNotesOpen.has(i)
+                            return (
+                              <Fragment key={i}>
+                                {notesOpen && (
+                                  <tr className="border-b border-indigo-100">
+                                    <td colSpan={maintColDefs.filter(c => c.visible).length + 1} className="p-0">
+                                      <div className="overflow-hidden border-l-4 border-indigo-400" style={{ backgroundColor: it.noteStyle.bgColor }}>
+                                        <div className="flex items-center gap-1 px-3 py-1.5 bg-white/70 border-b border-indigo-100 flex-wrap">
+                                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mr-2">Note style</span>
+                                          <button type="button" title="Bold"
+                                            onClick={() => updateMaintItem(i, 'noteStyle', { ...it.noteStyle, bold: !it.noteStyle.bold })}
+                                            className={`w-6 h-6 rounded text-xs font-bold transition ${it.noteStyle.bold ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300' : 'text-slate-500 hover:bg-slate-100'}`}>B</button>
+                                          <button type="button" title="Italic"
+                                            onClick={() => updateMaintItem(i, 'noteStyle', { ...it.noteStyle, italic: !it.noteStyle.italic })}
+                                            className={`w-6 h-6 rounded text-xs italic transition ${it.noteStyle.italic ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300' : 'text-slate-500 hover:bg-slate-100'}`}>I</button>
+                                          <div className="flex items-center gap-1 ml-1">
+                                            <span className="text-[10px] text-slate-400">Text</span>
+                                            <input type="color" value={it.noteStyle.color} title="Font color"
+                                              onChange={e => updateMaintItem(i, 'noteStyle', { ...it.noteStyle, color: e.target.value })}
+                                              className="w-6 h-6 rounded cursor-pointer border border-slate-200 p-0.5" />
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-[10px] text-slate-400">BG</span>
+                                            <input type="color" value={it.noteStyle.bgColor} title="Background color"
+                                              onChange={e => updateMaintItem(i, 'noteStyle', { ...it.noteStyle, bgColor: e.target.value })}
+                                              className="w-6 h-6 rounded cursor-pointer border border-slate-200 p-0.5" />
+                                          </div>
+                                          <select value={it.noteStyle.fontSize} title="Font size"
+                                            onChange={e => updateMaintItem(i, 'noteStyle', { ...it.noteStyle, fontSize: e.target.value })}
+                                            className="ml-1 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs text-slate-600 outline-none focus:border-indigo-400">
+                                            {['10','11','12','13','14','16','18'].map(s => <option key={s} value={s}>{s}px</option>)}
+                                          </select>
+                                          <button type="button" onClick={() => { updateMaintItem(i, 'notes', ''); updateMaintItem(i, 'noteStyle', defaultNoteStyle()); setMaintNotesOpen(prev => { const s = new Set(prev); s.delete(i); return s }) }}
+                                            className="ml-auto text-slate-300 hover:text-red-400 transition">
+                                            <span className="material-symbols-outlined text-[15px]">close</span>
+                                          </button>
+                                        </div>
+                                        <textarea value={it.notes} onChange={e => updateMaintItem(i, 'notes', e.target.value)}
+                                          placeholder="Add notes for this line item…" rows={2}
+                                          style={{ fontWeight: it.noteStyle.bold ? 'bold' : 'normal', fontStyle: it.noteStyle.italic ? 'italic' : 'normal', color: it.noteStyle.color, fontSize: it.noteStyle.fontSize + 'px', backgroundColor: 'transparent' }}
+                                          className="w-full px-4 py-2.5 outline-none resize-y placeholder-slate-400/60" />
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                                <tr className="border-b border-slate-100 hover:bg-slate-50/40 align-top">
+                                  {maintColDefs.filter(c => c.visible).map(col => (
+                                    <td key={col.key} className="px-2 py-2.5">
+                                      {col.key === 'sno' && (
+                                        <input type="text" value={it.sno} onChange={e => updateMaintItem(i, 'sno', e.target.value)}
+                                          className="w-full rounded border border-transparent bg-transparent px-1 py-1 text-sm font-semibold text-slate-500 text-center outline-none hover:border-slate-300 focus:border-indigo-400 focus:bg-white focus:ring-1 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                      {col.key === 'item' && (
+                                        <input type="text" value={it.item} onChange={e => updateMaintItem(i, 'item', e.target.value)}
+                                          placeholder="Item name" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                      {col.key === 'description' && (
+                                        <textarea value={it.description} onChange={e => updateMaintItem(i, 'description', e.target.value)}
+                                          placeholder="Description" rows={2}
+                                          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition resize-y min-h-[2.5rem]" />
+                                      )}
+                                      {col.key === 'width' && (
+                                        <input type="text" value={it.width} onChange={e => updateMaintItem(i, 'width', e.target.value)}
+                                          placeholder="—" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-center text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                      {col.key === 'height' && (
+                                        <input type="text" value={it.height} onChange={e => updateMaintItem(i, 'height', e.target.value)}
+                                          placeholder="—" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-center text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                      {col.key === 'qty' && (
+                                        <input type="number" min={1} value={it.qty} onChange={e => updateMaintItem(i, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
+                                          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-center text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                      {col.key === 'unitPrice' && (
+                                        <input type="number" min={0} step={0.01} value={it.unitPrice || ''} onChange={e => updateMaintItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                          placeholder="0.00" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-right text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                      {col.key === 'total' && (
+                                        <div className="text-right">
+                                          <p className={`font-semibold tabular-nums ${rt > 0 ? 'text-slate-800' : 'text-slate-300'}`}>{rt > 0 ? fmtM(rt) : '$0.00'}</p>
+                                          <p className="text-[10px] text-slate-400 mt-0.5">Auto: qty × unit</p>
+                                          <input type="number" min={0} step={0.01} value={it.overridePrice} onChange={e => updateMaintItem(i, 'overridePrice', e.target.value)}
+                                            placeholder="Override $"
+                                            className={`mt-1 w-full rounded-lg border px-2 py-1 text-xs text-right outline-none focus:ring-1 transition ${it.overridePrice ? 'border-amber-400 bg-amber-50 text-amber-800 focus:border-amber-400 focus:ring-amber-500/20' : 'border-slate-200 bg-slate-50 text-slate-600 focus:border-indigo-400 focus:ring-indigo-500/20'}`} />
+                                          {it.overridePrice && <p className="text-[10px] text-amber-500 mt-0.5">overridden</p>}
+                                        </div>
+                                      )}
+                                      {col.key.startsWith('extra_') && (
+                                        <input type="text" value={it.extras[col.key] ?? ''} onChange={e => updateMaintItem(i, 'extras', { ...it.extras, [col.key]: e.target.value })}
+                                          placeholder="—" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                    </td>
+                                  ))}
+                                  <td className="px-2 py-2.5">
+                                    <div className="flex flex-col gap-1.5">
+                                      <button type="button" onClick={() => setMaintItems(prev => prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i))}
+                                        className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 transition">
+                                        Remove
+                                      </button>
+                                      <button type="button"
+                                        onClick={() => setMaintNotesOpen(prev => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s })}
+                                        className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${notesOpen ? 'border-indigo-300 bg-indigo-50 text-indigo-600' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                                        {notesOpen ? 'Hide notes' : (it.notes ? 'Edit notes' : 'Add notes')}
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              </Fragment>
+                            )
+                          })}
                         </tbody>
                       </table>
                     </div>
+
+                    {/* Add Row */}
+                    <div className="px-6 pt-3">
+                      <button type="button" onClick={() => setMaintItems(prev => [...prev, emptyMaintItem(prev.length)])}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 py-2.5 text-sm font-medium text-slate-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50/40 transition">
+                        <span className="material-symbols-outlined text-[18px]">add</span>
+                        Add Row
+                      </button>
+                    </div>
+
                     {/* Totals */}
-                    <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 flex justify-end">
-                      <div className="w-48 space-y-1 text-xs">
-                        <div className="flex justify-between text-slate-600"><span>Subtotal</span><span className="tabular-nums font-medium">{fmtM(maintSubtotal)}</span></div>
-                        <div className="flex justify-between text-slate-500"><span>GST (10%)</span><span className="tabular-nums">{fmtM(maintSubtotal * 0.1)}</span></div>
-                        <div className="flex justify-between rounded-lg bg-slate-800 px-2.5 py-1.5 text-white font-semibold"><span>TOTAL</span><span className="tabular-nums">{fmtM(maintSubtotal * 1.1)}</span></div>
+                    <div className="px-6 pt-4">
+                      <div className="flex justify-end">
+                        <div className="w-56 space-y-1.5 text-sm">
+                          <div className="flex justify-between text-slate-600 px-1"><span>Subtotal</span><span className="tabular-nums font-medium">{fmtM(maintSubtotal)}</span></div>
+                          <div className="flex justify-between text-slate-500 px-1"><span>GST (10%)</span><span className="tabular-nums">{fmtM(maintSubtotal * 0.1)}</span></div>
+                          <div className="flex justify-between rounded-xl bg-slate-800 px-3 py-2 text-white font-semibold"><span>TOTAL</span><span className="tabular-nums">{fmtM(maintSubtotal * 1.1)}</span></div>
+                        </div>
                       </div>
                     </div>
                   </div>
+                    )
+                  })()}
 
                   {/* End User T&C selector */}
                   <div className="px-6 pt-5">
@@ -2153,7 +2367,8 @@ const autoDescLines = [
 
           {/* ── Parts quote form ── */}
           {isParts && (() => {
-              const partsSubtotal = partsItems.reduce((s, it) => s + it.qty * it.unitPrice, 0)
+              const partsRowTotalFn = (it: PartsItem) => { const base = it.overridePrice ? parseFloat(it.overridePrice) || 0 : it.qty * it.unitPrice; const disc = it.discount ? parseFloat(it.discount) || 0 : 0; return disc > 0 ? base * (1 - disc / 100) : base }
+              const partsSubtotal = partsItems.reduce((s, it) => s + partsRowTotalFn(it), 0)
               const fmtP = (n: number) => n === 0 ? '$0.00' : `$${n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
               return (
                 <div className="space-y-0 divide-y divide-slate-100">
@@ -2228,83 +2443,234 @@ const autoDescLines = [
                   </div>
                   </div>
 
-                  {/* Line items table — full-width */}
-                  <div className="border-t border-slate-100 rounded-b-2xl overflow-hidden">
+                  {/* ── Line Items (dynamic columns) ── */}
+                  {(() => {
+                    const partsRowTotal = (it: PartsItem) => {
+                      const base = it.overridePrice ? parseFloat(it.overridePrice) || 0 : it.qty * it.unitPrice
+                      const disc = it.discount ? parseFloat(it.discount) || 0 : 0
+                      return disc > 0 ? base * (1 - disc / 100) : base
+                    }
+                    return (
+                  <div className="pt-4 pb-2">
+                    {/* Column visibility toggles + Add Column */}
+                    <div className="px-6 mb-3 flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mr-1">Columns:</span>
+                      {partsColDefs.map(col => (
+                        <span key={col.key} className="inline-flex items-center gap-0.5">
+                          <button type="button" onClick={() => togglePartsCol(col.key)}
+                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition ${col.visible ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300'}`}>
+                            <span className="material-symbols-outlined text-[11px]">{col.visible ? 'visibility' : 'visibility_off'}</span>
+                            {col.label}
+                          </button>
+                          {col.key.startsWith('extra_') && (
+                            <button type="button" onClick={() => removePartsCol(col.key)}
+                              title="Remove column"
+                              className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-100 text-red-400 hover:bg-red-200 transition text-[10px] font-bold">×</button>
+                          )}
+                        </span>
+                      ))}
+                      {addingPartsCol ? (
+                        <span className="inline-flex items-center gap-1">
+                          <input autoFocus value={newPartsColName} onChange={e => setNewPartsColName(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter' && newPartsColName.trim()) { addPartsCol(newPartsColName.trim()); setNewPartsColName(''); setAddingPartsCol(false) } else if (e.key === 'Escape') { setNewPartsColName(''); setAddingPartsCol(false) } }}
+                            placeholder="Column name…"
+                            className="rounded-lg border border-indigo-300 bg-white px-2 py-0.5 text-xs text-slate-800 outline-none focus:ring-1 focus:ring-indigo-400 w-28" />
+                          <button type="button" onClick={() => { if (newPartsColName.trim()) { addPartsCol(newPartsColName.trim()); setNewPartsColName('') } setAddingPartsCol(false) }}
+                            className="rounded-lg bg-indigo-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-indigo-700 transition">Add</button>
+                          <button type="button" onClick={() => { setNewPartsColName(''); setAddingPartsCol(false) }}
+                            className="rounded-lg border border-slate-200 px-2 py-0.5 text-xs text-slate-500 hover:bg-slate-50 transition">Cancel</button>
+                        </span>
+                      ) : (
+                        <button type="button" onClick={() => setAddingPartsCol(true)}
+                          className="inline-flex items-center gap-1 rounded-full border border-dashed border-indigo-300 px-2.5 py-0.5 text-xs font-medium text-indigo-500 hover:bg-indigo-50 transition">
+                          <span className="material-symbols-outlined text-[11px]">add</span>
+                          Add Column
+                        </button>
+                      )}
+                      <span className="ml-1 text-[10px] text-slate-400">Drag headers to reorder · Double-click to rename</span>
+                    </div>
+
+                    {/* Table */}
                     <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead className="bg-slate-900 text-white text-left text-[10px] font-semibold uppercase tracking-wider">
-                          <tr className="border-b border-slate-700">
-                            <th rowSpan={2} className="px-3 py-2.5 w-8 align-middle">#</th>
-                            <th rowSpan={2} className="px-2 py-2.5 w-36 align-middle">Item</th>
-                            <th colSpan={3} className="px-2 pt-2.5 pb-0 text-center border-b border-slate-700">Description</th>
-                            <th rowSpan={2} className="px-2 py-2.5 w-12 text-center align-middle">Qty</th>
-                            <th rowSpan={2} className="px-2 py-2.5 w-24 text-right align-middle">Unit Price</th>
-                            <th rowSpan={2} className="px-2 py-2.5 w-24 text-right align-middle">Total</th>
-                            <th rowSpan={2} className="px-2 py-2.5 w-8 align-middle">
-                              <button type="button" onClick={() => setPartsItems(prev => [...prev, emptyPartsItem()])}
-                                title="Add row"
-                                className="flex items-center gap-0.5 rounded-md bg-white/15 hover:bg-white/30 px-1.5 py-1 text-[10px] font-semibold text-white transition mx-auto">
-                                <span className="material-symbols-outlined text-[13px]">add</span>
-                              </button>
-                            </th>
-                          </tr>
-                          <tr className="border-b border-slate-600 text-[9px] text-slate-300 font-medium">
-                            <th className="px-2 pb-1.5" />
-                            <th className="px-2 pb-1.5 w-20 text-center">Width</th>
-                            <th className="px-2 pb-1.5 w-20 text-center">Height</th>
+                      <table className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: `${partsColDefs.filter(c => c.visible).reduce((s, c) => s + c.width, 0) + 112}px`, minWidth: '100%' }}>
+                        <thead>
+                          <tr className="bg-slate-900 text-white text-left text-[10px] font-semibold uppercase tracking-wider select-none">
+                            {partsColDefs.filter(c => c.visible).map(col => (
+                              <th key={col.key}
+                                style={{ width: col.width, minWidth: col.width, position: 'relative' }}
+                                draggable
+                                onDragStart={() => setPartsDragColKey(col.key)}
+                                onDragOver={e => e.preventDefault()}
+                                onDrop={() => { if (partsDragColKey) reorderPartsCols(partsDragColKey, col.key); setPartsDragColKey(null) }}
+                                className={`px-3 py-3 cursor-grab active:cursor-grabbing transition ${partsDragColKey === col.key ? 'opacity-50' : ''} ${col.key === 'sno' || col.key === 'qty' || col.key === 'width' || col.key === 'height' ? 'text-center' : col.key === 'unitPrice' || col.key === 'total' ? 'text-right' : ''}`}>
+                                <span className="inline-flex items-center gap-1 truncate">
+                                  <span className="material-symbols-outlined text-[10px] text-white/40 shrink-0">drag_indicator</span>
+                                  {partsEditingColKey === col.key ? (
+                                    <input autoFocus defaultValue={col.label}
+                                      onBlur={e => { renamePartsCol(col.key, e.target.value || col.label); setPartsEditingColKey(null) }}
+                                      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                                      onClick={e => e.stopPropagation()}
+                                      className="bg-white/10 border-b border-white/40 text-white text-[10px] font-semibold uppercase tracking-wider outline-none w-20 px-0.5" />
+                                  ) : (
+                                    <span onDoubleClick={e => { e.stopPropagation(); setPartsEditingColKey(col.key) }} title="Double-click to rename" className="truncate">{col.label}</span>
+                                  )}
+                                </span>
+                                <div draggable={false} title="Drag to resize"
+                                  className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-white/20 transition"
+                                  onMouseDown={e => {
+                                    e.preventDefault(); e.stopPropagation()
+                                    const startX = e.clientX; const startW = col.width
+                                    const onMove = (me: MouseEvent) => {
+                                      const newW = Math.max(40, startW + me.clientX - startX)
+                                      setPartsColDefs(prev => prev.map(c => c.key === col.key ? { ...c, width: newW } : c))
+                                    }
+                                    const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+                                    window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp)
+                                  }} />
+                              </th>
+                            ))}
+                            <th className="px-3 py-3 text-center" style={{ width: 112, minWidth: 112 }}>Action</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {partsItems.map((it, i) => (
-                            <tr key={i} className="border-b border-slate-100 hover:bg-slate-50/60">
-                              <td className="px-2 py-1.5 text-slate-400">{i + 1}</td>
-                              <td className="px-2 py-1.5">
-                                <input type="text" value={it.item} onChange={e => updatePartsItem(i, 'item', e.target.value)}
-                                  placeholder="Item name" className="w-full rounded border border-slate-200 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none" />
-                              </td>
-                              <td className="px-2 py-1.5">
-                                <input type="text" value={it.description} onChange={e => updatePartsItem(i, 'description', e.target.value)}
-                                  placeholder="Description" className="w-full rounded border border-slate-200 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none" />
-                              </td>
-                              <td className="px-2 py-1.5">
-                                <input type="text" value={it.width} onChange={e => updatePartsItem(i, 'width', e.target.value)}
-                                  placeholder="—" className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-center focus:border-indigo-400 focus:outline-none" />
-                              </td>
-                              <td className="px-2 py-1.5">
-                                <input type="text" value={it.height} onChange={e => updatePartsItem(i, 'height', e.target.value)}
-                                  placeholder="—" className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-center focus:border-indigo-400 focus:outline-none" />
-                              </td>
-                              <td className="px-2 py-1.5">
-                                <input type="number" min={1} value={it.qty} onChange={e => updatePartsItem(i, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
-                                  className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-center focus:border-indigo-400 focus:outline-none" />
-                              </td>
-                              <td className="px-2 py-1.5">
-                                <input type="number" min={0} step={0.01} value={it.unitPrice || ''} onChange={e => updatePartsItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
-                                  placeholder="0.00" className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-right focus:border-indigo-400 focus:outline-none" />
-                              </td>
-                              <td className="px-2 py-1.5 text-right font-medium text-slate-700 tabular-nums">
-                                {it.qty * it.unitPrice > 0 ? fmtP(it.qty * it.unitPrice) : '—'}
-                              </td>
-                              <td className="px-1 py-1.5">
-                                <button type="button" onClick={() => setPartsItems(prev => prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i))}
-                                  className="rounded p-0.5 text-slate-300 hover:bg-red-50 hover:text-red-500">
-                                  <span className="material-symbols-outlined text-[14px]">close</span>
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
+                          {partsItems.map((it, i) => {
+                            const rt = partsRowTotal(it)
+                            const notesOpen = partsNotesOpen.has(i)
+                            return (
+                              <Fragment key={i}>
+                                {notesOpen && (
+                                  <tr className="border-b border-indigo-100">
+                                    <td colSpan={partsColDefs.filter(c => c.visible).length + 1} className="p-0">
+                                      <div className="overflow-hidden border-l-4 border-indigo-400" style={{ backgroundColor: it.noteStyle.bgColor }}>
+                                        <div className="flex items-center gap-1 px-3 py-1.5 bg-white/70 border-b border-indigo-100 flex-wrap">
+                                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mr-2">Note style</span>
+                                          <button type="button" title="Bold"
+                                            onClick={() => updatePartsItem(i, 'noteStyle', { ...it.noteStyle, bold: !it.noteStyle.bold })}
+                                            className={`w-6 h-6 rounded text-xs font-bold transition ${it.noteStyle.bold ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300' : 'text-slate-500 hover:bg-slate-100'}`}>B</button>
+                                          <button type="button" title="Italic"
+                                            onClick={() => updatePartsItem(i, 'noteStyle', { ...it.noteStyle, italic: !it.noteStyle.italic })}
+                                            className={`w-6 h-6 rounded text-xs italic transition ${it.noteStyle.italic ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300' : 'text-slate-500 hover:bg-slate-100'}`}>I</button>
+                                          <div className="flex items-center gap-1 ml-1">
+                                            <span className="text-[10px] text-slate-400">Text</span>
+                                            <input type="color" value={it.noteStyle.color} title="Font color"
+                                              onChange={e => updatePartsItem(i, 'noteStyle', { ...it.noteStyle, color: e.target.value })}
+                                              className="w-6 h-6 rounded cursor-pointer border border-slate-200 p-0.5" />
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-[10px] text-slate-400">BG</span>
+                                            <input type="color" value={it.noteStyle.bgColor} title="Background color"
+                                              onChange={e => updatePartsItem(i, 'noteStyle', { ...it.noteStyle, bgColor: e.target.value })}
+                                              className="w-6 h-6 rounded cursor-pointer border border-slate-200 p-0.5" />
+                                          </div>
+                                          <select value={it.noteStyle.fontSize} title="Font size"
+                                            onChange={e => updatePartsItem(i, 'noteStyle', { ...it.noteStyle, fontSize: e.target.value })}
+                                            className="ml-1 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs text-slate-600 outline-none focus:border-indigo-400">
+                                            {['10','11','12','13','14','16','18'].map(s => <option key={s} value={s}>{s}px</option>)}
+                                          </select>
+                                          <button type="button" onClick={() => { updatePartsItem(i, 'notes', ''); updatePartsItem(i, 'noteStyle', defaultNoteStyle()); setPartsNotesOpen(prev => { const s = new Set(prev); s.delete(i); return s }) }}
+                                            className="ml-auto text-slate-300 hover:text-red-400 transition">
+                                            <span className="material-symbols-outlined text-[15px]">close</span>
+                                          </button>
+                                        </div>
+                                        <textarea value={it.notes} onChange={e => updatePartsItem(i, 'notes', e.target.value)}
+                                          placeholder="Add notes for this line item…" rows={2}
+                                          style={{ fontWeight: it.noteStyle.bold ? 'bold' : 'normal', fontStyle: it.noteStyle.italic ? 'italic' : 'normal', color: it.noteStyle.color, fontSize: it.noteStyle.fontSize + 'px', backgroundColor: 'transparent' }}
+                                          className="w-full px-4 py-2.5 outline-none resize-y placeholder-slate-400/60" />
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                                <tr className="border-b border-slate-100 hover:bg-slate-50/40 align-top">
+                                  {partsColDefs.filter(c => c.visible).map(col => (
+                                    <td key={col.key} className="px-2 py-2.5">
+                                      {col.key === 'sno' && (
+                                        <input type="text" value={it.sno} onChange={e => updatePartsItem(i, 'sno', e.target.value)}
+                                          className="w-full rounded border border-transparent bg-transparent px-1 py-1 text-sm font-semibold text-slate-500 text-center outline-none hover:border-slate-300 focus:border-indigo-400 focus:bg-white focus:ring-1 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                      {col.key === 'item' && (
+                                        <input type="text" value={it.item} onChange={e => updatePartsItem(i, 'item', e.target.value)}
+                                          placeholder="Item name" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                      {col.key === 'description' && (
+                                        <textarea value={it.description} onChange={e => updatePartsItem(i, 'description', e.target.value)}
+                                          placeholder="Description" rows={2}
+                                          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition resize-y min-h-[2.5rem]" />
+                                      )}
+                                      {col.key === 'width' && (
+                                        <input type="text" value={it.width} onChange={e => updatePartsItem(i, 'width', e.target.value)}
+                                          placeholder="—" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-center text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                      {col.key === 'height' && (
+                                        <input type="text" value={it.height} onChange={e => updatePartsItem(i, 'height', e.target.value)}
+                                          placeholder="—" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-center text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                      {col.key === 'qty' && (
+                                        <input type="number" min={1} value={it.qty} onChange={e => updatePartsItem(i, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
+                                          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-center text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                      {col.key === 'unitPrice' && (
+                                        <input type="number" min={0} step={0.01} value={it.unitPrice || ''} onChange={e => updatePartsItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                          placeholder="0.00" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-right text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                      {col.key === 'total' && (
+                                        <div className="text-right">
+                                          <p className={`font-semibold tabular-nums ${rt > 0 ? 'text-slate-800' : 'text-slate-300'}`}>{rt > 0 ? fmtP(rt) : '$0.00'}</p>
+                                          <p className="text-[10px] text-slate-400 mt-0.5">Auto: qty × unit</p>
+                                          <input type="number" min={0} step={0.01} value={it.overridePrice} onChange={e => updatePartsItem(i, 'overridePrice', e.target.value)}
+                                            placeholder="Override $"
+                                            className={`mt-1 w-full rounded-lg border px-2 py-1 text-xs text-right outline-none focus:ring-1 transition ${it.overridePrice ? 'border-amber-400 bg-amber-50 text-amber-800 focus:border-amber-400 focus:ring-amber-500/20' : 'border-slate-200 bg-slate-50 text-slate-600 focus:border-indigo-400 focus:ring-indigo-500/20'}`} />
+                                          {it.overridePrice && <p className="text-[10px] text-amber-500 mt-0.5">overridden</p>}
+                                        </div>
+                                      )}
+                                      {col.key.startsWith('extra_') && (
+                                        <input type="text" value={it.extras[col.key] ?? ''} onChange={e => updatePartsItem(i, 'extras', { ...it.extras, [col.key]: e.target.value })}
+                                          placeholder="—" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                    </td>
+                                  ))}
+                                  <td className="px-2 py-2.5">
+                                    <div className="flex flex-col gap-1.5">
+                                      <button type="button" onClick={() => setPartsItems(prev => prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i))}
+                                        className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 transition">
+                                        Remove
+                                      </button>
+                                      <button type="button"
+                                        onClick={() => setPartsNotesOpen(prev => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s })}
+                                        className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${notesOpen ? 'border-indigo-300 bg-indigo-50 text-indigo-600' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                                        {notesOpen ? 'Hide notes' : (it.notes ? 'Edit notes' : 'Add notes')}
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              </Fragment>
+                            )
+                          })}
                         </tbody>
                       </table>
                     </div>
+
+                    {/* Add Row */}
+                    <div className="px-6 pt-3">
+                      <button type="button" onClick={() => setPartsItems(prev => [...prev, emptyPartsItem(prev.length)])}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 py-2.5 text-sm font-medium text-slate-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50/40 transition">
+                        <span className="material-symbols-outlined text-[18px]">add</span>
+                        Add Row
+                      </button>
+                    </div>
+
                     {/* Totals */}
-                    <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 flex justify-end">
-                      <div className="w-48 space-y-1 text-xs">
-                        <div className="flex justify-between text-slate-600"><span>Subtotal</span><span className="tabular-nums font-medium">{fmtP(partsSubtotal)}</span></div>
-                        <div className="flex justify-between text-slate-500"><span>GST (10%)</span><span className="tabular-nums">{fmtP(partsSubtotal * 0.1)}</span></div>
-                        <div className="flex justify-between rounded-lg bg-slate-800 px-2.5 py-1.5 text-white font-semibold"><span>TOTAL</span><span className="tabular-nums">{fmtP(partsSubtotal * 1.1)}</span></div>
+                    <div className="px-6 pt-4">
+                      <div className="flex justify-end">
+                        <div className="w-56 space-y-1.5 text-sm">
+                          <div className="flex justify-between text-slate-600 px-1"><span>Subtotal</span><span className="tabular-nums font-medium">{fmtP(partsSubtotal)}</span></div>
+                          <div className="flex justify-between text-slate-500 px-1"><span>GST (10%)</span><span className="tabular-nums">{fmtP(partsSubtotal * 0.1)}</span></div>
+                          <div className="flex justify-between rounded-xl bg-slate-800 px-3 py-2 text-white font-semibold"><span>TOTAL</span><span className="tabular-nums">{fmtP(partsSubtotal * 1.1)}</span></div>
+                        </div>
                       </div>
                     </div>
                   </div>
+                    )
+                  })()}
 
                   {/* End User T&C selector */}
                   <div className="px-6 pt-5">
