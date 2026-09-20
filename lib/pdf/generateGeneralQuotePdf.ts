@@ -16,7 +16,11 @@ export type GeneralLineItem = {
   height?:      string
   qty:          number
   unitPrice:    number
+  notes?:       string
+  extras?:      Record<string, string>
 }
+
+export type GeneralColSpec = { key: string; label: string; width?: number }
 
 export type GeneralQuotePdfInput = {
   quoteNumber:      string
@@ -29,6 +33,9 @@ export type GeneralQuotePdfInput = {
   customerPhone:    string
   customerEmail:    string
   lineItems:        GeneralLineItem[]
+  visibleColumns?:  GeneralColSpec[]   // ordered visible columns; omit = all defaults
+  discountPct?:     number
+  discountColor?:   string   // hex e.g. "#1a7a30"
   terms?:           string
   endUser?:         'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER'
   senderName?:      string
@@ -182,63 +189,140 @@ export async function generateGeneralQuotePdf(input: GeneralQuotePdfInput): Prom
   y -= custRows.length * 14 + 16
 
   // ── LINE ITEMS TABLE ──────────────────────────────────────────────────────
-  const cNo      = ML
-  const cNoW     = 22
-  const cItem    = ML + cNoW
-  const cItemW   = 100
-  const cDesc    = cItem + cItemW
-  const cWidthX  = cDesc + 130
-  const cWidthW  = 42
-  const cHeightX = cWidthX + cWidthW
-  const cHeightW = 42
-  const cQtyX    = cHeightX + cHeightW
-  const cQtyW    = 28
-  const cUpRight  = ML + CW - 60
-  const cTotRight = ML + CW
+  // helper: strip chars WinAnsi can't encode (newlines, smart quotes, etc.)
+  const sanitise = (s: string) => s.replace(/[\r\n]+/g, ' ').replace(/[^\x20-\xFF]/g, ' ').trim()
 
-  // Row 1 — main header (black bar)
+  // Default column order if caller doesn't supply visibleColumns
+  const DEFAULT_COLS: GeneralColSpec[] = [
+    { key: 'sno', label: 'S.No' }, { key: 'item', label: 'Item' },
+    { key: 'description', label: 'Description' }, { key: 'width', label: 'Width' },
+    { key: 'height', label: 'Height' }, { key: 'qty', label: 'Qty' },
+    { key: 'unitPrice', label: 'Unit Price' }, { key: 'total', label: 'Total' },
+  ]
+  const visCols = input.visibleColumns ?? DEFAULT_COLS
+
+  // Fallback widths (used when caller doesn't supply widths)
+  const FIXED_W: Record<string, number> = {
+    sno: 22, item: 80, width: 42, height: 42, qty: 28, unitPrice: 65, total: 65,
+  }
+  const EXTRA_W = 55
+
+  // Compute raw widths (use caller-supplied proportions when available)
+  const allHaveWidth = visCols.every(c => c.width != null)
+  let rawWidths: number[]
+  if (allHaveWidth) {
+    // Scale proportionally so the columns fill exactly CW
+    const rawTotal = visCols.reduce((s, c) => s + c.width!, 0)
+    const scale = CW / rawTotal
+    rawWidths = visCols.map(c => Math.max(16, c.width! * scale))
+  } else {
+    // Fallback: description gets remaining space
+    const fixedTotal = visCols.reduce((s, c) => c.key === 'description' ? s : s + (FIXED_W[c.key] ?? EXTRA_W), 0)
+    const fallbackDescW = visCols.some(c => c.key === 'description') ? Math.max(60, CW - fixedTotal) : 0
+    rawWidths = visCols.map(c => c.key === 'description' ? fallbackDescW : (FIXED_W[c.key] ?? EXTRA_W))
+  }
+
+  // Build col geometry: { key, label, x, w, align }
+  type ColGeo = { key: string; label: string; x: number; w: number; align: 'left' | 'center' | 'right' }
+  const cols: ColGeo[] = []
+  let cx = ML
+  for (let ci = 0; ci < visCols.length; ci++) {
+    const c = visCols[ci]
+    const w = rawWidths[ci]
+    const align: 'left' | 'center' | 'right' =
+      c.key === 'unitPrice' || c.key === 'total' ? 'right' :
+      c.key === 'sno' || c.key === 'description' || c.key === 'item' ? 'left' : 'center'
+    cols.push({ key: c.key, label: c.label, x: cx, w, align })
+    cx += w
+  }
+
   const TH = 20
   drawRect(page, ML, y - TH, CW, TH, BLACK)
-  t(page,       'NO',          cNo + 2,   y - 13, bold, 8, WHITE)
-  t(page,       'ITEM',        cItem,     y - 13, bold, 8, WHITE)
-  tCenter(page, 'DESCRIPTION', cDesc, (cHeightX + cHeightW - cDesc), y - 13, bold, 8, WHITE)
-  tCenter(page, 'QTY',         cQtyX,    cQtyW, y - 13, bold, 8, WHITE)
-  tRight(page,  'UNIT PRICE',  cUpRight,         y - 13, bold, 8, WHITE)
-  tRight(page,  'TOTAL',       cTotRight - 4,    y - 13, bold, 8, WHITE)
+  cols.forEach(col => {
+    const label = col.key === 'sno' ? 'NO'
+      : col.key === 'unitPrice' ? 'UNIT PRICE'
+      : col.label.toUpperCase()
+    if (col.align === 'right') {
+      tRight(page, label, col.x + col.w - 4, y - 13, bold, 8, WHITE)
+    } else if (col.align === 'center') {
+      tCenter(page, label, col.x, col.w, y - 13, bold, 8, WHITE)
+    } else {
+      t(page, label, col.x + (col.key === 'sno' ? 2 : 0), y - 13, bold, 8, WHITE)
+    }
+  })
   y -= TH
 
-  // Row 2 — sub-header
+  // Sub-header row (# / WIDTH / HEIGHT / # / $ / $$)
   const SH = 14
-  t(page,       '#',      cNo + 2,   y - 9,  reg, 8, BLACK)
-  tCenter(page, 'WIDTH',  cWidthX,   cWidthW, y - 9, reg, 8, BLACK)
-  tCenter(page, 'HEIGHT', cHeightX,  cHeightW,y - 9, reg, 8, BLACK)
-  tCenter(page, '#',      cQtyX,     cQtyW,   y - 9, reg, 8, BLACK)
-  tRight(page,  '$',      cUpRight,           y - 9, reg, 8, BLACK)
-  tRight(page,  '$$',     cTotRight - 4,      y - 9, reg, 8, BLACK)
-  y -= SH
+  const subLabels: Record<string, string> = { sno: '#', width: 'WIDTH', height: 'HEIGHT', qty: '#', unitPrice: '$', total: '$$' }
+  let hasSubRow = false
+  cols.forEach(col => {
+    const sub = subLabels[col.key]
+    if (!sub) return
+    hasSubRow = true
+    if (col.align === 'right') tRight(page, sub, col.x + col.w - 4, y - 9, reg, 8, BLACK)
+    else if (col.align === 'center') tCenter(page, sub, col.x, col.w, y - 9, reg, 8, BLACK)
+    else t(page, sub, col.x + 2, y - 9, reg, 8, BLACK)
+  })
+  if (hasSubRow) y -= SH
   drawHLine(page, ML, y, CW, 1.2, DARK)
   y -= 2
 
-  const ROW_H = 18
-  const MIN_ROWS = 15
+  const ROW_H  = 18
+  const LINE_H = 11
+  const descCol = cols.find(c => c.key === 'description')
+  const hasDesc = descCol != null
+  const descW   = descCol ? descCol.w - 8 : 100
 
-  // Filled rows
-  input.lineItems.forEach((item, i) => {
+  const filledItems = input.lineItems.filter(it => it.item.trim() || it.unitPrice > 0)
+  const MIN_ROWS  = Math.max(filledItems.length + 3, 5)
+  let rowsDrawn = 0
+
+  filledItems.forEach((item, i) => {
+    const total     = item.qty * item.unitPrice
+    const rawDesc   = sanitise(item.description ?? '')
+    const descLines = hasDesc && rawDesc ? wrapText(rawDesc, reg, 9, descW) : []
+    const rowH      = descLines.length > 1 ? descLines.length * LINE_H + 8 : ROW_H
+
+    // Notes band ABOVE the data row
+    if (item.notes?.trim()) {
+      const noteLines = wrapText(sanitise(item.notes), reg, 8.5, CW - 24)
+      const noteH = noteLines.length * 10 + 8
+      page.drawRectangle({ x: ML, y: y - noteH + 2, width: CW, height: noteH, color: rgb(0.93, 0.95, 1) })
+      noteLines.forEach((line, li) => { t(page, line, ML + 8, y - 9 - li * 10, reg, 8.5, GREY) })
+      y -= noteH
+    }
+
     drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
-    const total = item.qty * item.unitPrice
-    t(page,       String(i + 1),          cNo + 2,           y - 12, reg, 10, BLACK)
-    t(page,       item.item,              cItem,             y - 12, reg, 10, BLACK)
-    t(page,       item.description ?? '', cDesc,             y - 12, reg, 10, BLACK)
-    tCenter(page, item.width  ?? '',      cWidthX,  cWidthW, y - 12, reg, 10, BLACK)
-    tCenter(page, item.height ?? '',      cHeightX, cHeightW,y - 12, reg, 10, BLACK)
-    tCenter(page, String(item.qty),       cQtyX,    cQtyW,   y - 12, reg, 10, BLACK)
-    tRight(page,  item.unitPrice > 0 ? fmtAUD(item.unitPrice) : '-', cUpRight,  y - 12, reg, 10, BLACK)
-    tRight(page,  total > 0 ? fmtAUD(total) : '-',                   cTotRight, y - 12, reg, 10, BLACK)
-    y -= ROW_H
+
+    cols.forEach(col => {
+      let val = ''
+      switch (col.key) {
+        case 'sno':         val = String(i + 1); break
+        case 'item':        val = sanitise(item.item); break
+        case 'width':       val = sanitise(item.width ?? ''); break
+        case 'height':      val = sanitise(item.height ?? ''); break
+        case 'qty':         val = String(item.qty); break
+        case 'unitPrice':   val = item.unitPrice > 0 ? fmtAUD(item.unitPrice) : '-'; break
+        case 'total':       val = total > 0 ? fmtAUD(total) : '-'; break
+        case 'description': {
+          descLines.forEach((line, li) => {
+            t(page, line, col.x, y - 12 - li * LINE_H, reg, 9, BLACK)
+          })
+          return
+        }
+        default: val = sanitise(item.extras?.[col.key] ?? ''); break
+      }
+      if (col.align === 'right') tRight(page, val, col.x + col.w - 4, y - 12, reg, 10, BLACK)
+      else if (col.align === 'center') tCenter(page, val, col.x, col.w, y - 12, reg, 10, BLACK)
+      else t(page, val, col.x + (col.key === 'sno' ? 2 : 0), y - 12, reg, 10, BLACK)
+    })
+
+    y -= rowH
+    rowsDrawn++
   })
 
-  // Empty filler rows
-  const fillerCount = Math.max(0, MIN_ROWS - input.lineItems.length)
+  const fillerCount = Math.max(0, MIN_ROWS - rowsDrawn)
   for (let i = 0; i < fillerCount; i++) {
     drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
     y -= ROW_H
@@ -247,26 +331,50 @@ export async function generateGeneralQuotePdf(input: GeneralQuotePdfInput): Prom
   y -= 16
 
   // ── TOTALS + BANK DETAILS ─────────────────────────────────────────────────
-  const grandTotal = input.lineItems.reduce((s, it) => s + it.qty * it.unitPrice, 0)
+  const subtotal     = input.lineItems.reduce((s, it) => s + it.qty * it.unitPrice, 0)
+  const discPct      = input.discountPct ?? 0
+  const afterDisc    = subtotal * (1 - discPct / 100)
   const bankY = y
 
   t(page, 'BANK DETAILS',                             ML, bankY - 14, bold, 8, DARK)
   t(page, 'Account Name: NBE Australia Pty Ltd',      ML, bankY - 26, reg,  8, DARK)
   t(page, 'BSB: 013-525  |  Account No.: 3473-93755', ML, bankY - 38, reg,  8, DARK)
 
-  const totBoxW    = 170
+  const totBoxW     = 170
   const totValRight = ML + CW
-  const totLabelX  = ML + CW - totBoxW + 8
+  const totLabelX   = ML + CW - totBoxW + 8
 
-  t(page,      'Subtotal',              totLabelX,    bankY,      reg,  9, DARK)
-  tRight(page, grandTotal > 0 ? fmtAUD(grandTotal) : '-', totValRight, bankY, reg, 9, DARK)
-  t(page,      'GST (10%)',             totLabelX,    bankY - 14, reg,  9, DARK)
-  tRight(page, grandTotal > 0 ? fmtAUD(grandTotal * 0.1) : '-', totValRight, bankY - 14, reg, 9, DARK)
+  const ROW_STEP   = 16  // vertical gap between totals rows
+  // parse hex colour for discount, fallback to dark green
+  const hexToRgb = (hex: string) => {
+    const m = hex.replace('#','').match(/.{2}/g)
+    return m ? rgb(parseInt(m[0],16)/255, parseInt(m[1],16)/255, parseInt(m[2],16)/255) : rgb(0, 0.45, 0.1)
+  }
+  const DISC_COLOR = input.discountColor ? hexToRgb(input.discountColor) : rgb(0, 0.45, 0.1)
 
-  const totBoxY = bankY - 48
-  drawRect(page, ML + CW - totBoxW, totBoxY, totBoxW, 22, BLACK)
-  t(page,      'TOTAL',                           ML + CW - totBoxW + 8, totBoxY + 6, bold, 10, WHITE)
-  tRight(page, grandTotal > 0 ? fmtAUD(grandTotal * 1.1) : '$  -', ML + CW - 4, totBoxY + 6, bold, 10, WHITE)
+  // Subtotal row
+  t(page,      'Subtotal',                              totLabelX,   bankY,              reg,  9, DARK)
+  tRight(page, subtotal > 0 ? fmtAUD(subtotal) : '-',  totValRight, bankY,              reg,  9, DARK)
+
+  // Discount row (only if discount applied)
+  let offsetY = ROW_STEP
+  if (discPct > 0) {
+    const saving = subtotal * discPct / 100
+    t(page,      `Discount (${discPct}%)`,              totLabelX,   bankY - offsetY,    reg,  9, DISC_COLOR)
+    tRight(page, `-${fmtAUD(saving)}`,                  totValRight, bankY - offsetY,    reg,  9, DISC_COLOR)
+    offsetY += ROW_STEP
+  }
+
+  // GST row
+  t(page,      'GST (10%)',                             totLabelX,   bankY - offsetY,    reg,  9, DARK)
+  tRight(page, afterDisc > 0 ? fmtAUD(afterDisc * 0.1) : '-', totValRight, bankY - offsetY, reg, 9, DARK)
+  offsetY += ROW_STEP
+
+  // TOTAL box — 10pt gap below last row
+  const totBoxY = bankY - offsetY - 10
+  drawRect(page, ML + CW - totBoxW, totBoxY, totBoxW, 24, BLACK)
+  t(page,      'TOTAL',                                 ML + CW - totBoxW + 8, totBoxY + 7, bold, 10, WHITE)
+  tRight(page, afterDisc > 0 ? fmtAUD(afterDisc * 1.1) : '$  -', ML + CW - 4, totBoxY + 7, bold, 10, WHITE)
 
   // ── FOOTER TERMS ─────────────────────────────────────────────────────────
   const DEFAULT_TERMS = 'This quotation is based on the NBE Standard Door comprising a galvanized frame, PVC curtain (900 g/m²), and a zinc-coated control box (RAL 7035). Optional extras (e.g. powder coating, light curtain, remote control, radar, traffic light, induction loop, contactless exit button) are available at additional cost. All other matters shall be subject to our standard Terms and Conditions (T&C). The electrical scope is limited to the connection between the control panel and the doors only. Power supply and isolator shall be provided by others.'

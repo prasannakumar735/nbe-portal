@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { loadDoorImageStyle } from '@/app/(portal)/admin/settings/QuoteSettingsClient'
 import { createSupabaseClient } from '@/lib/supabase/client'
@@ -723,19 +723,63 @@ The quote includes all relevant specifications and pricing as discussed. Please 
   const emptyMaintItem = (): MaintItem => ({ item: '', description: '', width: '', height: '', qty: 1, unitPrice: 0 })
   const [maintItems, setMaintItems] = useState<MaintItem[]>(() => Array.from({ length: 5 }, emptyMaintItem))
 
-  type GeneralItem = { sno: string; item: string; description: string; width: string; height: string; qty: number; unitPrice: number; notes: string; overridePrice: string; discount: string }
-  const emptyGeneralItem = (i = 0): GeneralItem => ({ sno: String(i + 1), item: '', description: '', width: '', height: '', qty: 1, unitPrice: 0, notes: '', overridePrice: '', discount: '' })
+  type GeneralNoteStyle = { bold: boolean; italic: boolean; color: string; bgColor: string; fontSize: string }
+  type GeneralItem = { sno: string; item: string; description: string; width: string; height: string; qty: number; unitPrice: number; notes: string; noteStyle: GeneralNoteStyle; overridePrice: string; discount: string; extras: Record<string, string> }
+  const defaultNoteStyle = (): GeneralNoteStyle => ({ bold: false, italic: false, color: '#374151', bgColor: '#eff6ff', fontSize: '12' })
+  const emptyGeneralItem = (i = 0): GeneralItem => ({ sno: String(i + 1), item: '', description: '', width: '', height: '', qty: 1, unitPrice: 0, notes: '', noteStyle: defaultNoteStyle(), overridePrice: '', discount: '', extras: {} })
   const [generalItems, setGeneralItems] = useState<GeneralItem[]>(() => Array.from({ length: 5 }, (_, i) => emptyGeneralItem(i)))
-  const [generalCols, setGeneralCols] = useState({ width: true, height: true, notes: false, override: false, discount: false })
+
+  type GeneralColDef = { key: string; label: string; visible: boolean; width: number }
+  const [generalColDefs, setGeneralColDefs] = useState<GeneralColDef[]>([
+    { key: 'sno',         label: 'S.No',       visible: true, width: 52  },
+    { key: 'item',        label: 'Item',        visible: true, width: 110 },
+    { key: 'description', label: 'Description', visible: true, width: 220 },
+    { key: 'width',       label: 'Width',       visible: true, width: 75  },
+    { key: 'height',      label: 'Height',      visible: true, width: 75  },
+    { key: 'qty',         label: 'Qty',         visible: true, width: 65  },
+    { key: 'unitPrice',   label: 'Unit Price',  visible: true, width: 110 },
+    { key: 'total',       label: 'Total',       visible: true, width: 100 },
+  ])
   const [generalNotesOpen, setGeneralNotesOpen] = useState<Set<number>>(new Set())
-  const [showGeneralDiscount, setShowGeneralDiscount] = useState(false)
+  const [generalDragColKey, setGeneralDragColKey] = useState<string | null>(null)
+  const [generalEditingColKey, setGeneralEditingColKey] = useState<string | null>(null)
+  const [showGeneralDiscount, setShowGeneralDiscount] = useState(true)
   const [generalDiscountPct, setGeneralDiscountPct] = useState('')
+  const [generalDiscountColor, setGeneralDiscountColor] = useState('#1a7a30')
+  const [addingGeneralCol, setAddingGeneralCol] = useState(false)
+  const [newGeneralColName, setNewGeneralColName] = useState('')
 
   function updateGeneralItem<K extends keyof GeneralItem>(i: number, key: K, val: GeneralItem[K]) {
     setGeneralItems(prev => prev.map((it, idx) => idx === i ? { ...it, [key]: val } : it))
   }
-  function toggleGeneralCol(col: keyof typeof generalCols) {
-    setGeneralCols(prev => ({ ...prev, [col]: !prev[col] }))
+  function toggleGeneralCol(key: string) {
+    setGeneralColDefs(prev => prev.map(c => c.key === key ? { ...c, visible: !c.visible } : c))
+  }
+  function renameGeneralCol(key: string, label: string) {
+    setGeneralColDefs(prev => prev.map(c => c.key === key ? { ...c, label } : c))
+  }
+  function reorderGeneralCols(fromKey: string, toKey: string) {
+    if (fromKey === toKey) return
+    setGeneralColDefs(prev => {
+      const arr = [...prev]
+      const fi = arr.findIndex(c => c.key === fromKey)
+      const ti = arr.findIndex(c => c.key === toKey)
+      const [moved] = arr.splice(fi, 1)
+      arr.splice(ti, 0, moved)
+      return arr
+    })
+  }
+  function addGeneralCol(label: string) {
+    const key = `extra_${Date.now()}`
+    setGeneralColDefs(prev => {
+      const insertBefore = prev.findIndex(c => c.key === 'total')
+      const arr = [...prev]
+      arr.splice(insertBefore, 0, { key, label, visible: true, width: 100 })
+      return arr
+    })
+  }
+  function removeGeneralCol(key: string) {
+    setGeneralColDefs(prev => prev.filter(c => c.key !== key))
   }
 
   type PartsItem = { item: string; description: string; width: string; height: string; qty: number; unitPrice: number }
@@ -927,9 +971,10 @@ The quote includes all relevant specifications and pricing as discussed. Please 
         quoteNumberRef.current = qn
         setQuoteNumber(qn)
       }
-      const filled = generalItems.filter(it => it.item.trim())
+      const filled = generalItems.filter(it => it.item.trim() || it.unitPrice > 0)
       const validDate = new Date(); validDate.setDate(validDate.getDate() + 30)
       const validUntil = `${String(validDate.getDate()).padStart(2,'0')}/${String(validDate.getMonth()+1).padStart(2,'0')}/${validDate.getFullYear()}`
+      const visCols = generalColDefs.filter(c => c.visible).map(c => ({ key: c.key, label: c.label, width: c.width }))
       const res = await fetch('/api/quotes/general/pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -939,7 +984,10 @@ The quote includes all relevant specifications and pricing as discussed. Please 
           customerName: custName, customerAttn: custAttn,
           customerAddress: custAddress, customerPostcode: custPostcode,
           customerPhone: custPhone, customerEmail: custEmail,
-          lineItems: filled,
+          lineItems: filled.map(it => ({ ...it, extras: it.extras ?? {} })),
+          visibleColumns: visCols,
+          discountPct: showGeneralDiscount ? (parseFloat(generalDiscountPct) || undefined) : undefined,
+          discountColor: (showGeneralDiscount && parseFloat(generalDiscountPct) > 0) ? generalDiscountColor : undefined,
           terms: generalTerms || DEFAULT_GENERAL_TERMS,
           endUser: generalEndUser || undefined,
           senderName: generalSenderName, senderAddress: generalSenderAddress, senderEmail: generalSenderEmail,
@@ -1293,7 +1341,8 @@ const autoDescLines = [
       .trim()
       .replace(/\s+/g, '_')
       .slice(0, 50)
-    const euPart = endUser ? `_${endUser}` : ''
+    const activeEndUser = isGeneral ? generalEndUser : endUser
+    const euPart = activeEndUser ? `_${activeEndUser}` : ''
     a.download = `${quoteNumber}_${safeCust}${euPart}.pdf`
     a.click()
   }
@@ -2026,7 +2075,7 @@ const autoDescLines = [
                 return base * (1 - disc / 100)
               }
               const generalSubtotal = generalItems.reduce((s, it) => s + rowTotal(it), 0)
-              const discPct = parseFloat(generalDiscountPct) || 0
+              const discPct = showGeneralDiscount ? (parseFloat(generalDiscountPct) || 0) : 0
               const generalAfterDiscount = generalSubtotal * (1 - discPct / 100)
               return (
                 <div className="space-y-0 divide-y divide-slate-100">
@@ -2103,134 +2152,217 @@ const autoDescLines = [
 
                   {/* ── Line Items ── */}
                   <div className="pt-4 pb-2">
-                    {/* Column toggles — only real table columns */}
+                    {/* Column visibility toggles + Add Column */}
                     <div className="px-6 mb-3 flex items-center gap-2 flex-wrap">
-                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mr-1">Show columns:</span>
-                      {([['width','Width'],['height','Height']] as [keyof typeof generalCols, string][]).map(([col, label]) => (
-                        <button key={col} type="button" onClick={() => toggleGeneralCol(col)}
-                          className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition ${generalCols[col] ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300'}`}>
-                          <span className="material-symbols-outlined text-[12px]">{generalCols[col] ? 'check_circle' : 'add_circle'}</span>
-                          {label}
-                        </button>
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mr-1">Columns:</span>
+                      {generalColDefs.map(col => (
+                        <span key={col.key} className="inline-flex items-center gap-0.5">
+                          <button type="button" onClick={() => toggleGeneralCol(col.key)}
+                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition ${col.visible ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300'}`}>
+                            <span className="material-symbols-outlined text-[11px]">{col.visible ? 'visibility' : 'visibility_off'}</span>
+                            {col.label}
+                          </button>
+                          {col.key.startsWith('extra_') && (
+                            <button type="button" onClick={() => removeGeneralCol(col.key)}
+                              title="Remove column"
+                              className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-100 text-red-400 hover:bg-red-200 transition text-[10px] font-bold">×</button>
+                          )}
+                        </span>
                       ))}
+                      {/* Add Column */}
+                      {addingGeneralCol ? (
+                        <span className="inline-flex items-center gap-1">
+                          <input autoFocus value={newGeneralColName} onChange={e => setNewGeneralColName(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter' && newGeneralColName.trim()) { addGeneralCol(newGeneralColName.trim()); setNewGeneralColName(''); setAddingGeneralCol(false) } else if (e.key === 'Escape') { setNewGeneralColName(''); setAddingGeneralCol(false) } }}
+                            placeholder="Column name…"
+                            className="rounded-lg border border-indigo-300 bg-white px-2 py-0.5 text-xs text-slate-800 outline-none focus:ring-1 focus:ring-indigo-400 w-28" />
+                          <button type="button" onClick={() => { if (newGeneralColName.trim()) { addGeneralCol(newGeneralColName.trim()); setNewGeneralColName(''); } setAddingGeneralCol(false) }}
+                            className="rounded-lg bg-indigo-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-indigo-700 transition">Add</button>
+                          <button type="button" onClick={() => { setNewGeneralColName(''); setAddingGeneralCol(false) }}
+                            className="rounded-lg border border-slate-200 px-2 py-0.5 text-xs text-slate-500 hover:bg-slate-50 transition">Cancel</button>
+                        </span>
+                      ) : (
+                        <button type="button" onClick={() => setAddingGeneralCol(true)}
+                          className="inline-flex items-center gap-1 rounded-full border border-dashed border-indigo-300 px-2.5 py-0.5 text-xs font-medium text-indigo-500 hover:bg-indigo-50 transition">
+                          <span className="material-symbols-outlined text-[11px]">add</span>
+                          Add Column
+                        </button>
+                      )}
+                      <span className="ml-1 text-[10px] text-slate-400">Drag headers to reorder · Double-click to rename</span>
                     </div>
 
                     {/* Table */}
                     <div className="overflow-x-auto">
-                      <table className="w-full text-sm border-collapse">
+                      <table className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: `${generalColDefs.filter(c => c.visible).reduce((s, c) => s + c.width, 0) + 112}px`, minWidth: '100%' }}>
                         <thead>
-                          <tr className="bg-slate-900 text-white text-left text-[10px] font-semibold uppercase tracking-wider">
-                            <th className="px-3 py-3 w-12 text-center">S.No</th>
-                            <th className="px-3 py-3 w-32">Item</th>
-                            <th className="px-3 py-3">Description</th>
-                            {generalCols.width  && <th className="px-3 py-3 w-20 text-center">Width</th>}
-                            {generalCols.height && <th className="px-3 py-3 w-20 text-center">Height</th>}
-                            <th className="px-3 py-3 w-16 text-center">Qty</th>
-                            <th className="px-3 py-3 w-28 text-right">Unit Price</th>
-                            <th className="px-3 py-3 w-36 text-right">Total</th>
-                            <th className="px-3 py-3 w-28 text-center">Action</th>
+                          <tr className="bg-slate-900 text-white text-left text-[10px] font-semibold uppercase tracking-wider select-none">
+                            {generalColDefs.filter(c => c.visible).map(col => (
+                              <th key={col.key}
+                                style={{ width: col.width, minWidth: col.width, position: 'relative' }}
+                                draggable
+                                onDragStart={() => setGeneralDragColKey(col.key)}
+                                onDragOver={e => e.preventDefault()}
+                                onDrop={() => { if (generalDragColKey) reorderGeneralCols(generalDragColKey, col.key); setGeneralDragColKey(null) }}
+                                className={`px-3 py-3 cursor-grab active:cursor-grabbing transition ${generalDragColKey === col.key ? 'opacity-50' : ''} ${col.key === 'sno' || col.key === 'qty' || col.key === 'width' || col.key === 'height' ? 'text-center' : col.key === 'unitPrice' || col.key === 'total' ? 'text-right' : ''}`}>
+                                <span className="inline-flex items-center gap-1 truncate">
+                                  <span className="material-symbols-outlined text-[10px] text-white/40 shrink-0">drag_indicator</span>
+                                  {generalEditingColKey === col.key ? (
+                                    <input
+                                      autoFocus
+                                      defaultValue={col.label}
+                                      onBlur={e => { renameGeneralCol(col.key, e.target.value || col.label); setGeneralEditingColKey(null) }}
+                                      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                                      onClick={e => e.stopPropagation()}
+                                      className="bg-white/10 border-b border-white/40 text-white text-[10px] font-semibold uppercase tracking-wider outline-none w-20 px-0.5"
+                                    />
+                                  ) : (
+                                    <span onDoubleClick={e => { e.stopPropagation(); setGeneralEditingColKey(col.key) }} title="Double-click to rename" className="truncate">{col.label}</span>
+                                  )}
+                                </span>
+                                {/* Resize handle */}
+                                <div
+                                  draggable={false}
+                                  title="Drag to resize"
+                                  className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-white/20 transition"
+                                  onMouseDown={e => {
+                                    e.preventDefault(); e.stopPropagation()
+                                    const startX = e.clientX
+                                    const startW = col.width
+                                    const onMove = (me: MouseEvent) => {
+                                      const newW = Math.max(40, startW + me.clientX - startX)
+                                      setGeneralColDefs(prev => prev.map(c => c.key === col.key ? { ...c, width: newW } : c))
+                                    }
+                                    const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+                                    window.addEventListener('mousemove', onMove)
+                                    window.addEventListener('mouseup', onUp)
+                                  }}
+                                />
+                              </th>
+                            ))}
+                            <th className="px-3 py-3 text-center" style={{ width: 112, minWidth: 112 }}>Action</th>
                           </tr>
                         </thead>
                         <tbody>
                           {generalItems.map((it, i) => {
                             const rt = rowTotal(it)
+                            const notesOpen = generalNotesOpen.has(i)
                             return (
-                              <tr key={i} className="border-b border-slate-100 hover:bg-slate-50/60 align-top">
-                                {/* S.No — editable */}
-                                <td className="px-2 py-2.5 text-center">
-                                  <input type="text" value={it.sno} onChange={e => updateGeneralItem(i, 'sno', e.target.value)}
-                                    className="w-10 rounded border border-transparent bg-transparent px-1 py-1 text-sm font-semibold text-slate-500 text-center outline-none hover:border-slate-300 focus:border-indigo-400 focus:bg-white focus:ring-1 focus:ring-indigo-500/20 transition" />
-                                </td>
-                                {/* Item */}
-                                <td className="px-2 py-2.5">
-                                  <input type="text" value={it.item} onChange={e => updateGeneralItem(i, 'item', e.target.value)}
-                                    placeholder="Item name"
-                                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
-                                </td>
-                                {/* Description (resizable textarea) */}
-                                <td className="px-2 py-2.5">
-                                  <textarea value={it.description} onChange={e => updateGeneralItem(i, 'description', e.target.value)}
-                                    placeholder="Description"
-                                    rows={2}
-                                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition resize-y min-h-[2.5rem]" />
-                                </td>
-                                {/* Width */}
-                                {generalCols.width && (
-                                  <td className="px-2 py-2.5">
-                                    <input type="text" value={it.width} onChange={e => updateGeneralItem(i, 'width', e.target.value)}
-                                      placeholder="—"
-                                      className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-center text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
-                                  </td>
+                              <Fragment key={i}>
+                                {/* Notes row — ABOVE the data row */}
+                                {notesOpen && (
+                                  <tr className="border-b border-indigo-100">
+                                    <td colSpan={generalColDefs.filter(c => c.visible).length + 1} className="p-0">
+                                      <div className="overflow-hidden border-l-4 border-indigo-400" style={{ backgroundColor: it.noteStyle.bgColor }}>
+                                        {/* Formatting toolbar */}
+                                        <div className="flex items-center gap-1 px-3 py-1.5 bg-white/70 border-b border-indigo-100 flex-wrap">
+                                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mr-2">Note style</span>
+                                          <button type="button" title="Bold"
+                                            onClick={() => updateGeneralItem(i, 'noteStyle', { ...it.noteStyle, bold: !it.noteStyle.bold })}
+                                            className={`w-6 h-6 rounded text-xs font-bold transition ${it.noteStyle.bold ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300' : 'text-slate-500 hover:bg-slate-100'}`}>B</button>
+                                          <button type="button" title="Italic"
+                                            onClick={() => updateGeneralItem(i, 'noteStyle', { ...it.noteStyle, italic: !it.noteStyle.italic })}
+                                            className={`w-6 h-6 rounded text-xs italic transition ${it.noteStyle.italic ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300' : 'text-slate-500 hover:bg-slate-100'}`}>I</button>
+                                          <div className="flex items-center gap-1 ml-1">
+                                            <span className="text-[10px] text-slate-400">Text</span>
+                                            <input type="color" value={it.noteStyle.color} title="Font color"
+                                              onChange={e => updateGeneralItem(i, 'noteStyle', { ...it.noteStyle, color: e.target.value })}
+                                              className="w-6 h-6 rounded cursor-pointer border border-slate-200 p-0.5" />
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-[10px] text-slate-400">BG</span>
+                                            <input type="color" value={it.noteStyle.bgColor} title="Background color"
+                                              onChange={e => updateGeneralItem(i, 'noteStyle', { ...it.noteStyle, bgColor: e.target.value })}
+                                              className="w-6 h-6 rounded cursor-pointer border border-slate-200 p-0.5" />
+                                          </div>
+                                          <select value={it.noteStyle.fontSize} title="Font size"
+                                            onChange={e => updateGeneralItem(i, 'noteStyle', { ...it.noteStyle, fontSize: e.target.value })}
+                                            className="ml-1 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs text-slate-600 outline-none focus:border-indigo-400">
+                                            {['10','11','12','13','14','16','18'].map(s => <option key={s} value={s}>{s}px</option>)}
+                                          </select>
+                                          <button type="button" onClick={() => { updateGeneralItem(i, 'notes', ''); updateGeneralItem(i, 'noteStyle', defaultNoteStyle()); setGeneralNotesOpen(prev => { const s = new Set(prev); s.delete(i); return s }) }}
+                                            className="ml-auto text-slate-300 hover:text-red-400 transition">
+                                            <span className="material-symbols-outlined text-[15px]">close</span>
+                                          </button>
+                                        </div>
+                                        {/* Note textarea */}
+                                        <textarea value={it.notes} onChange={e => updateGeneralItem(i, 'notes', e.target.value)}
+                                          placeholder="Add notes for this line item…"
+                                          rows={2}
+                                          style={{ fontWeight: it.noteStyle.bold ? 'bold' : 'normal', fontStyle: it.noteStyle.italic ? 'italic' : 'normal', color: it.noteStyle.color, fontSize: it.noteStyle.fontSize + 'px', backgroundColor: 'transparent' }}
+                                          className="w-full px-4 py-2.5 outline-none resize-y placeholder-slate-400/60" />
+                                      </div>
+                                    </td>
+                                  </tr>
                                 )}
-                                {/* Height */}
-                                {generalCols.height && (
+                                <tr className="border-b border-slate-100 hover:bg-slate-50/40 align-top">
+                                  {generalColDefs.filter(c => c.visible).map(col => (
+                                    <td key={col.key} className="px-2 py-2.5">
+                                      {col.key === 'sno' && (
+                                        <input type="text" value={it.sno} onChange={e => updateGeneralItem(i, 'sno', e.target.value)}
+                                          className="w-full rounded border border-transparent bg-transparent px-1 py-1 text-sm font-semibold text-slate-500 text-center outline-none hover:border-slate-300 focus:border-indigo-400 focus:bg-white focus:ring-1 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                      {col.key === 'item' && (
+                                        <input type="text" value={it.item} onChange={e => updateGeneralItem(i, 'item', e.target.value)}
+                                          placeholder="Item name" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                      {col.key === 'description' && (
+                                        <textarea value={it.description} onChange={e => updateGeneralItem(i, 'description', e.target.value)}
+                                          placeholder="Description" rows={2}
+                                          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition resize-y min-h-[2.5rem]" />
+                                      )}
+                                      {col.key === 'width' && (
+                                        <input type="text" value={it.width} onChange={e => updateGeneralItem(i, 'width', e.target.value)}
+                                          placeholder="—" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-center text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                      {col.key === 'height' && (
+                                        <input type="text" value={it.height} onChange={e => updateGeneralItem(i, 'height', e.target.value)}
+                                          placeholder="—" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-center text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                      {col.key === 'qty' && (
+                                        <input type="number" min={1} value={it.qty} onChange={e => updateGeneralItem(i, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
+                                          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-center text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                      {col.key === 'unitPrice' && (
+                                        <input type="number" min={0} step={0.01} value={it.unitPrice || ''} onChange={e => updateGeneralItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                          placeholder="0.00" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-right text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                      {col.key === 'total' && (
+                                        <div className="text-right">
+                                          <p className={`font-semibold tabular-nums ${rt > 0 ? 'text-slate-800' : 'text-slate-300'}`}>{rt > 0 ? fmtG(rt) : '$0.00'}</p>
+                                          <p className="text-[10px] text-slate-400 mt-0.5">Auto: qty × unit</p>
+                                          <input type="number" min={0} step={0.01} value={it.overridePrice} onChange={e => updateGeneralItem(i, 'overridePrice', e.target.value)}
+                                            placeholder="Override $"
+                                            className={`mt-1 w-full rounded-lg border px-2 py-1 text-xs text-right outline-none focus:ring-1 transition ${it.overridePrice ? 'border-amber-400 bg-amber-50 text-amber-800 focus:border-amber-400 focus:ring-amber-500/20' : 'border-slate-200 bg-slate-50 text-slate-600 focus:border-indigo-400 focus:ring-indigo-500/20'}`} />
+                                          {it.overridePrice && <p className="text-[10px] text-amber-500 mt-0.5">overridden</p>}
+                                        </div>
+                                      )}
+                                      {col.key.startsWith('extra_') && (
+                                        <input type="text" value={it.extras[col.key] ?? ''} onChange={e => updateGeneralItem(i, 'extras', { ...it.extras, [col.key]: e.target.value })}
+                                          placeholder="—" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                      )}
+                                    </td>
+                                  ))}
+                                  {/* Action */}
                                   <td className="px-2 py-2.5">
-                                    <input type="text" value={it.height} onChange={e => updateGeneralItem(i, 'height', e.target.value)}
-                                      placeholder="—"
-                                      className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-center text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                                    <div className="flex flex-col gap-1.5">
+                                      <button type="button" onClick={() => setGeneralItems(prev => prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i))}
+                                        className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 transition">
+                                        Remove
+                                      </button>
+                                      <button type="button"
+                                        onClick={() => setGeneralNotesOpen(prev => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s })}
+                                        className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${notesOpen ? 'border-indigo-300 bg-indigo-50 text-indigo-600' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                                        {notesOpen ? 'Hide notes' : (it.notes ? 'Edit notes' : 'Add notes')}
+                                      </button>
+                                    </div>
                                   </td>
-                                )}
-                                {/* Qty */}
-                                <td className="px-2 py-2.5">
-                                  <input type="number" min={1} value={it.qty} onChange={e => updateGeneralItem(i, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
-                                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-center text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
-                                </td>
-                                {/* Unit Price */}
-                                <td className="px-2 py-2.5">
-                                  <input type="number" min={0} step={0.01} value={it.unitPrice || ''} onChange={e => updateGeneralItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
-                                    placeholder="0.00"
-                                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-right text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
-                                </td>
-                                {/* Total + Override inline */}
-                                <td className="px-2 py-2.5 text-right">
-                                  <p className={`font-semibold tabular-nums ${rt > 0 ? 'text-slate-800' : 'text-slate-300'}`}>
-                                    {rt > 0 ? fmtG(rt) : '$0.00'}
-                                  </p>
-                                  <p className="text-[10px] text-slate-400 mt-0.5">Auto: qty × unit</p>
-                                  <input type="number" min={0} step={0.01} value={it.overridePrice} onChange={e => updateGeneralItem(i, 'overridePrice', e.target.value)}
-                                    placeholder="Override $"
-                                    className={`mt-1 w-full rounded-lg border px-2 py-1 text-xs text-right outline-none focus:ring-1 transition ${it.overridePrice ? 'border-amber-400 bg-amber-50 text-amber-800 focus:border-amber-400 focus:ring-amber-500/20' : 'border-slate-200 bg-slate-50 text-slate-600 focus:border-indigo-400 focus:ring-indigo-500/20'}`} />
-                                  {it.overridePrice && <p className="text-[10px] text-amber-500 mt-0.5">overridden</p>}
-                                </td>
-                                {/* Action: Remove + Add notes */}
-                                <td className="px-2 py-2.5">
-                                  <div className="flex flex-col gap-1.5">
-                                    <button type="button" onClick={() => setGeneralItems(prev => prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i))}
-                                      className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 transition">
-                                      Remove
-                                    </button>
-                                    <button type="button" onClick={() => setGeneralNotesOpen(prev => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s })}
-                                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50 transition">
-                                      {generalNotesOpen.has(i) ? 'Hide notes' : (it.notes ? 'Edit notes' : 'Add notes')}
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
+                                </tr>
+                              </Fragment>
                             )
                           })}
                         </tbody>
                       </table>
                     </div>
-
-                    {/* Notes expansion rows (below table, per item) */}
-                    {generalNotesOpen.size > 0 && (
-                      <div className="border-t border-slate-100 px-6 pt-3 space-y-2">
-                        {generalItems.map((it, i) => generalNotesOpen.has(i) ? (
-                          <div key={i} className="flex items-start gap-3">
-                            <span className="text-[10px] font-semibold text-slate-400 w-10 text-center pt-1.5 shrink-0">#{it.sno}</span>
-                            <span className="material-symbols-outlined text-[14px] text-slate-400 mt-1.5 shrink-0">sticky_note_2</span>
-                            <textarea value={it.notes} onChange={e => updateGeneralItem(i, 'notes', e.target.value)}
-                              placeholder="Add notes for this line item…"
-                              rows={2}
-                              className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600 outline-none focus:border-indigo-300 focus:bg-white focus:ring-1 focus:ring-indigo-500/20 transition resize-y" />
-                            <button type="button" onClick={() => { updateGeneralItem(i, 'notes', ''); setGeneralNotesOpen(prev => { const s = new Set(prev); s.delete(i); return s }) }}
-                              className="mt-1 text-slate-300 hover:text-red-400 transition shrink-0">
-                              <span className="material-symbols-outlined text-[15px]">close</span>
-                            </button>
-                          </div>
-                        ) : null)}
-                      </div>
-                    )}
 
                     {/* Add Row */}
                     <div className="px-6 pt-3">
@@ -2240,30 +2372,47 @@ const autoDescLines = [
                         Add Row
                       </button>
                     </div>
+                  </div>
 
-                    {/* Discount section — collapsible */}
+                  {/* Discount section — collapsible */}
                     <div className="px-6 pt-4">
                       <div className="rounded-xl border border-slate-200 overflow-hidden">
-                        <button type="button" onClick={() => setShowGeneralDiscount(p => !p)}
-                          className="flex w-full items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition text-left">
+                        {/* Header row — toggle switch + label */}
+                        <div className="flex items-center justify-between px-4 py-3 bg-slate-50">
                           <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-[16px] text-slate-500">discount</span>
                             <span className="text-sm font-semibold text-slate-700">Discount</span>
-                            {discPct > 0 && <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">{discPct}% off</span>}
+                            {discPct > 0 && showGeneralDiscount && (
+                              <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">{discPct}% off</span>
+                            )}
                           </div>
-                          <span className="material-symbols-outlined text-[16px] text-slate-400">{showGeneralDiscount ? 'expand_less' : 'expand_more'}</span>
-                        </button>
+                          {/* Toggle switch */}
+                          <button type="button" role="switch" aria-checked={showGeneralDiscount}
+                            onClick={() => setShowGeneralDiscount(p => !p)}
+                            className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${showGeneralDiscount ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ${showGeneralDiscount ? 'translate-x-4' : 'translate-x-0'}`} />
+                          </button>
+                        </div>
+                        {/* Body — only when toggled on */}
                         {showGeneralDiscount && (
-                          <div className="px-4 py-3 border-t border-slate-100 flex items-center gap-4 bg-white">
+                          <div className="px-4 py-3 border-t border-slate-100 bg-white flex flex-wrap items-center gap-4">
                             <label className="text-sm text-slate-600">Discount (%)</label>
-                            <div className="relative w-32">
+                            <div className="relative w-28">
                               <input type="number" min={0} max={100} step={1} value={generalDiscountPct} onChange={e => setGeneralDiscountPct(e.target.value)}
                                 placeholder="0"
-                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 pr-8 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
-                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-sm">%</span>
+                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 pr-7 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
+                              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-sm">%</span>
+                            </div>
+                            {/* Font color for discount label in PDF */}
+                            <div className="flex items-center gap-1.5 border-l border-slate-200 pl-4">
+                              <span className="text-[11px] text-slate-500 uppercase tracking-wide font-medium">PDF colour</span>
+                              <input type="color" value={generalDiscountColor}
+                                onChange={e => setGeneralDiscountColor(e.target.value)}
+                                title="Discount text colour in PDF"
+                                className="h-6 w-8 cursor-pointer rounded border border-slate-200 p-0.5" />
+                              <span className="text-[11px] text-slate-400 font-mono">{generalDiscountColor}</span>
                             </div>
                             {discPct > 0 && (
-                              <span className="text-sm text-green-600 font-medium">
+                              <span className="text-sm font-medium" style={{ color: generalDiscountColor }}>
                                 Saving {fmtG(generalSubtotal * discPct / 100)}
                               </span>
                             )}
@@ -2295,7 +2444,6 @@ const autoDescLines = [
                         </div>
                       </div>
                     </div>
-                  </div>
 
                   {/* End User T&C selector */}
                   <div className="px-6 pt-5">
@@ -2384,6 +2532,39 @@ const autoDescLines = [
                 </div>
               )
           })()}
+
+          {/* ── General Quote Preview ───────────────────────────────────── */}
+          {isGeneral && showPreview && previewUrl && (
+            <div ref={previewRef} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+              <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="material-symbols-outlined text-indigo-600 text-xl">picture_as_pdf</span>
+                  <div>
+                    <h2 className="text-base font-semibold text-slate-800">Quotation Preview</h2>
+                    {quoteNumber && <p className="text-xs text-slate-400">{quoteNumber}</p>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={handleEditQuote}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50">
+                    <span className="material-symbols-outlined text-[16px]">edit</span>
+                    Edit Quote
+                  </button>
+                  <button type="button" onClick={handleDownload}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 shadow-sm transition hover:bg-indigo-100">
+                    <span className="material-symbols-outlined text-[16px]">download</span>
+                    Download PDF
+                  </button>
+                  <button type="button" onClick={openEmailModal}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50">
+                    <span className="material-symbols-outlined text-[16px]">send</span>
+                    Send Email
+                  </button>
+                </div>
+              </div>
+              <iframe src={previewUrl} className="w-full border-0" style={{ height: '900px' }} title="Quote Preview" />
+            </div>
+          )}
 
           {/* ── PVC Flex System ─────────────────────────────────────────── */}
           {isPvcFlex && (() => {
@@ -3529,7 +3710,7 @@ const autoDescLines = [
       )}
 
       {/* ── Quotation Preview ──────────────────────────────────────────────── */}
-      {showPreview && previewUrl && (
+      {!isGeneral && showPreview && previewUrl && (
         <div ref={previewRef} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           {/* Preview header */}
           <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
