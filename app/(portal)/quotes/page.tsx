@@ -431,12 +431,18 @@ export default function NewQuotesPage() {
     service_date: string; total: number; workflow_status: string
     rapid_door_quote_details: DetailRow | null
   }
-  const [recentQuotes, setRecentQuotes]     = useState<RecentQuoteRow[]>([])
+  type AllQuoteRow = {
+    id: string; quote_number: string; quote_kind: string
+    customer_name: string | null; site_address: string | null
+    service_date: string; total: number; workflow_status: string
+    updated_at: string; form_snapshot: Record<string, unknown> | null
+  }
+  const [recentQuotes, setRecentQuotes]     = useState<AllQuoteRow[]>([])
   const [recentLoading, setRecentLoading]   = useState(true)
 
   function loadRecentQuotes() {
     setRecentLoading(true)
-    fetch('/api/quotes/rapid-door/list?limit=25')
+    fetch('/api/quotes/list?limit=50')
       .then(r => r.json())
       .then(j => { if (j.ok) setRecentQuotes(j.data ?? []) })
       .catch(() => {/* non-fatal */})
@@ -748,6 +754,31 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     }
     setSaveMsg(null)
     setView('form')
+  }
+
+  // ── Unified open from list ─────────────────────────────────────────────────
+  const [groupsOpen, setGroupsOpen] = useState<Record<string, boolean>>({
+    rapid_door: true, general: true, maintenance: true, parts: true,
+  })
+  function toggleGroup(kind: string) {
+    setGroupsOpen(prev => ({ ...prev, [kind]: !prev[kind] }))
+  }
+  function openQuoteFromList(q: AllQuoteRow) {
+    if (q.quote_kind === 'rapid_door') {
+      // Re-fetch the full rapid-door row (has rapid_door_quote_details)
+      fetch(`/api/quotes/rapid-door/list?limit=200`)
+        .then(r => r.json())
+        .then(j => {
+          const full = (j.data ?? []).find((r: RecentQuoteRow) => r.id === q.id)
+          if (full) { loadQuoteFromRow(full); setView('form') }
+        })
+      return
+    }
+    if (!q.form_snapshot) return
+    const row = { id: q.id, quote_number: q.quote_number, customer_name: q.customer_name, site_address: q.site_address, service_date: q.service_date, total: q.total, workflow_status: q.workflow_status, form_snapshot: q.form_snapshot }
+    if (q.quote_kind === 'general')     { loadGeneralQuote(row as GeneralRecentRow); setSelected('GENERAL'); setView('form') }
+    if (q.quote_kind === 'maintenance') { loadMaintQuote(row as SavedQuoteRow);      setSelected('MAINTENANCE_SERVICE_REPAIR'); setView('form') }
+    if (q.quote_kind === 'parts')       { loadPartsQuote(row as SavedQuoteRow);       setSelected('PARTS'); setView('form') }
   }
 
   useEffect(() => {
@@ -1806,105 +1837,146 @@ const autoDescLines = [
           </button>
         </div>
 
-        {/* Quotes table */}
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          {recentLoading ? (
-            <div className="flex items-center justify-center gap-2 py-20 text-slate-400">
-              <span className="material-symbols-outlined animate-spin text-2xl">progress_activity</span>
-              <span className="text-sm">Loading quotes…</span>
-            </div>
-          ) : filteredQuotes.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-20 text-slate-400">
-              <span className="material-symbols-outlined text-5xl text-slate-300">receipt_long</span>
-              <p className="text-sm font-medium">
-                {search.trim() ? 'No quotes match your search' : 'No rapid door quotes yet'}
-              </p>
-              {!search.trim() && (
-                <button type="button" onClick={() => { resetAll(); setView('form') }}
-                  className="mt-1 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700">
-                  <span className="material-symbols-outlined text-[16px]">add</span>
-                  Create first quote
-                </button>
-              )}
-            </div>
-          ) : (
-            <>
-              {/* Desktop table */}
-              <div className="hidden overflow-x-auto xl:block">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
-                      <th className="px-6 py-3">Quote #</th>
-                      <th className="px-4 py-3">Customer</th>
-                      <th className="px-4 py-3">Doors</th>
-                      <th className="px-4 py-3">Date</th>
-                      <th className="px-4 py-3">Total (inc. GST)</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredQuotes.map(q => {
-                      const doorCount = Array.isArray(q.rapid_door_quote_details?.doors) ? q.rapid_door_quote_details!.doors.length : '—'
-                      const [y, m, d] = (q.service_date ?? '').split('-')
-                      const dateStr = y ? `${d}/${m}/${y}` : '—'
-                      return (
-                        <tr key={q.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition">
-                          <td className="px-6 py-3.5 font-mono text-xs font-semibold text-indigo-700">{q.quote_number}</td>
-                          <td className="px-4 py-3.5 font-medium text-slate-800">{q.customer_name || <span className="text-slate-400 italic font-normal">No customer</span>}</td>
-                          <td className="px-4 py-3.5 text-slate-500">{doorCount}</td>
-                          <td className="px-4 py-3.5 text-slate-500">{dateStr}</td>
-                          <td className="px-4 py-3.5 font-semibold text-slate-800">${Number(q.total ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</td>
-                          <td className="px-4 py-3.5">
-                            <span className="inline-flex items-center rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
-                              {(q.workflow_status ?? 'draft').replace(/_/g, ' ')}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <button type="button" onClick={() => loadQuoteFromRow(q)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 transition">
-                                <span className="material-symbols-outlined text-[13px]">edit</span>Open
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+        {/* Grouped quote sections */}
+        {recentLoading ? (
+          <div className="flex items-center justify-center gap-2 py-20 text-slate-400">
+            <span className="material-symbols-outlined animate-spin text-2xl">progress_activity</span>
+            <span className="text-sm">Loading quotes…</span>
+          </div>
+        ) : filteredQuotes.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-20 text-slate-400">
+            <span className="material-symbols-outlined text-5xl text-slate-300">receipt_long</span>
+            <p className="text-sm font-medium">
+              {search.trim() ? 'No quotes match your search' : 'No quotes yet'}
+            </p>
+            {!search.trim() && (
+              <button type="button" onClick={() => { resetAll(); setView('form') }}
+                className="mt-1 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700">
+                <span className="material-symbols-outlined text-[16px]">add</span>
+                Create first quote
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {([
+              { kind: 'rapid_door',  label: 'Rapid Roller Door',       icon: 'garage',        accent: 'indigo' },
+              { kind: 'general',     label: 'General',                  icon: 'description',   accent: 'violet' },
+              { kind: 'maintenance', label: 'Maintenance Service/Repair',icon: 'build',         accent: 'orange' },
+              { kind: 'parts',       label: 'Parts',                    icon: 'inventory_2',   accent: 'emerald' },
+            ] as { kind: string; label: string; icon: string; accent: string }[]).map(({ kind, label, icon, accent }) => {
+              const rows = filteredQuotes.filter(q => q.quote_kind === kind)
+              if (rows.length === 0 && search.trim()) return null
+              const open = groupsOpen[kind] !== false
+              const accentMap: Record<string, string> = {
+                indigo:  'bg-indigo-50 border-indigo-200 text-indigo-700',
+                violet:  'bg-violet-50 border-violet-200 text-violet-700',
+                orange:  'bg-orange-50 border-orange-200 text-orange-700',
+                emerald: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+              }
+              const headerMap: Record<string, string> = {
+                indigo:  'bg-indigo-600',
+                violet:  'bg-violet-600',
+                orange:  'bg-orange-500',
+                emerald: 'bg-emerald-600',
+              }
+              return (
+                <div key={kind} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                  {/* Group header */}
+                  <button type="button" onClick={() => toggleGroup(kind)}
+                    className={`w-full flex items-center justify-between px-5 py-3.5 ${headerMap[accent]} text-white transition hover:opacity-90`}>
+                    <div className="flex items-center gap-2.5">
+                      <span className="material-symbols-outlined text-[18px]">{icon}</span>
+                      <span className="text-sm font-semibold">{label}</span>
+                      <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-bold">{rows.length}</span>
+                    </div>
+                    <span className="material-symbols-outlined text-[20px]">{open ? 'expand_less' : 'expand_more'}</span>
+                  </button>
 
-              {/* Mobile/tablet cards */}
-              <ul className="space-y-0 xl:hidden divide-y divide-slate-100">
-                {filteredQuotes.map(q => {
-                  const doorCount = Array.isArray(q.rapid_door_quote_details?.doors) ? q.rapid_door_quote_details!.doors.length : '—'
-                  const [y, m, d] = (q.service_date ?? '').split('-')
-                  const dateStr = y ? `${d}/${m}/${y}` : '—'
-                  return (
-                    <li key={q.id} className="flex items-start justify-between gap-4 px-5 py-4 hover:bg-slate-50 transition">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-mono text-xs font-semibold text-indigo-700">{q.quote_number}</p>
-                        <p className="mt-0.5 text-sm font-medium text-slate-800">{q.customer_name || <span className="text-slate-400 italic font-normal">No customer</span>}</p>
-                        <p className="mt-0.5 text-xs text-slate-500">{doorCount} door{doorCount !== 1 ? 's' : ''} · {dateStr}</p>
-                        <button type="button" onClick={() => loadQuoteFromRow(q)}
-                          className="mt-2 inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 transition">
-                          <span className="material-symbols-outlined text-[13px]">edit</span>Open
-                        </button>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-sm font-semibold text-slate-800">${Number(q.total ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
-                        <span className="inline-flex items-center rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
-                          {(q.workflow_status ?? 'draft').replace(/_/g, ' ')}
-                        </span>
-                      </div>
-                    </li>
-                  )
-                })}
-              </ul>
-            </>
-          )}
-        </div>
+                  {/* Rows */}
+                  {open && (
+                    rows.length === 0 ? (
+                      <div className="px-5 py-6 text-center text-sm text-slate-400">No {label.toLowerCase()} quotes yet</div>
+                    ) : (
+                      <>
+                        {/* Desktop */}
+                        <div className="hidden overflow-x-auto xl:block">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-slate-100 bg-slate-50 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
+                                <th className="px-6 py-2.5">Quote #</th>
+                                <th className="px-4 py-2.5">Customer</th>
+                                <th className="px-4 py-2.5">Address</th>
+                                <th className="px-4 py-2.5">Date</th>
+                                <th className="px-4 py-2.5">Total (inc. GST)</th>
+                                <th className="px-4 py-2.5">Status</th>
+                                <th className="px-4 py-2.5 text-right">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {rows.map(q => {
+                                const [y, m, d] = (q.service_date ?? '').split('-')
+                                const dateStr = y ? `${d}/${m}/${y}` : '—'
+                                return (
+                                  <tr key={q.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/80 transition">
+                                    <td className="px-6 py-3 font-mono text-xs font-semibold text-indigo-700">{q.quote_number}</td>
+                                    <td className="px-4 py-3 font-medium text-slate-800">{q.customer_name || <span className="text-slate-400 italic font-normal">No customer</span>}</td>
+                                    <td className="px-4 py-3 text-slate-500 max-w-[180px] truncate">{q.site_address || '—'}</td>
+                                    <td className="px-4 py-3 text-slate-500">{dateStr}</td>
+                                    <td className="px-4 py-3 font-semibold text-slate-800">${Number(q.total ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</td>
+                                    <td className="px-4 py-3">
+                                      <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${accentMap[accent]}`}>
+                                        {(q.workflow_status ?? 'draft').replace(/_/g, ' ')}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <div className="flex items-center justify-end">
+                                        <button type="button" onClick={() => openQuoteFromList(q)}
+                                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 transition">
+                                          <span className="material-symbols-outlined text-[13px]">edit</span>Open
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                        {/* Mobile */}
+                        <ul className="divide-y divide-slate-100 xl:hidden">
+                          {rows.map(q => {
+                            const [y, m, d] = (q.service_date ?? '').split('-')
+                            const dateStr = y ? `${d}/${m}/${y}` : '—'
+                            return (
+                              <li key={q.id} className="flex items-start justify-between gap-4 px-5 py-4 hover:bg-slate-50 transition">
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-mono text-xs font-semibold text-indigo-700">{q.quote_number}</p>
+                                  <p className="mt-0.5 text-sm font-medium text-slate-800">{q.customer_name || <span className="text-slate-400 italic font-normal">No customer</span>}</p>
+                                  <p className="mt-0.5 text-xs text-slate-500">{dateStr}</p>
+                                  <button type="button" onClick={() => openQuoteFromList(q)}
+                                    className="mt-2 inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 transition">
+                                    <span className="material-symbols-outlined text-[13px]">edit</span>Open
+                                  </button>
+                                </div>
+                                <div className="shrink-0 text-right">
+                                  <p className="text-sm font-semibold text-slate-800">${Number(q.total ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
+                                  <span className={`mt-1 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${accentMap[accent]}`}>
+                                    {(q.workflow_status ?? 'draft').replace(/_/g, ' ')}
+                                  </span>
+                                </div>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      </>
+                    )
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     )
   }
