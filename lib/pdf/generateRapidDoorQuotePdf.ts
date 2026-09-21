@@ -712,11 +712,11 @@ async function drawPage2(
   const footerSize = 8
   const footerLineH = 11
   const footerColor = rgb(0x33/255, 0x33/255, 0x33/255)   // #333333
-  const footerLines = terms.split('\n').flatMap(para => wrapText(para, italic, footerSize, CW))
+  const footerLines = terms.split('\n').flatMap(para => wrapText(safeText(para), italic, footerSize, CW))
   // Leave room for the page-number footer bar (drawn in post-processing at y ~= 20)
   const footerStartY = 52 + (footerLines.length - 1) * footerLineH
   footerLines.forEach((ln, i) => {
-    page.drawText(ln, { x: ML, y: footerStartY - i * footerLineH, size: footerSize, font: italic, color: footerColor })
+    t(page, ln, ML, footerStartY - i * footerLineH, italic, footerSize, footerColor)
   })
 }
 

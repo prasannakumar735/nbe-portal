@@ -374,14 +374,14 @@ export async function generateMaintenanceQuotePdf(input: MaintenanceQuotePdfInpu
 
   // ── FOOTER TERMS ─────────────────────────────────────────────────────────
   const DEFAULT_TERMS = 'This quotation is based on the NBE Standard Door comprising a galvanized frame, PVC curtain (900 g/m²), and a zinc-coated control box (RAL 7035). Optional extras (e.g. powder coating, light curtain, remote control, radar, traffic light, induction loop, contactless exit button) are available at additional cost. All other matters shall be subject to our standard Terms and Conditions (T&C). The electrical scope is limited to the connection between the control panel and the doors only. Power supply and isolator shall be provided by others.'
-  const terms = input.terms?.trim() || DEFAULT_TERMS
+  const terms = safeText(input.terms?.trim() || DEFAULT_TERMS)
   const footerSize   = 8
   const footerLineH  = 11
   const footerColor  = rgb(0x33/255, 0x33/255, 0x33/255)
   const footerLines  = wrapText(terms, italic, footerSize, CW)
   const footerStartY = 52 + (footerLines.length - 1) * footerLineH
   footerLines.forEach((ln, i) => {
-    page.drawText(ln, { x: ML, y: footerStartY - i * footerLineH, size: footerSize, font: italic, color: footerColor })
+    t(page, ln, ML, footerStartY - i * footerLineH, italic, footerSize, footerColor)
   })
 
   // ── PAGE FOOTER BAR ───────────────────────────────────────────────────────

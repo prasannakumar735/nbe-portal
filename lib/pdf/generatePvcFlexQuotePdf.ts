@@ -305,12 +305,12 @@ export async function generatePvcFlexQuotePdf(input: PvcFlexQuotePdfInput): Prom
 
   // ── FOOTER TERMS ────────────────────────────────────────────────────────────
   const DEFAULT_TERMS = 'This quotation covers the PVC strip curtain system(s) listed above. Strip configurations are calculated from nominated opening dimensions; final measurements must be verified on-site before manufacture. Pricing is valid for 30 days from date of issue. Delivery and installation are excluded unless shown as priced line items. All supply and installation is subject to NBE Australia\'s standard Terms & Conditions.'
-  const terms = input.terms?.trim() || DEFAULT_TERMS
+  const terms = safeText(input.terms?.trim() || DEFAULT_TERMS)
   const footerLines  = wrapText(terms, italic, 8, CW)
   const footerLineH  = 11
   const footerStartY = 52 + (footerLines.length - 1) * footerLineH
   footerLines.forEach((ln, i) => {
-    page.drawText(ln, { x: ML, y: footerStartY - i * footerLineH, size: 8, font: italic, color: rgb(0x33/255, 0x33/255, 0x33/255) })
+    t(page, ln, ML, footerStartY - i * footerLineH, italic, 8, rgb(0x33/255, 0x33/255, 0x33/255))
   })
 
   // ── PAGE FOOTER BAR ─────────────────────────────────────────────────────────
