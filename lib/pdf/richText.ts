@@ -72,16 +72,16 @@ export function parseRichDesc(
 ): RichLine[] {
   if (!text.trim()) return []
 
-  // Sanitize before measurement — pdf-lib throws on widthOfTextAtSize for non-WinAnsi chars
-  const cleaned = text.replace(/[^\x20-\xFF\n]/g, ' ')
-
   const BULLET_PREFIX = fonts.reg.widthOfTextAtSize('- ', size) + 2
   const out: RichLine[] = []
 
-  for (const rawLine of cleaned.split('\n')) {
+  for (const rawLine of text.split('\n')) {
     const line     = rawLine.trimEnd()
+    // Detect bullet on raw text BEFORE sanitizing (• is U+2022, stripped by WinAnsi sanitizer)
     const isBullet = line.startsWith('• ') || line.startsWith('- ')
-    const content  = isBullet ? line.slice(2) : line
+    const raw      = isBullet ? line.slice(2) : line
+    // Sanitize content: strip non-WinAnsi chars so widthOfTextAtSize never throws
+    const content  = raw.replace(/[^\x20-\xFF]/g, ' ')
     const wrapW    = maxWidth - (isBullet ? BULLET_PREFIX : 0)
 
     if (!content.trim() && !isBullet) {
