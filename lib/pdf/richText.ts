@@ -72,10 +72,13 @@ export function parseRichDesc(
 ): RichLine[] {
   if (!text.trim()) return []
 
+  // Sanitize before measurement — pdf-lib throws on widthOfTextAtSize for non-WinAnsi chars
+  const cleaned = text.replace(/[^\x20-\xFF\n]/g, ' ')
+
   const BULLET_PREFIX = fonts.reg.widthOfTextAtSize('- ', size) + 2
   const out: RichLine[] = []
 
-  for (const rawLine of text.split('\n')) {
+  for (const rawLine of cleaned.split('\n')) {
     const line     = rawLine.trimEnd()
     const isBullet = line.startsWith('• ') || line.startsWith('- ')
     const content  = isBullet ? line.slice(2) : line

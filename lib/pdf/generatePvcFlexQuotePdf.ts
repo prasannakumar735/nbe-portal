@@ -76,7 +76,8 @@ function fmtAUD(n: number) {
 }
 
 function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
-  const words = text.split(' ')
+  const safe  = safeText(text)
+  const words = safe.split(' ')
   const lines: string[] = []
   let line = ''
   for (const word of words) {
