@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont } from 'pdf-lib'
 import { embedRobotoForPdfLib } from '@/lib/pdf/robotoPdf'
+import { parseRichDesc, drawRichLine } from '@/lib/pdf/richText'
 
 const PARTS_COLOR = rgb(0xFF / 255, 0x66 / 255, 0x00 / 255) // #FF6600
 const DARK  = rgb(0.08,  0.08,  0.08)
@@ -274,9 +275,10 @@ export async function generatePartsQuotePdf(input: PartsQuotePdfInput): Promise<
 
   filledItems.forEach((item, i) => {
     const effective = item.overridePrice ? parseFloat(item.overridePrice) || 0 : item.qty * item.unitPrice
-    const rawDesc   = sanitise(item.description ?? '')
-    const descLines = hasDesc && rawDesc ? wrapText(rawDesc, reg, 9, descW) : []
-    const rowH      = descLines.length > 1 ? descLines.length * LINE_H + 8 : ROW_H
+    const richLines = hasDesc && item.description?.trim()
+      ? parseRichDesc(item.description, { reg, bold, italic }, 9, descW)
+      : []
+    const rowH = richLines.length > 1 ? richLines.length * LINE_H + 8 : ROW_H
 
     if (item.notes?.trim()) {
       const noteLines = wrapText(sanitise(item.notes), reg, 8.5, CW - 24)
@@ -302,7 +304,9 @@ export async function generatePartsQuotePdf(input: PartsQuotePdfInput): Promise<
         case 'unitPrice':   val = item.unitPrice > 0 ? fmtAUD(item.unitPrice) : '-'; break
         case 'total':       val = effective > 0 ? fmtAUD(effective) : '-'; break
         case 'description': {
-          descLines.forEach((line, li) => { t(page, line, col.x, y - 12 - li * LINE_H, reg, 9, BLACK) })
+          richLines.forEach((line, li) => {
+            drawRichLine(page, line, col.x, y - 12 - li * LINE_H, { reg, bold, italic }, 9, BLACK)
+          })
           return
         }
         default: val = sanitise(item.extras?.[col.key] ?? ''); break

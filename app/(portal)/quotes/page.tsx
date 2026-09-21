@@ -196,6 +196,84 @@ function Tip({ text }: { text?: string }) {
   )
 }
 
+// ── Rich description textarea with formatting toolbar ─────────────────────────
+function RichDescTextarea({
+  value, onChange, placeholder = 'Description', rows = 2, className,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  rows?: number
+  className?: string
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+
+  function applyFormat(type: 'bold' | 'italic' | 'bullet') {
+    const el = ref.current
+    if (!el) return
+    const start = el.selectionStart
+    const end   = el.selectionEnd
+    const sel   = value.slice(start, end)
+    let next = value
+    let newStart = start, newEnd = end
+
+    if (type === 'bold') {
+      const wrapped = `**${sel}**`
+      next = value.slice(0, start) + wrapped + value.slice(end)
+      newStart = start + 2; newEnd = start + 2 + sel.length
+    } else if (type === 'italic') {
+      const wrapped = `_${sel}_`
+      next = value.slice(0, start) + wrapped + value.slice(end)
+      newStart = start + 1; newEnd = start + 1 + sel.length
+    } else if (type === 'bullet') {
+      // Find start of current line
+      const lineStart = value.lastIndexOf('\n', start - 1) + 1
+      const lineEnd   = value.indexOf('\n', start)
+      const lineText  = value.slice(lineStart, lineEnd === -1 ? undefined : lineEnd)
+      if (lineText.startsWith('• ') || lineText.startsWith('- ')) {
+        // remove bullet prefix
+        const prefix = lineText.slice(0, 2)
+        next = value.slice(0, lineStart) + lineText.slice(2) + (lineEnd === -1 ? '' : value.slice(lineEnd))
+        newStart = Math.max(lineStart, start - prefix.length)
+        newEnd   = newStart
+      } else {
+        next = value.slice(0, lineStart) + '• ' + lineText + (lineEnd === -1 ? '' : value.slice(lineEnd))
+        newStart = start + 2; newEnd = end + 2
+      }
+    }
+
+    onChange(next)
+    requestAnimationFrame(() => {
+      el.focus()
+      el.setSelectionRange(newStart, newEnd)
+    })
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <div className="flex gap-0.5">
+        <button type="button" onMouseDown={e => { e.preventDefault(); applyFormat('bold') }}
+          title="Bold (**text**)"
+          className="px-2 py-0.5 text-xs font-bold border border-slate-200 rounded bg-white hover:bg-slate-100 text-slate-700 leading-tight">B</button>
+        <button type="button" onMouseDown={e => { e.preventDefault(); applyFormat('italic') }}
+          title="Italic (_text_)"
+          className="px-2 py-0.5 text-xs italic border border-slate-200 rounded bg-white hover:bg-slate-100 text-slate-700 leading-tight">I</button>
+        <button type="button" onMouseDown={e => { e.preventDefault(); applyFormat('bullet') }}
+          title="Bullet point"
+          className="px-2 py-0.5 text-xs border border-slate-200 rounded bg-white hover:bg-slate-100 text-slate-700 leading-tight">•</button>
+      </div>
+      <textarea
+        ref={ref}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={rows}
+        className={className ?? 'w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition resize-y min-h-[2.5rem]'}
+      />
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function NewQuotesPage() {
   // DB-driven option lists (fetched once on mount)
@@ -2291,9 +2369,7 @@ const autoDescLines = [
                                           placeholder="Item name" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
                                       )}
                                       {col.key === 'description' && (
-                                        <textarea value={it.description} onChange={e => updateMaintItem(i, 'description', e.target.value)}
-                                          placeholder="Description" rows={2}
-                                          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition resize-y min-h-[2.5rem]" />
+                                        <RichDescTextarea value={it.description} onChange={v => updateMaintItem(i, 'description', v)} />
                                       )}
                                       {col.key === 'width' && (
                                         <input type="text" value={it.width} onChange={e => updateMaintItem(i, 'width', e.target.value)}
@@ -2742,9 +2818,7 @@ const autoDescLines = [
                                           placeholder="Item name" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
                                       )}
                                       {col.key === 'description' && (
-                                        <textarea value={it.description} onChange={e => updatePartsItem(i, 'description', e.target.value)}
-                                          placeholder="Description" rows={2}
-                                          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition resize-y min-h-[2.5rem]" />
+                                        <RichDescTextarea value={it.description} onChange={v => updatePartsItem(i, 'description', v)} />
                                       )}
                                       {col.key === 'width' && (
                                         <input type="text" value={it.width} onChange={e => updatePartsItem(i, 'width', e.target.value)}
@@ -3204,9 +3278,7 @@ const autoDescLines = [
                                           placeholder="Item name" className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition" />
                                       )}
                                       {col.key === 'description' && (
-                                        <textarea value={it.description} onChange={e => updateGeneralItem(i, 'description', e.target.value)}
-                                          placeholder="Description" rows={2}
-                                          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition resize-y min-h-[2.5rem]" />
+                                        <RichDescTextarea value={it.description} onChange={v => updateGeneralItem(i, 'description', v)} />
                                       )}
                                       {col.key === 'width' && (
                                         <input type="text" value={it.width} onChange={e => updateGeneralItem(i, 'width', e.target.value)}

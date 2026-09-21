@@ -5,21 +5,18 @@ import type { QuoteData } from '@/lib/types/quote.types'
 import { embedRobotoForPdfLib } from '@/lib/pdf/robotoPdf'
 
 function currency(value: number): string {
-  return new Intl.NumberFormat('en-AU', {
-    style: 'currency',
-    currency: 'AUD',
-    minimumFractionDigits: 2,
-  }).format(value)
+  const parts = value.toFixed(2).split('.')
+  const int   = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return `$${int}.${parts[1]}`
 }
 
 function formatDate(value: Date): string {
-  return value.toLocaleString('en-AU', {
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  const d  = value.getDate().toString().padStart(2, '0')
+  const mo = value.toLocaleString('en-AU', { month: 'short' })
+  const y  = value.getFullYear()
+  const hh = value.getHours().toString().padStart(2, '0')
+  const mm = value.getMinutes().toString().padStart(2, '0')
+  return `${d} ${mo} ${y}, ${hh}:${mm}`
 }
 
 export async function generateQuotePdf(quoteData: QuoteData): Promise<Uint8Array> {

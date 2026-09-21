@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont } from 'pdf-lib'
 import { embedRobotoForPdfLib } from '@/lib/pdf/robotoPdf'
+import { parseRichDesc, drawRichLine } from '@/lib/pdf/richText'
 
 const BRAND = rgb(0.282, 0.067, 0.749)   // #4811BF
 const DARK  = rgb(0.08,  0.08,  0.08)
@@ -288,9 +289,10 @@ export async function generateGeneralQuotePdf(input: GeneralQuotePdfInput): Prom
 
   filledItems.forEach((item, i) => {
     const total     = item.qty * item.unitPrice
-    const rawDesc   = sanitise(item.description ?? '')
-    const descLines = hasDesc && rawDesc ? wrapText(rawDesc, reg, 9, descW) : []
-    const rowH      = descLines.length > 1 ? descLines.length * LINE_H + 8 : ROW_H
+    const richLines = hasDesc && item.description?.trim()
+      ? parseRichDesc(item.description, { reg, bold, italic }, 9, descW)
+      : []
+    const rowH = richLines.length > 1 ? richLines.length * LINE_H + 8 : ROW_H
 
     // Notes band ABOVE the data row
     if (item.notes?.trim()) {
@@ -317,8 +319,8 @@ export async function generateGeneralQuotePdf(input: GeneralQuotePdfInput): Prom
         case 'unitPrice':   val = item.unitPrice > 0 ? fmtAUD(item.unitPrice) : '-'; break
         case 'total':       val = total > 0 ? fmtAUD(total) : '-'; break
         case 'description': {
-          descLines.forEach((line, li) => {
-            t(page, line, col.x, y - 12 - li * LINE_H, reg, 9, BLACK)
+          richLines.forEach((line, li) => {
+            drawRichLine(page, line, col.x, y - 12 - li * LINE_H, { reg, bold, italic }, 9, BLACK)
           })
           return
         }
