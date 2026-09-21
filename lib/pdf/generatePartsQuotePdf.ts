@@ -60,24 +60,28 @@ function drawRect(page: PDFPage, x: number, y: number, w: number, h: number, col
   page.drawRectangle({ x, y, width: w, height: h, color })
 }
 
+function safeText(s: string) { return s.replace(/[\r\n\t]+/g, ' ').replace(/[^\x20-\xFF]/g, ' ').replace(/\s+/g, ' ').trim() }
+
 function t(page: PDFPage, text: string, x: number, y: number, font: PDFFont, size = 9, color = DARK) {
-  if (!text) return
-  page.drawText(text, { x, y, size, font, color })
+  const s = safeText(text); if (!s) return
+  page.drawText(s, { x, y, size, font, color })
 }
 
 function tRight(page: PDFPage, text: string, xRight: number, y: number, font: PDFFont, size = 9, color = DARK) {
-  if (!text) return
-  page.drawText(text, { x: xRight - font.widthOfTextAtSize(text, size), y, size, font, color })
+  const s = safeText(text); if (!s) return
+  page.drawText(s, { x: xRight - font.widthOfTextAtSize(s, size), y, size, font, color })
 }
 
 function tCenter(page: PDFPage, text: string, xLeft: number, colW: number, y: number, font: PDFFont, size = 9, color = DARK) {
-  if (!text) return
-  const w = font.widthOfTextAtSize(text, size)
-  page.drawText(text, { x: xLeft + (colW - w) / 2, y, size, font, color })
+  const s = safeText(text); if (!s) return
+  const w = font.widthOfTextAtSize(s, size)
+  page.drawText(s, { x: xLeft + (colW - w) / 2, y, size, font, color })
 }
 
 function fmtAUD(n: number) {
-  return `$${n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const parts = n.toFixed(2).split('.')
+  const int = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return `$${int}.${parts[1]}`
 }
 
 function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
@@ -193,7 +197,7 @@ export async function generatePartsQuotePdf(input: PartsQuotePdfInput): Promise<
   y -= custRows.length * 14 + 16
 
   // ── LINE ITEMS TABLE ──────────────────────────────────────────────────────
-  const sanitise = (s: string) => s.replace(/[\r\n]+/g, ' ').replace(/[^\x20-\xFF]/g, ' ').trim()
+  const sanitise = safeText
 
   const DEFAULT_COLS: PartsColSpec[] = [
     { key: 'sno', label: 'S.No' }, { key: 'item', label: 'Item' },

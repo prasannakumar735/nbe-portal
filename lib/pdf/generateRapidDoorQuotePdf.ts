@@ -175,24 +175,28 @@ function drawRect(page: PDFPage, x: number, y: number, w: number, h: number, col
   page.drawRectangle({ x, y, width: w, height: h, color })
 }
 
+function safeText(s: string) { return s.replace(/[\r\n\t]+/g, ' ').replace(/[^\x20-\xFF]/g, ' ').replace(/\s+/g, ' ').trim() }
+
 function t(page: PDFPage, text: string, x: number, y: number, font: PDFFont, size = 9, color = DARK) {
-  if (!text) return
-  page.drawText(text, { x, y, size, font, color })
+  const s = safeText(text); if (!s) return
+  page.drawText(s, { x, y, size, font, color })
 }
 
 function tRight(page: PDFPage, text: string, xRight: number, y: number, font: PDFFont, size = 9, color = DARK) {
-  if (!text) return
-  page.drawText(text, { x: xRight - font.widthOfTextAtSize(text, size), y, size, font, color })
+  const s = safeText(text); if (!s) return
+  page.drawText(s, { x: xRight - font.widthOfTextAtSize(s, size), y, size, font, color })
 }
 
 function tCenter(page: PDFPage, text: string, xLeft: number, colW: number, y: number, font: PDFFont, size = 9, color = DARK) {
-  if (!text) return
-  const w = font.widthOfTextAtSize(text, size)
-  page.drawText(text, { x: xLeft + (colW - w) / 2, y, size, font, color })
+  const s = safeText(text); if (!s) return
+  const w = font.widthOfTextAtSize(s, size)
+  page.drawText(s, { x: xLeft + (colW - w) / 2, y, size, font, color })
 }
 
 function fmtAUD(n: number) {
-  return `$${n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const parts = n.toFixed(2).split('.')
+  const int = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return `$${int}.${parts[1]}`
 }
 
 function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
@@ -451,7 +455,7 @@ async function drawPageDoor(
   // ── Right column: Unit Door Price | Quantity | DOOR SUBTOTAL | Demolition Cost ──
   // Row 1 right: Unit Door Price (aligned with first left content row)
   t(page, 'Unit Door Price', rightColX, y - 11, reg, 10, BLACK)
-  tRight(page, `$  ${door.unitPrice.toLocaleString('en-AU', { minimumFractionDigits: 2 })}`, ML + CW - 5, y - 11, reg, 10, BLACK)
+  tRight(page, fmtAUD(door.unitPrice), ML + CW - 5, y - 11, reg, 10, BLACK)
 
   // Row 2 right: Quantity
   t(page, 'Quantity', rightColX, y - swRowH - 11, reg, 8, BLACK)
@@ -460,12 +464,12 @@ async function drawPageDoor(
   // Row 3 right: DOOR SUBTOTAL bar
   drawRect(page, rightColX - 4, y - 2 * swRowH - stH, rightColW + 4, stH, BLACK)
   t(page, 'DOOR SUBTOTAL (ex. GST)', rightColX + 2, y - 2 * swRowH - (stH / 2) - 4, bold, 9, WHITE)
-  tRight(page, `$  ${(door.qty * door.unitPrice).toLocaleString('en-AU', { minimumFractionDigits: 2 })}`, ML + CW - 5, y - 2 * swRowH - (stH / 2) - 4, bold, 11, WHITE)
+  tRight(page, fmtAUD(door.qty * door.unitPrice), ML + CW - 5, y - 2 * swRowH - (stH / 2) - 4, bold, 11, WHITE)
 
   // Row 4 right: Demolition Cost (only when demolition is required)
   if (demolRequired) {
     t(page, 'Demolition Cost', rightColX, y - 2 * swRowH - stH - 11, reg, 9, DARK)
-    tRight(page, `$  ${door.demolition.toLocaleString('en-AU', { minimumFractionDigits: 2 })}`, ML + CW - 5, y - 2 * swRowH - stH - 11, reg, 9, DARK)
+    tRight(page, fmtAUD(door.demolition), ML + CW - 5, y - 2 * swRowH - stH - 11, reg, 9, DARK)
   }
 
   // ── Left column: 3 content rows ──────────────────────────────────────────
