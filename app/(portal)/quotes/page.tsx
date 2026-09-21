@@ -489,6 +489,11 @@ export default function NewQuotesPage() {
   const [previewUrl,   setPreviewUrl]   = useState<string | null>(null)
   const [showPreview,  setShowPreview]  = useState(false)
   const previewRef = useRef<HTMLDivElement>(null)
+  const [isSafari, setIsSafari] = useState(false)
+  useEffect(() => {
+    const ua = navigator.userAgent
+    setIsSafari(/Safari/i.test(ua) && !/Chrome|CriOS|Chromium|Edg|EdgiOS|OPR|FxiOS|Firefox/i.test(ua))
+  }, [])
 
   // List view vs form view
   const [view, setView] = useState<'list' | 'form'>('list')
@@ -3543,16 +3548,21 @@ const autoDescLines = [
                   {generalSaveMsg.text}
                 </div>
               )}
-              <div className="relative w-full" style={{ height: '900px' }}>
-                <embed src={previewUrl!} type="application/pdf" className="w-full h-full border-0" />
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <p className="mb-3 text-sm text-slate-500 bg-white/80 px-3 py-1 rounded">PDF not loading? Open in a new tab.</p>
-                  <button type="button" onClick={() => window.open(previewUrl!, '_blank')}
-                    className="pointer-events-auto rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white shadow hover:bg-slate-700">
+              {isSafari ? (
+                <div className="flex flex-col items-center justify-center gap-4 py-16 px-6">
+                  <span className="material-symbols-outlined text-4xl text-slate-400">picture_as_pdf</span>
+                  <p className="text-sm text-slate-600 text-center max-w-sm">
+                    Safari doesn&apos;t support displaying this PDF in the embedded preview. Open the PDF in a new tab to view or download it.
+                  </p>
+                  <button type="button" onClick={() => { const w = window.open(); if (w) w.location.href = previewUrl! }}
+                    className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-medium text-white shadow hover:bg-slate-700">
+                    <span className="material-symbols-outlined text-[16px]">open_in_new</span>
                     Open PDF in New Tab
                   </button>
                 </div>
-              </div>
+              ) : (
+                <iframe src={previewUrl!} className="w-full border-0" style={{ height: '900px' }} title="Quote Preview" />
+              )}
             </div>
           )}
 
@@ -4809,16 +4819,21 @@ const autoDescLines = [
               {partsSaveMsg.text}
             </div>
           )}
-          <div className="relative w-full" style={{ height: '900px' }}>
-            <embed src={previewUrl!} type="application/pdf" className="w-full h-full border-0" />
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <p className="mb-3 text-sm text-slate-500 bg-white/80 px-3 py-1 rounded">PDF not loading? Open in a new tab.</p>
-              <button type="button" onClick={() => window.open(previewUrl!, '_blank')}
-                className="pointer-events-auto rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white shadow hover:bg-slate-700">
+          {isSafari ? (
+            <div className="flex flex-col items-center justify-center gap-4 py-16 px-6">
+              <span className="material-symbols-outlined text-4xl text-slate-400">picture_as_pdf</span>
+              <p className="text-sm text-slate-600 text-center max-w-sm">
+                Safari doesn&apos;t support displaying this PDF in the embedded preview. Open the PDF in a new tab to view or download it.
+              </p>
+              <button type="button" onClick={() => { const w = window.open(); if (w) w.location.href = previewUrl! }}
+                className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-medium text-white shadow hover:bg-slate-700">
+                <span className="material-symbols-outlined text-[16px]">open_in_new</span>
                 Open PDF in New Tab
               </button>
             </div>
-          </div>
+          ) : (
+            <iframe src={previewUrl!} className="w-full border-0" style={{ height: '900px' }} title="Quote Preview" />
+          )}
         </div>
       )}
 
