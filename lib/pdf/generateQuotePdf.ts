@@ -12,7 +12,8 @@ function currency(value: number): string {
 
 function formatDate(value: Date): string {
   const d  = value.getDate().toString().padStart(2, '0')
-  const mo = value.toLocaleString('en-AU', { month: 'short' })
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  const mo = MONTHS[value.getMonth()]
   const y  = value.getFullYear()
   const hh = value.getHours().toString().padStart(2, '0')
   const mm = value.getMinutes().toString().padStart(2, '0')

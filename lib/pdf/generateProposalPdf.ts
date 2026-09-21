@@ -9,11 +9,9 @@ import {
 import { embedRobotoForPdfLib } from '@/lib/pdf/robotoPdf'
 
 function currency(value: number): string {
-  return new Intl.NumberFormat('en-AU', {
-    style: 'currency',
-    currency: 'AUD',
-    minimumFractionDigits: 2,
-  }).format(value)
+  const parts = value.toFixed(2).split('.')
+  const int   = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return `$${int}.${parts[1]}`
 }
 
 function round2(value: number): number {
