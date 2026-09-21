@@ -17,6 +17,12 @@ function todayDisplay(): string {
   const d = new Date()
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
 }
+/** Convert DD/MM/YYYY display date to ISO YYYY-MM-DD for Supabase date columns */
+function displayToISO(ddmmyyyy: string): string {
+  const [dd, mm, yyyy] = ddmmyyyy.split('/')
+  return `${yyyy}-${mm}-${dd}`
+}
+function todayISO(): string { return displayToISO(todayDisplay()) }
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const RAPID_DOOR_TYPES = ['PE01', 'SP01', 'FR01', 'CAD01', 'CL01', 'ES01']
@@ -639,7 +645,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
         body: JSON.stringify({
           quoteNumber: qn,
           quoteId: quoteIdRef.current ?? undefined,
-          date: todayDisplay(), validUntil,
+          date: todayISO(), validUntil: displayToISO(validUntil),
           customerName: custName, customerAttn: custAttn,
           customerAddress: custAddress || '—',
           customerPostcode: custPostcode, customerPhone: custPhone, customerEmail: custEmail,
@@ -1115,7 +1121,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           quoteId: maintQuoteIdRef.current ?? undefined,
-          quoteNumber: qn, date: todayDisplay(), validUntil,
+          quoteNumber: qn, date: todayISO(), validUntil: displayToISO(validUntil),
           customerName: custName, customerAddress: custAddress,
           subtotal, endUser: maintEndUser || undefined,
           formSnapshot: buildMaintSnapshot(),
@@ -1200,7 +1206,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           quoteId: partsQuoteIdRef.current ?? undefined,
-          quoteNumber: qn, date: todayDisplay(), validUntil,
+          quoteNumber: qn, date: todayISO(), validUntil: displayToISO(validUntil),
           customerName: custName, customerAddress: custAddress,
           subtotal, endUser: partsEndUser || undefined,
           formSnapshot: buildPartsSnapshot(),
@@ -1343,8 +1349,8 @@ The quote includes all relevant specifications and pricing as discussed. Please 
         body: JSON.stringify({
           quoteId:         generalQuoteIdRef.current ?? undefined,
           quoteNumber:     qn,
-          date:            todayDisplay(),
-          validUntil,
+          date:            todayISO(),
+          validUntil:      displayToISO(validUntil),
           customerName:    custName,
           customerAttn:    custAttn,
           customerAddress: custAddress,
@@ -1711,7 +1717,7 @@ const autoDescLines = [
           body: JSON.stringify({
             quoteNumber: qn,
             quoteId: quoteIdRef.current ?? undefined,
-            date: todayDisplay(), validUntil,
+            date: todayISO(), validUntil: displayToISO(validUntil),
             customerName: custName, customerAttn: custAttn,
             customerAddress: custAddress, customerPostcode: custPostcode,
             customerPhone: custPhone, customerEmail: custEmail,

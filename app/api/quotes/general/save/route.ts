@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
         .update({
           quote_number:    payload.quoteNumber,
           customer_name:   payload.customerName || payload.quoteNumber,
-          site_address:    payload.customerAddress || null,
+          site_address:    payload.customerAddress || '',
           service_date:    payload.date,
           valid_until:     payload.validUntil,
           subtotal:        payload.subtotal,
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
       .insert({
         quote_number:       payload.quoteNumber,
         customer_name:      payload.customerName || payload.quoteNumber,
-        site_address:       payload.customerAddress || null,
+        site_address:       payload.customerAddress || '',
         service_date:       payload.date,
         valid_until:        payload.validUntil,
         subtotal:           payload.subtotal,
