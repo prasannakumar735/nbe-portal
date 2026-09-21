@@ -3543,7 +3543,16 @@ const autoDescLines = [
                   {generalSaveMsg.text}
                 </div>
               )}
-              <iframe src={previewUrl} className="w-full border-0" style={{ height: '900px' }} title="Quote Preview" />
+              <div className="relative w-full" style={{ height: '900px' }}>
+                <embed src={previewUrl!} type="application/pdf" className="w-full h-full border-0" />
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <p className="mb-3 text-sm text-slate-500 bg-white/80 px-3 py-1 rounded">PDF not loading? Open in a new tab.</p>
+                  <button type="button" onClick={() => window.open(previewUrl!, '_blank')}
+                    className="pointer-events-auto rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white shadow hover:bg-slate-700">
+                    Open PDF in New Tab
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -4800,7 +4809,16 @@ const autoDescLines = [
               {partsSaveMsg.text}
             </div>
           )}
-          <iframe src={previewUrl} className="w-full border-0" style={{ height: '900px' }} title="Quote Preview" />
+          <div className="relative w-full" style={{ height: '900px' }}>
+            <embed src={previewUrl!} type="application/pdf" className="w-full h-full border-0" />
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <p className="mb-3 text-sm text-slate-500 bg-white/80 px-3 py-1 rounded">PDF not loading? Open in a new tab.</p>
+              <button type="button" onClick={() => window.open(previewUrl!, '_blank')}
+                className="pointer-events-auto rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white shadow hover:bg-slate-700">
+                Open PDF in New Tab
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

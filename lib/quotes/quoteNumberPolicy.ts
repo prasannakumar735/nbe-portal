@@ -8,12 +8,12 @@ export function isQuoteNumberPrefix(v: string): v is QuoteNumberPrefix {
   return (QUOTE_NUMBER_PREFIXES as readonly string[]).includes(v)
 }
 
-/** Local calendar YYYYMMDD (browser or server `Date`). */
-export function localDateKeyYmd(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}${m}${day}`
+/** Calendar YYYYMMDD in Australia/Melbourne time (handles AEST/AEDT automatically). */
+export function localDateKeyYmd(_d: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Australia/Melbourne',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date()).replace(/-/g, '')
 }
 
 /**
