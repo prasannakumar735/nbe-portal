@@ -27,6 +27,17 @@ export async function resolveAuthEmail(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<string | null> {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('notification_email')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (profile?.notification_email) {
+    const notifEmail = String(profile.notification_email).trim()
+    if (isValidEmail(notifEmail)) return notifEmail
+  }
+
   const { data, error } = await supabase.auth.admin.getUserById(userId)
   if (error || !data.user?.email) return null
   const em = String(data.user.email).trim()
