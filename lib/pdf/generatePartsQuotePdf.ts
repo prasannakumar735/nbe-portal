@@ -9,6 +9,8 @@ const GREY  = rgb(0.40,  0.40,  0.40)
 const WHITE = rgb(1,     1,     1)
 const BLACK = rgb(0,     0,     0)
 
+export type PartsNoteStyle = { bold?: boolean; italic?: boolean; color?: string; bgColor?: string; fontSize?: string }
+
 export type PartsLineItem = {
   item:           string
   description?:   string
@@ -17,6 +19,7 @@ export type PartsLineItem = {
   qty:            number
   unitPrice:      number
   notes?:         string
+  noteStyle?:     PartsNoteStyle
   overridePrice?: string
   extras?:        Record<string, string>
 }
@@ -274,8 +277,11 @@ export async function generatePartsQuotePdf(input: PartsQuotePdfInput): Promise<
     if (item.notes?.trim()) {
       const noteLines = wrapText(sanitise(item.notes), reg, 8.5, CW - 24)
       const noteH = noteLines.length * 10 + 8
-      page.drawRectangle({ x: ML, y: y - noteH + 2, width: CW, height: noteH, color: rgb(0.93, 0.95, 1) })
-      noteLines.forEach((line, li) => { t(page, line, ML + 8, y - 9 - li * 10, reg, 8.5, GREY) })
+      const parseHex = (hex: string) => { const m = hex.replace('#','').match(/.{2}/g); return m ? rgb(parseInt(m[0],16)/255, parseInt(m[1],16)/255, parseInt(m[2],16)/255) : null }
+      const noteBg   = item.noteStyle?.bgColor ? (parseHex(item.noteStyle.bgColor) ?? rgb(0.93, 0.95, 1)) : rgb(0.93, 0.95, 1)
+      const noteFg   = item.noteStyle?.color   ? (parseHex(item.noteStyle.color)   ?? GREY)               : GREY
+      page.drawRectangle({ x: ML, y: y - noteH + 2, width: CW, height: noteH, color: noteBg })
+      noteLines.forEach((line, li) => { t(page, line, ML + 8, y - 9 - li * 10, reg, 8.5, noteFg) })
       y -= noteH
     }
 
