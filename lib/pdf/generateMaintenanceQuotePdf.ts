@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont } from 'pdf-lib'
 import { embedRobotoForPdfLib } from '@/lib/pdf/robotoPdf'
-import { parseRichDesc, drawRichLine } from '@/lib/pdf/richText'
+import { parseRichDesc, drawRichLine, type RichLine } from '@/lib/pdf/richText'
 
 const BRAND = rgb(0.282, 0.067, 0.749)   // #4811BF
 const DARK  = rgb(0.08,  0.08,  0.08)
@@ -121,86 +121,12 @@ export async function generateMaintenanceQuotePdf(input: MaintenanceQuotePdfInpu
   const reg       = roboto?.regular ?? (await pdfDoc.embedFont(StandardFonts.Helvetica))
   const bold      = roboto?.bold    ?? (await pdfDoc.embedFont(StandardFonts.HelveticaBold))
   const italic    = roboto?.italic  ?? (await pdfDoc.embedFont(StandardFonts.HelveticaOblique))
-  const display: import('pdf-lib').PDFFont = jostLight ?? reg  // Jost Light, fallback to Roboto Regular (never bold)
+  const display: import('pdf-lib').PDFFont = jostLight ?? reg
 
-  const page = pdfDoc.addPage([595.28, 841.89])
-  const PW = 595.28
-  const ML = 36, MR = 36, CW = PW - ML - MR
-  let y = 800
-
-  // ── HEADER ────────────────────────────────────────────────────────────────
-  const logoH = 50
-  let logoImg = null
-  try {
-    const logoBytes = await readFile(path.join(process.cwd(), 'public', 'NBE_LOGO_BK_PL.png'))
-    logoImg = await pdfDoc.embedPng(new Uint8Array(logoBytes))
-  } catch { /* fallback text below */ }
-
-  if (logoImg) {
-    const { width: lw, height: lh } = logoImg
-    page.drawImage(logoImg, { x: ML, y: y - logoH, width: (lw / lh) * logoH, height: logoH })
-  } else {
-    t(page, 'NBE australia', ML, y - 22, bold, 20, BLACK)
-  }
-  t(page, 'ABN: 17 007 048 008', ML, y - logoH - 10, reg, 9, DARK)
-
-  // "QUOTE" — Jost Light 36pt BLACK, identical to Industrial Rapid Door
-  t(page, 'QUOTE', PW - MR - display.widthOfTextAtSize('QUOTE', 36), y - 26, display, 36, BLACK)
-
-  // Subtitle right-aligned — #6A6A6A grey
-  const subtitle = 'MAINTENANCE SERVICE / REPAIR'
-  t(page, subtitle, PW - MR - bold.widthOfTextAtSize(subtitle, 14), y - 52, bold, 14, rgb(0x80/255, 0x80/255, 0x80/255))
-
-  y -= logoH + 22
-  drawHLine(page, ML, y, CW, 1, DARK)
-  y -= 20
-
-  // ── COMPANY INFO + DATE BLOCK ─────────────────────────────────────────────
-  t(page, input.senderName    ?? 'NBE AUSTRALIA',                                      ML, y,      bold, 8, DARK)
-  t(page, input.senderAddress ?? '22A Humeside Dr, Campbellfield VIC 3061, Australia', ML, y - 12, reg,  8, DARK)
-  t(page, input.senderEmail   ?? 'accountsreceivable@nbeaustralia.com.au',             ML, y - 24, reg,  8, DARK)
-  t(page, input.contactName   ?? 'Andrew Newton',                                      ML, y - 36, reg,  8, DARK)
-  t(page, input.contactPhone  ?? '(04) 2705 5556',                                     ML, y - 48, reg,  8, DARK)
-  t(page, input.contactEmail  ?? 'anewton@nbeaustralia.com.au',                        ML, y - 60, reg,  8, DARK)
-
-  const dateLabelX = ML + CW - 160
-  const dateRows: [string, string][] = [
-    ['DATE',        input.date],
-    ['VALID UNTIL', input.validUntil],
-    ['QUOTE NO.',   input.quoteNumber],
-  ]
-  dateRows.forEach(([label, val], i) => {
-    t(page,      label, dateLabelX, y - i * 14, bold, 8.5, DARK)
-    tRight(page, val,   ML + CW,    y - i * 14, reg,  8.5, DARK)
-  })
-  y -= 80
-
-  // ── CUSTOMER SECTION ──────────────────────────────────────────────────────
-  const STRIP_H = 20
-  drawRect(page, ML, y - STRIP_H, CW, STRIP_H, BLACK)
-  t(page, 'CUSTOMER', ML + 8, y - 13, bold, 10, WHITE)
-  y -= STRIP_H + 12
-
-  const custRows: [string, string][] = [
-    ['Customer',  input.customerName     || ''],
-    ['Attention', input.customerAttn     || ''],
-    ['Address',   input.customerAddress  || ''],
-    ['Postcode',  input.customerPostcode || ''],
-    ['Phone',     input.customerPhone    || ''],
-    ['Email',     input.customerEmail    || ''],
-  ]
-  const cLabelX = ML + 4
-  const cValueX = ML + 80
-  const CUST_COLOR = rgb(31 / 255, 41 / 255, 51 / 255) // #1F2933 — matches Excel reference
-  custRows.forEach(([label, val], i) => {
-    t(page, label, cLabelX, y - i * 14, bold, 8, CUST_COLOR)
-    t(page, val,   cValueX, y - i * 14, reg,  8, CUST_COLOR)
-  })
-  y -= custRows.length * 14 + 16
-
-  // ── LINE ITEMS TABLE ──────────────────────────────────────────────────────
+  const PW = 595.28, ML = 36, MR = 36, CW = PW - ML - MR
   const sanitise = safeText
 
+  // ── Column geometry ───────────────────────────────────────────────────────────
   const DEFAULT_COLS: MaintColSpec[] = [
     { key: 'sno', label: 'S.No' }, { key: 'item', label: 'Item' },
     { key: 'description', label: 'Description' }, { key: 'width', label: 'Width' },
@@ -208,10 +134,7 @@ export async function generateMaintenanceQuotePdf(input: MaintenanceQuotePdfInpu
     { key: 'unitPrice', label: 'Unit Price' }, { key: 'total', label: 'Total' },
   ]
   const visCols = input.visibleColumns ?? DEFAULT_COLS
-
-  const FIXED_W: Record<string, number> = {
-    sno: 22, item: 80, width: 42, height: 42, qty: 28, unitPrice: 65, total: 65,
-  }
+  const FIXED_W: Record<string, number> = { sno: 22, item: 80, width: 42, height: 42, qty: 28, unitPrice: 65, total: 65 }
   const EXTRA_W = 55
 
   const allHaveWidth = visCols.every(c => c.width != null)
@@ -228,68 +151,216 @@ export async function generateMaintenanceQuotePdf(input: MaintenanceQuotePdfInpu
 
   type ColGeo = { key: string; label: string; x: number; w: number; align: 'left' | 'center' | 'right' }
   const cols: ColGeo[] = []
-  let cx = ML
+  let colX = ML
   for (let ci = 0; ci < visCols.length; ci++) {
     const c = visCols[ci]
     const w = rawWidths[ci]
     const align: 'left' | 'center' | 'right' =
       c.key === 'unitPrice' || c.key === 'total' ? 'right' :
       c.key === 'sno' || c.key === 'description' || c.key === 'item' ? 'left' : 'center'
-    cols.push({ key: c.key, label: c.label, x: cx, w, align })
-    cx += w
+    cols.push({ key: c.key, label: c.label, x: colX, w, align })
+    colX += w
   }
 
-  const TH = 20
-  drawRect(page, ML, y - TH, CW, TH, BLACK)
-  cols.forEach(col => {
-    const label = col.key === 'sno' ? 'NO' : col.key === 'unitPrice' ? 'UNIT PRICE' : col.label.toUpperCase()
-    if (col.align === 'right') tRight(page, label, col.x + col.w - 4, y - 13, bold, 8, WHITE)
-    else if (col.align === 'center') tCenter(page, label, col.x, col.w, y - 13, bold, 8, WHITE)
-    else t(page, label, col.x + (col.key === 'sno' ? 2 : 0), y - 13, bold, 8, WHITE)
-  })
-  y -= TH
+  const TH = 20, SH = 14
+  const ROW_H = 18, LINE_H = 11
+  const descCol  = cols.find(c => c.key === 'description')
+  const hasDesc  = descCol != null
+  const descW    = descCol ? descCol.w - 8 : 100
+  const SH_LABELS: Record<string, string> = { sno: '#', width: 'WIDTH', height: 'HEIGHT', qty: '#', unitPrice: '$', total: '$$' }
+  const hasSubRow = cols.some(c => SH_LABELS[c.key] != null)
 
-  const SH = 14
-  const subLabels: Record<string, string> = { sno: '#', width: 'WIDTH', height: 'HEIGHT', qty: '#', unitPrice: '$', total: '$$' }
-  let hasSubRow = false
-  cols.forEach(col => {
-    const sub = subLabels[col.key]
-    if (!sub) return
-    hasSubRow = true
-    if (col.align === 'right') tRight(page, sub, col.x + col.w - 4, y - 9, reg, 8, BLACK)
-    else if (col.align === 'center') tCenter(page, sub, col.x, col.w, y - 9, reg, 8, BLACK)
-    else t(page, sub, col.x + 2, y - 9, reg, 8, BLACK)
-  })
-  if (hasSubRow) y -= SH
-  drawHLine(page, ML, y, CW, 1.2, DARK)
-  y -= 2
-
-  const ROW_H  = 18
-  const LINE_H = 11
-  const descCol = cols.find(c => c.key === 'description')
-  const hasDesc = descCol != null
-  const descW   = descCol ? descCol.w - 8 : 100
-
+  // ── Pre-compute row data ──────────────────────────────────────────────────────
+  type RowData = {
+    item: MaintenanceLineItem; idx: number; effective: number
+    richLines: RichLine[]; rowH: number; noteLines: string[]; noteH: number
+  }
   const filledItems = input.lineItems.filter(it => it.item.trim() || it.unitPrice > 0)
-  const MIN_ROWS = Math.max(filledItems.length + 2, 5)
-  let rowsDrawn = 0
-
-  filledItems.forEach((item, i) => {
-    const effective = item.overridePrice ? parseFloat(item.overridePrice) || 0 : item.qty * item.unitPrice
-    const richLines = hasDesc && item.description?.trim()
+  const rowData: RowData[] = filledItems.map((item, i) => {
+    const effective  = item.overridePrice ? parseFloat(item.overridePrice) || 0 : item.qty * item.unitPrice
+    const richLines  = hasDesc && item.description?.trim()
       ? parseRichDesc(item.description, { reg, bold, italic }, 9, descW)
       : []
-    const rowH = richLines.length > 1 ? richLines.length * LINE_H + 8 : ROW_H
+    const rowH       = richLines.length > 1 ? richLines.length * LINE_H + 8 : ROW_H
+    const noteLines  = item.notes?.trim() ? wrapText(sanitise(item.notes), reg, 8.5, CW - 24) : []
+    const noteH      = noteLines.length > 0 ? noteLines.length * 10 + 8 : 0
+    return { item, idx: i, effective, richLines, rowH, noteLines, noteH }
+  })
+  const MIN_ROWS = Math.max(filledItems.length + 2, 5)
 
-    if (item.notes?.trim()) {
-      const noteLines = wrapText(sanitise(item.notes), reg, 8.5, CW - 24)
-      const noteH = noteLines.length * 10 + 8
-      const parseHex = (hex: string) => { const m = hex.replace('#','').match(/.{2}/g); return m ? rgb(parseInt(m[0],16)/255, parseInt(m[1],16)/255, parseInt(m[2],16)/255) : null }
-      const noteBg   = item.noteStyle?.bgColor ? (parseHex(item.noteStyle.bgColor) ?? rgb(0.93, 0.95, 1)) : rgb(0.93, 0.95, 1)
-      const noteFg   = item.noteStyle?.color   ? (parseHex(item.noteStyle.color)   ?? GREY)               : GREY
-      page.drawRectangle({ x: ML, y: y - noteH + 2, width: CW, height: noteH, color: noteBg })
-      noteLines.forEach((line, li) => { t(page, line, ML + 8, y - 9 - li * 10, reg, 8.5, noteFg) })
-      y -= noteH
+  // ── Footer terms (pre-computed for height simulation) ─────────────────────────
+  const DEFAULT_TERMS = 'This quotation covers the maintenance and/or parts listed above. Pricing is valid for 30 days from the date of issue. Work will be carried out during standard business hours unless otherwise agreed. Additional works identified on-site will be quoted separately before proceeding. Travel, accommodation, and after-hours rates may apply depending on site location and scheduling requirements. All works are subject to NBE Australia\'s standard Terms and Conditions.'
+  const terms       = safeText(input.terms?.trim() || DEFAULT_TERMS)
+  const footerSize  = 8, footerLineH = 11
+  const footerColor = rgb(0x33/255, 0x33/255, 0x33/255)
+  const footerLines = wrapText(terms, italic, footerSize, CW)
+  const footerStartY = 52 + (footerLines.length - 1) * footerLineH
+
+  // ── Pagination simulation ─────────────────────────────────────────────────────
+  // Page 1: y after full header + customer section + table header = 460
+  // Continuation: y after compact header + table header = 670
+  const SAFE_BOTTOM   = 50
+  const Y_ROWS_P1     = 460
+  const Y_ROWS_CONT   = 670
+  const discPct       = input.discountPct ?? 0
+  const TOTALS_ROWS   = 2 + (discPct > 0 ? 1 : 0)
+  const TOTALS_NEEDED = TOTALS_ROWS * 16 + 34          // rows + total box
+  const MIN_Y_FOR_TOTALS = footerStartY + TOTALS_NEEDED + 24
+
+  const simulateTotalPages = (): number => {
+    let simY = Y_ROWS_P1, pages = 1
+    for (const rd of rowData) {
+      if (simY - rd.noteH - rd.rowH < SAFE_BOTTOM) { pages++; simY = Y_ROWS_CONT }
+      simY -= rd.noteH + rd.rowH
+    }
+    const fillerCount = Math.max(0, MIN_ROWS - rowData.length)
+    for (let i = 0; i < fillerCount; i++) {
+      if (simY - ROW_H < SAFE_BOTTOM) { pages++; simY = Y_ROWS_CONT }
+      simY -= ROW_H
+    }
+    simY -= 18  // heavy separator + y -= 16
+    if (simY < MIN_Y_FOR_TOTALS) pages++
+    return pages
+  }
+  const totalPages = simulateTotalPages()
+
+  // ── Rendering state ───────────────────────────────────────────────────────────
+  let page: PDFPage = null!
+  let y = 800
+  let pageNum = 0
+
+  let logoImg: Awaited<ReturnType<typeof pdfDoc.embedPng>> | null = null
+  try {
+    const logoBytes = await readFile(path.join(process.cwd(), 'public', 'NBE_LOGO_BK_PL.png'))
+    logoImg = await pdfDoc.embedPng(new Uint8Array(logoBytes))
+  } catch {}
+
+  // ── Inner helpers (closures over page/y/pageNum) ──────────────────────────────
+
+  const drawTableCols = () => {
+    drawRect(page, ML, y - TH, CW, TH, BLACK)
+    cols.forEach(col => {
+      const label = col.key === 'sno' ? 'NO' : col.key === 'unitPrice' ? 'UNIT PRICE' : col.label.toUpperCase()
+      if (col.align === 'right')       tRight (page, label, col.x + col.w - 4, y - 13, bold, 8, WHITE)
+      else if (col.align === 'center') tCenter(page, label, col.x, col.w, y - 13, bold, 8, WHITE)
+      else                             t      (page, label, col.x + (col.key === 'sno' ? 2 : 0), y - 13, bold, 8, WHITE)
+    })
+    y -= TH
+    if (hasSubRow) {
+      cols.forEach(col => {
+        const sub = SH_LABELS[col.key]; if (!sub) return
+        if (col.align === 'right')       tRight (page, sub, col.x + col.w - 4, y - 9, reg, 8, BLACK)
+        else if (col.align === 'center') tCenter(page, sub, col.x, col.w, y - 9, reg, 8, BLACK)
+        else                             t      (page, sub, col.x + 2, y - 9, reg, 8, BLACK)
+      })
+      y -= SH
+    }
+    drawHLine(page, ML, y, CW, 1.2, DARK)
+    y -= 2
+  }
+
+  const drawPageFooterBar = () => {
+    drawHLine(page, ML, 38, CW, 0.5, DARK)
+    t(page, 'NBE AUSTRALIA',       ML,      20, bold, 7.5, DARK)
+    t(page, 'nbeaustralia.com.au', ML + 75, 20, reg,  7,   GREY)
+    tRight(page, `Quote No. ${input.quoteNumber} | MAINTENANCE SERVICE / REPAIR | Page ${pageNum} of ${totalPages}`, ML + CW, 20, reg, 7.5, GREY)
+  }
+
+  const drawCompanyDateBlock = () => {
+    t(page, input.senderName    ?? 'NBE AUSTRALIA',                                      ML, y,      bold, 8, DARK)
+    t(page, input.senderAddress ?? '22A Humeside Dr, Campbellfield VIC 3061, Australia', ML, y - 12, reg,  8, DARK)
+    t(page, input.senderEmail   ?? 'accountsreceivable@nbeaustralia.com.au',             ML, y - 24, reg,  8, DARK)
+    t(page, input.contactName   ?? 'Andrew Newton',                                      ML, y - 36, reg,  8, DARK)
+    t(page, input.contactPhone  ?? '(04) 2705 5556',                                     ML, y - 48, reg,  8, DARK)
+    t(page, input.contactEmail  ?? 'anewton@nbeaustralia.com.au',                        ML, y - 60, reg,  8, DARK)
+    const dateLabelX = ML + CW - 160
+    const dateRows: [string, string][] = [
+      ['DATE',        input.date],
+      ['VALID UNTIL', input.validUntil],
+      ['QUOTE NO.',   input.quoteNumber],
+    ]
+    dateRows.forEach(([label, val], i) => {
+      t(page,      label, dateLabelX, y - i * 14, bold, 8.5, DARK)
+      tRight(page, val,   ML + CW,    y - i * 14, reg,  8.5, DARK)
+    })
+    y -= 80
+  }
+
+  const startPage = (isFirst: boolean) => {
+    if (pageNum > 0) drawPageFooterBar()   // finish the previous page
+    pageNum++
+    page = pdfDoc.addPage([595.28, 841.89])
+    y = 800
+
+    if (isFirst) {
+      // ── Full page 1 header ──
+      const logoH = 50
+      if (logoImg) {
+        const { width: lw, height: lh } = logoImg
+        page.drawImage(logoImg, { x: ML, y: y - logoH, width: (lw / lh) * logoH, height: logoH })
+      } else {
+        t(page, 'NBE australia', ML, y - 22, bold, 20, BLACK)
+      }
+      t(page, 'ABN: 17 007 048 008', ML, y - logoH - 10, reg, 9, DARK)
+      t(page, 'QUOTE', PW - MR - display.widthOfTextAtSize('QUOTE', 36), y - 26, display, 36, BLACK)
+      const subtitle = 'MAINTENANCE SERVICE / REPAIR'
+      t(page, subtitle, PW - MR - bold.widthOfTextAtSize(subtitle, 14), y - 52, bold, 14, rgb(0x80/255, 0x80/255, 0x80/255))
+      y -= logoH + 22
+      drawHLine(page, ML, y, CW, 1, DARK)
+      y -= 20
+
+      drawCompanyDateBlock()
+
+      // Customer section
+      const STRIP_H = 20
+      drawRect(page, ML, y - STRIP_H, CW, STRIP_H, BLACK)
+      t(page, 'CUSTOMER', ML + 8, y - 13, bold, 10, WHITE)
+      y -= STRIP_H + 12
+      const custRows: [string, string][] = [
+        ['Customer',  input.customerName     || ''],
+        ['Attention', input.customerAttn     || ''],
+        ['Address',   input.customerAddress  || ''],
+        ['Postcode',  input.customerPostcode || ''],
+        ['Phone',     input.customerPhone    || ''],
+        ['Email',     input.customerEmail    || ''],
+      ]
+      const cLabelX = ML + 4, cValueX = ML + 80
+      const CUST_COLOR = rgb(31/255, 41/255, 51/255)
+      custRows.forEach(([label, val], i) => {
+        t(page, label, cLabelX, y - i * 14, bold, 8, CUST_COLOR)
+        t(page, val,   cValueX, y - i * 14, reg,  8, CUST_COLOR)
+      })
+      y -= custRows.length * 14 + 16
+    } else {
+      // ── Compact continuation header: company + date block only ──
+      drawCompanyDateBlock()
+      drawHLine(page, ML, y, CW, 1, DARK)
+      y -= 14
+    }
+
+    drawTableCols()
+  }
+
+  // ── Start page 1 ─────────────────────────────────────────────────────────────
+  startPage(true)
+
+  // ── Draw line item rows ───────────────────────────────────────────────────────
+  const parseHex = (hex: string) => {
+    const m = hex.replace('#', '').match(/.{2}/g)
+    return m ? rgb(parseInt(m[0], 16) / 255, parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255) : null
+  }
+
+  let rowsDrawn = 0
+  for (const rd of rowData) {
+    const rowTotal = rd.noteH + rd.rowH
+    if (y - rowTotal < SAFE_BOTTOM) startPage(false)
+
+    if (rd.noteH > 0) {
+      const noteBg = rd.item.noteStyle?.bgColor ? (parseHex(rd.item.noteStyle.bgColor) ?? rgb(0.93, 0.95, 1)) : rgb(0.93, 0.95, 1)
+      const noteFg = rd.item.noteStyle?.color   ? (parseHex(rd.item.noteStyle.color)   ?? GREY)               : GREY
+      page.drawRectangle({ x: ML, y: y - rd.noteH + 2, width: CW, height: rd.noteH, color: noteBg })
+      rd.noteLines.forEach((line, li) => t(page, line, ML + 8, y - 9 - li * 10, reg, 8.5, noteFg))
+      y -= rd.noteH
     }
 
     drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
@@ -297,44 +368,48 @@ export async function generateMaintenanceQuotePdf(input: MaintenanceQuotePdfInpu
     cols.forEach(col => {
       let val = ''
       switch (col.key) {
-        case 'sno':         val = String(i + 1); break
-        case 'item':        val = sanitise(item.item); break
-        case 'width':       val = sanitise(item.width ?? ''); break
-        case 'height':      val = sanitise(item.height ?? ''); break
-        case 'qty':         val = String(item.qty); break
-        case 'unitPrice':   val = item.unitPrice > 0 ? fmtAUD(item.unitPrice) : '-'; break
-        case 'total':       val = effective > 0 ? fmtAUD(effective) : '-'; break
+        case 'sno':         val = String(rd.idx + 1); break
+        case 'item':        val = sanitise(rd.item.item); break
+        case 'width':       val = sanitise(rd.item.width ?? ''); break
+        case 'height':      val = sanitise(rd.item.height ?? ''); break
+        case 'qty':         val = String(rd.item.qty); break
+        case 'unitPrice':   val = rd.item.unitPrice > 0 ? fmtAUD(rd.item.unitPrice) : '-'; break
+        case 'total':       val = rd.effective > 0 ? fmtAUD(rd.effective) : '-'; break
         case 'description': {
-          richLines.forEach((line, li) => {
+          rd.richLines.forEach((line, li) => {
             drawRichLine(page, line, col.x, y - 12 - li * LINE_H, { reg, bold, italic }, 9, BLACK)
           })
           return
         }
-        default: val = sanitise(item.extras?.[col.key] ?? ''); break
+        default: val = sanitise(rd.item.extras?.[col.key] ?? ''); break
       }
-      if (col.align === 'right') tRight(page, val, col.x + col.w - 4, y - 12, reg, 10, BLACK)
+      if (col.align === 'right')       tRight (page, val, col.x + col.w - 4, y - 12, reg, 10, BLACK)
       else if (col.align === 'center') tCenter(page, val, col.x, col.w, y - 12, reg, 10, BLACK)
-      else t(page, val, col.x + (col.key === 'sno' ? 2 : 0), y - 12, reg, 10, BLACK)
+      else                             t      (page, val, col.x + (col.key === 'sno' ? 2 : 0), y - 12, reg, 10, BLACK)
     })
 
-    y -= rowH
+    y -= rd.rowH
     rowsDrawn++
-  })
+  }
 
+  // ── Filler rows ───────────────────────────────────────────────────────────────
   const fillerCount = Math.max(0, MIN_ROWS - rowsDrawn)
   for (let i = 0; i < fillerCount; i++) {
+    if (y - ROW_H < SAFE_BOTTOM) startPage(false)
     drawHLine(page, ML, y, CW, 0.3, rgb(0.82, 0.82, 0.82))
     y -= ROW_H
   }
   drawHLine(page, ML, y, CW, 0.8, DARK)
   y -= 16
 
-  // ── TOTALS + BANK DETAILS ─────────────────────────────────────────────────
+  // ── Totals page: start a new page if not enough room ─────────────────────────
+  if (y < MIN_Y_FOR_TOTALS) startPage(false)
+
+  // ── Totals + bank details ─────────────────────────────────────────────────────
   const grandTotal = filledItems.reduce((s, it) => {
     const base = it.overridePrice ? parseFloat(it.overridePrice) || 0 : it.qty * it.unitPrice
     return s + base
   }, 0)
-  const discPct   = input.discountPct ?? 0
   const afterDisc = grandTotal * (1 - discPct / 100)
   const bankY = y
 
@@ -347,51 +422,40 @@ export async function generateMaintenanceQuotePdf(input: MaintenanceQuotePdfInpu
   const totLabelX   = ML + CW - totBoxW + 8
   const ROW_STEP    = 16
 
-  const hexToRgb = (hex: string) => {
-    const m = hex.replace('#','').match(/.{2}/g)
-    return m ? rgb(parseInt(m[0],16)/255, parseInt(m[1],16)/255, parseInt(m[2],16)/255) : rgb(0, 0.45, 0.1)
+  const hexToRgbTot = (hex: string) => {
+    const m = hex.replace('#', '').match(/.{2}/g)
+    return m ? rgb(parseInt(m[0], 16) / 255, parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255) : rgb(0, 0.45, 0.1)
   }
-  const DISC_COLOR = input.discountColor ? hexToRgb(input.discountColor) : rgb(0, 0.45, 0.1)
+  const DISC_COLOR = input.discountColor ? hexToRgbTot(input.discountColor) : rgb(0, 0.45, 0.1)
 
-  t(page,      'Subtotal',                              totLabelX,   bankY,            reg, 9, DARK)
-  tRight(page, grandTotal > 0 ? fmtAUD(grandTotal) : '-', totValRight, bankY,          reg, 9, DARK)
+  t(page,      'Subtotal',                                       totLabelX,   bankY,            reg, 9, DARK)
+  tRight(page, grandTotal > 0 ? fmtAUD(grandTotal) : '-',       totValRight, bankY,            reg, 9, DARK)
 
   let offsetY = ROW_STEP
   if (discPct > 0) {
     const saving = grandTotal * discPct / 100
-    t(page,      `Discount (${discPct}%)`,              totLabelX,   bankY - offsetY,  reg, 9, DISC_COLOR)
-    tRight(page, `-${fmtAUD(saving)}`,                  totValRight, bankY - offsetY,  reg, 9, DISC_COLOR)
+    t(page,      `Discount (${discPct}%)`,                       totLabelX,   bankY - offsetY,  reg, 9, DISC_COLOR)
+    tRight(page, `-${fmtAUD(saving)}`,                           totValRight, bankY - offsetY,  reg, 9, DISC_COLOR)
     offsetY += ROW_STEP
   }
-
-  t(page,      'GST (10%)',                             totLabelX,   bankY - offsetY,  reg, 9, DARK)
-  tRight(page, afterDisc > 0 ? fmtAUD(afterDisc * 0.1) : '-', totValRight, bankY - offsetY, reg, 9, DARK)
+  t(page,      'GST (10%)',                                      totLabelX,   bankY - offsetY,  reg, 9, DARK)
+  tRight(page, afterDisc > 0 ? fmtAUD(afterDisc * 0.1) : '-',  totValRight, bankY - offsetY,  reg, 9, DARK)
   offsetY += ROW_STEP
 
   const totBoxY = bankY - offsetY - 10
   drawRect(page, ML + CW - totBoxW, totBoxY, totBoxW, 24, BLACK)
-  t(page,      'TOTAL',                           ML + CW - totBoxW + 8, totBoxY + 7, bold, 10, WHITE)
-  tRight(page, afterDisc > 0 ? fmtAUD(afterDisc * 1.1) : '$  -', ML + CW - 4, totBoxY + 7, bold, 10, WHITE)
+  t(page,      'TOTAL',                                          ML + CW - totBoxW + 8, totBoxY + 7, bold, 10, WHITE)
+  tRight(page, afterDisc > 0 ? fmtAUD(afterDisc * 1.1) : '$  -', ML + CW - 4,         totBoxY + 7, bold, 10, WHITE)
 
-  // ── FOOTER TERMS ─────────────────────────────────────────────────────────
-  const DEFAULT_TERMS = 'This quotation is based on the NBE Standard Door comprising a galvanized frame, PVC curtain (900 g/m²), and a zinc-coated control box (RAL 7035). Optional extras (e.g. powder coating, light curtain, remote control, radar, traffic light, induction loop, contactless exit button) are available at additional cost. All other matters shall be subject to our standard Terms and Conditions (T&C). The electrical scope is limited to the connection between the control panel and the doors only. Power supply and isolator shall be provided by others.'
-  const terms = safeText(input.terms?.trim() || DEFAULT_TERMS)
-  const footerSize   = 8
-  const footerLineH  = 11
-  const footerColor  = rgb(0x33/255, 0x33/255, 0x33/255)
-  const footerLines  = wrapText(terms, italic, footerSize, CW)
-  const footerStartY = 52 + (footerLines.length - 1) * footerLineH
+  // ── Footer terms (last content page only) ────────────────────────────────────
   footerLines.forEach((ln, i) => {
     t(page, ln, ML, footerStartY - i * footerLineH, italic, footerSize, footerColor)
   })
 
-  // ── PAGE FOOTER BAR ───────────────────────────────────────────────────────
-  drawHLine(page, ML, 38, CW, 0.5, DARK)
-  t(page, 'NBE AUSTRALIA',          ML,       20, bold, 7.5, DARK)
-  t(page, 'nbeaustralia.com.au',    ML + 75,  20, reg,  7,   GREY)
-  tRight(page, `Quote No. ${input.quoteNumber} | MAINTENANCE SERVICE / REPAIR | Page 1 of 1`, ML + CW, 20, reg, 7.5, GREY)
+  // ── Last page footer bar ──────────────────────────────────────────────────────
+  drawPageFooterBar()
 
-  // ── Append T&C pages ──────────────────────────────────────────────────────
+  // ── Append T&C pages ──────────────────────────────────────────────────────────
   const TC_FILES: Record<string, string> = {
     CUSTOMER:    'Rapid Door_T&C for CUSTOMERS.pdf',
     DISTRIBUTOR: 'Rapid Door_T&C for DISTRIBUTOR.pdf',
@@ -404,10 +468,9 @@ export async function generateMaintenanceQuotePdf(input: MaintenanceQuotePdfInpu
       const tcDoc   = await PDFDocument.load(tcBytes)
       const pages   = await pdfDoc.copyPages(tcDoc, tcDoc.getPageIndices())
       pages.forEach(p => pdfDoc.addPage(p))
-    } catch { /* T&C file missing — skip silently */ }
+    } catch {}
   }
 
-  // Set PDF title for browser download filename
   const safeCust = (input.customerName || 'CUSTOMER')
     .replace(/[^a-zA-Z0-9\s]/g, ' ').trim().replace(/\s+/g, '_').slice(0, 50)
   const euPart = input.endUser ? `_${input.endUser}` : ''
