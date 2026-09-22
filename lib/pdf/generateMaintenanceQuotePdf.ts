@@ -201,7 +201,7 @@ export async function generateMaintenanceQuotePdf(input: MaintenanceQuotePdfInpu
   // Continuation: y after compact header + table header = 670
   const SAFE_BOTTOM   = 50
   const Y_ROWS_P1     = 460
-  const Y_ROWS_CONT   = 670
+  const Y_ROWS_CONT   = 678
   const discPct       = input.discountPct ?? 0
   const TOTALS_ROWS   = 2 + (discPct > 0 ? 1 : 0)
   const TOTALS_NEEDED = TOTALS_ROWS * 16 + 34          // rows + total box
@@ -332,8 +332,18 @@ export async function generateMaintenanceQuotePdf(input: MaintenanceQuotePdfInpu
       })
       y -= custRows.length * 14 + 16
     } else {
-      // ── Compact continuation header: company + date block only ──
-      drawCompanyDateBlock()
+      // ── Continuation header: logo + QUOTE title (no company block, no customer) ──
+      const logoH = 50
+      if (logoImg) {
+        const { width: lw, height: lh } = logoImg
+        page.drawImage(logoImg, { x: ML, y: y - logoH, width: (lw / lh) * logoH, height: logoH })
+      } else {
+        t(page, 'NBE australia', ML, y - 22, bold, 20, BLACK)
+      }
+      t(page, 'QUOTE', PW - MR - display.widthOfTextAtSize('QUOTE', 36), y - 26, display, 36, BLACK)
+      const subtitle = 'MAINTENANCE SERVICE / REPAIR'
+      t(page, subtitle, PW - MR - bold.widthOfTextAtSize(subtitle, 14), y - 52, bold, 14, rgb(0x80/255, 0x80/255, 0x80/255))
+      y -= logoH + 22
       drawHLine(page, ML, y, CW, 1, DARK)
       y -= 14
     }
