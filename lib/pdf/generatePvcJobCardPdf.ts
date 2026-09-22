@@ -44,6 +44,21 @@ function doorSupplyScope(door: ProposalDoor): 'strips_only' | 'whole_door' {
   return ht === 'none' || ht === 'strips_only' ? 'strips_only' : 'whole_door'
 }
 
+function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+  const lines: string[] = []
+  for (const para of text.split('\n')) {
+    const words = para.replace(/[^\x20-\xFF]/g, ' ').replace(/\s+/g, ' ').trim().split(' ')
+    let line = ''
+    for (const word of words) {
+      const test = line ? `${line} ${word}` : word
+      if (font.widthOfTextAtSize(test, size) <= maxWidth) { line = test }
+      else { if (line) lines.push(line); line = word }
+    }
+    if (line) lines.push(line)
+  }
+  return lines
+}
+
 function drawHLine(page: PDFPage, x: number, y: number, width: number, thickness = 0.5) {
   page.drawLine({
     start: { x, y },
@@ -144,10 +159,12 @@ export async function generatePvcJobCardPdf(input: PvcJobCardPdfInput): Promise<
 
   // ── Notes ────────────────────────────────────────────────────────────────
   if (input.approvalMessage?.trim()) {
-    const note = input.approvalMessage.trim().slice(0, 220)
+    const noteLines = wrapText(input.approvalMessage.trim(), regularFont, 9, contentWidth - 52)
     page.drawText('Notes:', { x: marginL, y, size: 9, font: boldFont, color: rgb(0.35, 0.35, 0.45) })
-    page.drawText(note, { x: marginL + 48, y, size: 9, font: regularFont, color: rgb(0.1, 0.1, 0.1) })
-    y -= 16
+    noteLines.forEach((line, i) => {
+      page.drawText(line, { x: marginL + 52, y: y - i * 13, size: 9, font: regularFont, color: rgb(0.1, 0.1, 0.1) })
+    })
+    y -= Math.max(16, noteLines.length * 13 + 4)
   }
 
   y -= 6
