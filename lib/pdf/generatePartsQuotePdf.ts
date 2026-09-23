@@ -272,11 +272,11 @@ export async function generatePartsQuotePdf(input: PartsQuotePdfInput): Promise<
     }
     t(page, 'QUOTE', PW - MR - display.widthOfTextAtSize('QUOTE', 36), y - 26, display, 36, BLACK)
     t(page, 'PARTS', PW - MR - bold.widthOfTextAtSize('PARTS', 14), y - 52, bold, 14, PARTS_COLOR)
+    if (isFirst) t(page, 'ABN: 17 007 048 008', ML, y - logoH - 10, reg, 9, DARK)
     y -= logoH + 22
     drawHLine(page, ML, y, CW, 1, DARK)
 
     if (isFirst) {
-      t(page, 'ABN: 17 007 048 008', ML, y - (50 - 20) - 10, reg, 9, DARK)
       y -= 20
       t(page, input.senderName    ?? 'NBE AUSTRALIA',                                      ML, y,      bold, 8, DARK)
       t(page, input.senderAddress ?? '22A Humeside Dr, Campbellfield VIC 3061, Australia', ML, y - 12, reg,  8, DARK)

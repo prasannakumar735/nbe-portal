@@ -242,11 +242,11 @@ export async function generatePvcFlexQuotePdf(input: PvcFlexQuotePdfInput): Prom
     t(page, 'QUOTE', PW - MR - display.widthOfTextAtSize('QUOTE', 36), y - 26, display, 36, BLACK)
     const subtitle = 'PVC FLEX SYSTEMS'
     t(page, subtitle, PW - MR - bold.widthOfTextAtSize(subtitle, 14), y - 52, bold, 14, PVC_COLOR)
+    if (isFirst) t(page, 'ABN: 17 007 048 008', ML, y - logoH - 10, reg, 9, DARK)
     y -= logoH + 22
     drawHLine(page, ML, y, CW, 1, DARK)
 
     if (isFirst) {
-      t(page, 'ABN: 17 007 048 008', ML, y - (logoH - 20) - 10, reg, 9, DARK)
       y -= 20
       t(page, input.senderName    ?? 'NBE AUSTRALIA',                                      ML, y,      bold, 8, DARK)
       t(page, input.senderAddress ?? '22A Humeside Dr, Campbellfield VIC 3061, Australia', ML, y - 12, reg,  8, DARK)
