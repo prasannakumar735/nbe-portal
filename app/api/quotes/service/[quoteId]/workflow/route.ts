@@ -2,13 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getServerUser } from '@/lib/auth/server'
 import { isManagerOrAdmin } from '@/app/api/job-cards/helpers'
-import { requirePortalStaff } from '@/lib/security/requirePortalStaff'
-import { unauthorizedOrForbiddenResponse } from '@/lib/security/httpAuthErrors'
-import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import {
   approveServiceQuote,
   closeServiceQuoteFromDraft,
-  exportServiceWorkflowFields,
   markServiceQuoteCompleted,
   profileDisplayName,
   resumeServiceQuoteFromHold,
@@ -17,43 +13,10 @@ import {
 } from '@/lib/quotes/serviceQuoteWorkflowService'
 import type { ServiceQuoteClosedStatus, ServiceQuoteInvoiceStatus } from '@/lib/quotes/serviceQuoteWorkflow'
 
-
+export const runtime = 'nodejs'
 
 function fail(message: string, status = 400) {
   return NextResponse.json({ ok: false, error: message }, { status })
-}
-
-/**
- * Generic workflow-state fetch for any `quotes` row (General/Parts/Maintenance/PVC Flex/
- * Rapid Door/Service), independent of the `quote_items` table used only by the legacy
- * Service quote builder's own GET route.
- */
-export async function GET(_request: NextRequest, { params }: { params: Promise<{ quoteId: string }> }) {
-  try {
-    await requirePortalStaff()
-
-    const { quoteId } = await params
-    const supabase = createServiceRoleClient()
-    const { data: quote, error } = await supabase.from('quotes').select('*').eq('id', quoteId).maybeSingle()
-
-    if (error) throw error
-    if (!quote) {
-      return NextResponse.json({ error: 'Quote not found.' }, { status: 404 })
-    }
-
-    const assignedUserId = (quote.assigned_user_id as string | null) ?? null
-    const assigneeName = assignedUserId ? await profileDisplayName(supabase, assignedUserId) : null
-    const workflow = 'workflow_status' in quote
-      ? exportServiceWorkflowFields(quote as Record<string, unknown>, assigneeName)
-      : null
-
-    return NextResponse.json({ ok: true, workflow })
-  } catch (error) {
-    const auth = unauthorizedOrForbiddenResponse(error)
-    if (auth) return auth
-    const message = error instanceof Error ? error.message : 'Failed to load workflow state.'
-    return NextResponse.json({ error: message }, { status: 400 })
-  }
 }
 
 export async function POST(
