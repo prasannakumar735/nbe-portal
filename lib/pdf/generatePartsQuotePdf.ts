@@ -43,6 +43,10 @@ export type PartsQuotePdfInput = {
   discountColor?:   string
   terms?:           string
   endUser?:         'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER'
+  /** Which product line's T&C document to append. Defaults to 'INDUSTRIAL_RAPID_DOOR' for backwards compatibility. */
+  tcType?:          'INDUSTRIAL_RAPID_DOOR' | 'PVC_FLEX_SYSTEM'
+  /** Pre-fetched T&C PDF bytes from Supabase storage (admin-uploaded override); takes priority over bundled files. */
+  tcPdfBytes?:      Buffer
   senderName?:      string
   senderAddress?:   string
   senderEmail?:     string
@@ -428,17 +432,30 @@ export async function generatePartsQuotePdf(input: PartsQuotePdfInput): Promise<
   drawPageFooterBar()
 
   // ── T&C pages ─────────────────────────────────────────────────────────────────
-  const TC_FILES: Record<string, string> = {
-    CUSTOMER:    'Rapid Door_T&C for CUSTOMERS.pdf',
-    DISTRIBUTOR: 'Rapid Door_T&C for DISTRIBUTOR.pdf',
-    TENDER:      'Rapid Door_T&C for TENDER.pdf',
+  // PVC Flex System has no Distributor T&C document.
+  const TC_FILES_BY_TYPE: Record<'INDUSTRIAL_RAPID_DOOR' | 'PVC_FLEX_SYSTEM', Record<string, string>> = {
+    INDUSTRIAL_RAPID_DOOR: {
+      CUSTOMER:    'Rapid Door_T&C for CUSTOMERS.pdf',
+      DISTRIBUTOR: 'Rapid Door_T&C for DISTRIBUTOR.pdf',
+      TENDER:      'Rapid Door_T&C for TENDER.pdf',
+    },
+    PVC_FLEX_SYSTEM: {
+      CUSTOMER: 'PVC Flex Systems_T&C for CUSTOMERS.pdf',
+      TENDER:   'PVC Flex Systems_T&C for TENDER.pdf',
+    },
   }
-  const tcFile = input.endUser ? TC_FILES[input.endUser] : null
-  if (tcFile) {
+  const TC_FILES = TC_FILES_BY_TYPE[input.tcType ?? 'INDUSTRIAL_RAPID_DOOR']
+  let tcSource: Buffer | Uint8Array | null = input.tcPdfBytes ?? null
+  if (!tcSource) {
+    const tcFile = input.endUser ? TC_FILES[input.endUser] : null
+    if (tcFile) {
+      tcSource = await readFile(path.join(process.cwd(), 'public', 'documents', tcFile)).catch(() => null)
+    }
+  }
+  if (tcSource) {
     try {
-      const tcBytes = await readFile(path.join(process.cwd(), 'public', 'documents', tcFile))
-      const tcDoc   = await PDFDocument.load(tcBytes)
-      const pages   = await pdfDoc.copyPages(tcDoc, tcDoc.getPageIndices())
+      const tcDoc = await PDFDocument.load(tcSource)
+      const pages = await pdfDoc.copyPages(tcDoc, tcDoc.getPageIndices())
       pages.forEach(p => pdfDoc.addPage(p))
     } catch {}
   }
