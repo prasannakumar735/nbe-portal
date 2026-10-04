@@ -8,7 +8,7 @@ import fs from 'fs'
 import path from 'path'
 
 
-export const maxDuration = 60
+
 
 function parseEmails(raw: string): string[] {
   return raw.split(/[,;\n]/).map(e => e.trim()).filter(e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))

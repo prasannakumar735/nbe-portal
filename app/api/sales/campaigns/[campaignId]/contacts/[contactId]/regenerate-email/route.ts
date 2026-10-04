@@ -11,7 +11,7 @@ import {
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
 
-export const maxDuration = 60
+
 
 type RouteContext = { params: Promise<{ campaignId: string; contactId: string }> }
 

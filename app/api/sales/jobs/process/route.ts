@@ -5,7 +5,7 @@ import { processSalesJobsBodySchema } from '@/lib/sales/validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
 
-export const maxDuration = 60
+
 
 function routeErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) return error.message

@@ -3,7 +3,7 @@ import { parsePublicContactSlug } from '@/lib/security/publicContactSlug';
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole';
 import { getContactDisplayName } from '@/lib/contact-qr';
 import type { Contact } from '@/lib/types/contact.types';
-export const runtime = 'nodejs';
+
 async function getContactBySlug(slug: string) {
     const normalized = parsePublicContactSlug(slug);
     if (!normalized)

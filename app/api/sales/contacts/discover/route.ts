@@ -5,7 +5,7 @@ import { contactDiscoveryRequestSchema } from '@/lib/sales/validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
 
-export const maxDuration = 60
+
 
 export async function POST(request: Request) {
   const auth = await requireManagerOrAdminApi(request)

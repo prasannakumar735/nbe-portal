@@ -10,7 +10,7 @@ import { dispatchEmailSendQueue } from '@/lib/sales/sending/emailSendQueueDispat
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 
 
-export const maxDuration = 60
+
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message

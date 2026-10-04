@@ -10,7 +10,7 @@ import { dispatchSalesAgentBodySchema } from '@/lib/sales/validators/salesAgent.
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
 
-export const maxDuration = 60
+
 
 export async function GET(request: Request) {
   const auth = await requireManagerOrAdminApi(request)

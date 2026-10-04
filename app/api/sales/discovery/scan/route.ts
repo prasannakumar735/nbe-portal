@@ -5,7 +5,7 @@ import { discoveryScanBodySchema } from '@/lib/sales/validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
 
-export const maxDuration = 60
+
 
 const LOG_PREFIX = '[businessDiscovery]'
 

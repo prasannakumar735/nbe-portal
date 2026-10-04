@@ -24,7 +24,7 @@ import {
 } from '@/lib/reports/supabase-queries'
 import { createPdfBinaryResponse } from '@/lib/http/pdfBinaryResponse'
 
-export const runtime = 'nodejs'
+
 
 export async function GET(request: NextRequest) {
   try {
