@@ -30,7 +30,7 @@ function mapAttachmentsListError(error: unknown) {
   return fail(error instanceof Error ? error.message : 'Failed to list attachments', 500)
 }
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ emailId: string }> }
 

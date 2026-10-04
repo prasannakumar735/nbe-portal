@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { jsonError500 } from '@/lib/security/safeApiError'
 import { listFabLevel2TasksSorted } from '@/lib/officeClock/fabWorkTypes'
 
-export const runtime = 'nodejs'
+
 
 export async function GET() {
   try {

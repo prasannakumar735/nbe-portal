@@ -5,7 +5,7 @@ import { SalesEmailSendQueueError } from '@/lib/sales/repositories/salesEmailSen
 import { bulkQueueApprovedEmailsBodySchema } from '@/lib/sales/validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
-export const runtime = 'nodejs'
+
 
 export async function POST(request: Request) {
   const auth = await requireManagerOrAdminApi(request)

@@ -1,7 +1,7 @@
 import QRCode from 'qrcode'
 import { createServerClient } from '@/lib/supabase/server'
 
-export const runtime = 'nodejs'
+
 
 export async function GET(
   request: Request,

@@ -4,7 +4,7 @@ import { setSalesEmailTemplateActive } from '@/lib/sales/repositories/salesEmail
 import { activateSalesEmailTemplateBodySchema } from '@/lib/sales/validators/emailTemplate.validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ id: string }> }
 

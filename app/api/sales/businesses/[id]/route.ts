@@ -4,7 +4,7 @@ import { updateSalesBusinessSelected } from '@/lib/sales/repositories/salesBusin
 import { salesBusinessSelectedPatchSchema } from '@/lib/sales/validation'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ id: string }> }
 

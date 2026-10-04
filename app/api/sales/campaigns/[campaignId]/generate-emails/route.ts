@@ -6,8 +6,8 @@ import { ensureActivePromptForCampaign } from '@/lib/sales/prompts/promptPreview
 import { campaignIdParamSchema, emailGenerationRequestSchema } from '@/lib/sales/validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
-export const runtime = 'nodejs'
-export const maxDuration = 300
+
+export const maxDuration = 60
 
 type RouteContext = { params: Promise<{ campaignId: string }> }
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@/lib/supabase/server'
 
-export const runtime = 'nodejs'
+
 
 const BUCKET = 'maintenance-images'
 

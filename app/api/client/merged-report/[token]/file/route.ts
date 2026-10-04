@@ -12,7 +12,7 @@ import { createPdfBinaryResponse } from '@/lib/http/pdfBinaryResponse'
 import { loadClientPortalPdfScope } from '@/lib/client-portal/loadClientPortalPdfScope'
 import { mergedReportAllowedForClientPortal } from '@/lib/client-portal/clientMaintenancePortal'
 
-export const runtime = 'nodejs'
+
 
 export async function GET(
   _request: NextRequest,

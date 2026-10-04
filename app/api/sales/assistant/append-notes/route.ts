@@ -7,7 +7,7 @@ import {
 import { appendAssistantNotesBodySchema } from '@/lib/sales/validators/salesAssistant.validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
-export const runtime = 'nodejs'
+
 
 /** Manager explicitly appends assistant output to pipeline notes (never automatic). */
 export async function POST(request: Request) {

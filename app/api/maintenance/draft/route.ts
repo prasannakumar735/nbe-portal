@@ -15,7 +15,7 @@ import { maintenanceReportClientViewUrl } from '@/lib/app/publicAppBaseUrl'
 import { uploadSignatureDataUrlToStorage } from '@/lib/maintenance/signatureDataUrlUpload'
 import { assertSubProjectSelection, SubProjectValidationError } from '@/lib/clients/subProjectGate'
 
-export const runtime = 'nodejs'
+
 
 /** Use service role key so draft writes bypass RLS. */
 function createWriteClient(): SupabaseClient {

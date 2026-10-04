@@ -9,7 +9,7 @@ import { verifyTurnstileToken } from '@/lib/security/verifyTurnstile'
 import { sanitizePlainText } from '@/lib/validation/safeText'
 import { jsonError500 } from '@/lib/security/safeApiError'
 
-export const runtime = 'nodejs'
+
 
 export async function POST(request: NextRequest) {
   try {

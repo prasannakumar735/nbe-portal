@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js'
 import { runMaintenanceSubmit } from '@/lib/maintenance/runMaintenanceSubmit'
 import { createServerClient } from '@/lib/supabase/server'
 
-export const runtime = 'nodejs'
+
 
 type MaintenanceStatus = 'draft' | 'submitted'
 

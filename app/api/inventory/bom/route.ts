@@ -11,7 +11,7 @@ const bomSchema = z.object({
   wastage_percentage: z.number().min(0).optional(),
 })
 
-export const runtime = 'nodejs'
+
 
 export async function GET(request: Request) {
   try {

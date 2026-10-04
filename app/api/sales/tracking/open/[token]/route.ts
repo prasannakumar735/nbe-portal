@@ -3,7 +3,7 @@ import { recordCampaignEngagementEvent } from '@/lib/sales/engagement/campaignEn
 import { verifyEngagementTrackingToken } from '@/lib/sales/engagement/engagementTrackingToken'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 
-export const runtime = 'nodejs'
+
 
 const PIXEL = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',

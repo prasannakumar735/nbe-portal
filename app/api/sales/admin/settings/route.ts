@@ -14,7 +14,7 @@ import {
   validateSafeDeliveryPatch,
 } from '@/lib/sales/validators/salesEngineSettings.validators'
 
-export const runtime = 'nodejs'
+
 
 export async function GET(request: Request) {
   const auth = await requireManagerOrAdminApi(request)

@@ -10,7 +10,7 @@ import {
 } from '@/lib/sales/validators/emailTemplate.validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
-export const runtime = 'nodejs'
+
 
 export async function GET(request: Request) {
   const auth = await requireManagerOrAdminApi(request)

@@ -3,7 +3,7 @@ import { fail, ok, requireManagerOrAdminApi } from '@/app/api/admin/_utils'
 import { cancelQueuedEmail } from '@/lib/sales/sending/emailSendQueueService'
 import { emailSendQueueIdParamSchema } from '@/lib/sales/validators'
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ queueId: string }> }
 

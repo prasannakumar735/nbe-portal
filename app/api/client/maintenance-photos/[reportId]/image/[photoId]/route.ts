@@ -5,7 +5,7 @@ import { clientCanViewApprovedReportPhotos } from '@/lib/client-portal/clientMai
 import { loadClientPortalPdfScope } from '@/lib/client-portal/loadClientPortalPdfScope'
 import { imageUrlToMaintenanceBucketPath } from '@/lib/maintenance/imageUrlToMaintenanceBucketPath'
 
-export const runtime = 'nodejs'
+
 
 const BUCKET = 'maintenance-images'
 

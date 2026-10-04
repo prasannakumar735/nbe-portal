@@ -3,7 +3,7 @@ import { fail, ok, requireManagerOrAdminApi } from '@/app/api/admin/_utils'
 import type { ClientServiceDueReminderRow } from '@/lib/serviceReminders/types'
 import { createServiceDueReminderSchema } from '@/lib/validation/service-due-reminders'
 
-export const runtime = 'nodejs'
+
 
 function mapReminderRow(row: Record<string, unknown>): ClientServiceDueReminderRow {
   const clients = row.clients as { name?: string } | null | undefined

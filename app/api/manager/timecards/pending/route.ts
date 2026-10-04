@@ -7,7 +7,7 @@ import { profileDisplayName, type ProfileFromTable } from '@/lib/auth/roles'
 import { loadLevel1CodeMap } from '@/lib/timecard/loadLevel1CodeMap'
 import { isLeaveTimesheetEntry, splitWorkAndLeaveHours } from '@/lib/timecard/leaveWorkType'
 
-export const runtime = 'nodejs'
+
 
 function displayName(p: ProfileFromTable | null | undefined): string {
   const n = profileDisplayName(p ?? null)

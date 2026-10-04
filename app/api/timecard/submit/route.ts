@@ -6,7 +6,7 @@ import type { PortalNotifyResult } from '@/lib/notifications/portalGraphNotifica
 import { submitWeeklyTimesheet } from '@/lib/timecard/submitWeeklyTimesheet'
 import { weekEndFromStart } from '@/lib/timecard/weekDates'
 
-export const runtime = 'nodejs'
+
 
 export async function POST(request: NextRequest) {
   try {

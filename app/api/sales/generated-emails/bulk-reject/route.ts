@@ -4,7 +4,7 @@ import { bulkRejectGeneratedEmails } from '@/lib/sales/review/generatedEmailRevi
 import { bulkGeneratedEmailReviewBodySchema } from '@/lib/sales/validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
-export const runtime = 'nodejs'
+
 
 export async function POST(request: Request) {
   const auth = await requireManagerOrAdminApi(request)

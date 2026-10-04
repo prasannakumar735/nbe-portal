@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireInventoryAccess } from '@/lib/auth/inventoryAccess'
 import { InventoryService } from '@/lib/services/inventory.service'
 
-export const runtime = 'nodejs'
+
 
 export async function GET() {
   try {

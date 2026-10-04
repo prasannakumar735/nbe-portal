@@ -5,7 +5,7 @@ import { canApproveMaintenanceReport } from '@/lib/auth/roles'
 import { softDeleteMergedReport } from '@/lib/merged-reports/deleteMergedReport'
 import { jsonError500 } from '@/lib/security/safeApiError'
 
-export const runtime = 'nodejs'
+
 
 function createServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL

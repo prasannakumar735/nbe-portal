@@ -3,7 +3,7 @@ import { fail, ok, requireManagerOrAdminApi } from '@/app/api/admin/_utils'
 import { getSalesCampaignById } from '@/lib/sales/repositories/salesCampaignRepository'
 import { campaignIdParamSchema } from '@/lib/sales/validators'
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ campaignId: string }> }
 

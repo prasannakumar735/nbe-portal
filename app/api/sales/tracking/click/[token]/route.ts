@@ -5,7 +5,7 @@ import { verifyClickToken } from '@/lib/sales/engagement/engagementTrackingToken
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { engagementTrackingClickQuerySchema } from '@/lib/sales/validators/engagement.validators'
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ token: string }> }
 

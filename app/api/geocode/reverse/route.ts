@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { isWithinAustralia } from '@/lib/geocoding/australiaBounds'
 import { getAddressFromLatLng } from '@/lib/timecard/reverseGeocode'
 
-export const runtime = 'nodejs'
+
 
 /**
  * Reverse geocode for Australia GPS points (returns suburb-first display line; no raw coords in label).

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import QRCode from 'qrcode'
 import { createServerClient } from '@/lib/supabase/server'
 
-export const runtime = 'nodejs'
+
 
 export async function GET(request: NextRequest) {
   const siteSlug = request.nextUrl.searchParams.get('site')?.trim().toLowerCase() ?? ''

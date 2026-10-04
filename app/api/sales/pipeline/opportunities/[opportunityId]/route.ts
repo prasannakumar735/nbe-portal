@@ -8,7 +8,7 @@ import {
 import { updateSalesPipelineOpportunityBodySchema } from '@/lib/sales/validators/pipeline.validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ opportunityId: string }> }
 

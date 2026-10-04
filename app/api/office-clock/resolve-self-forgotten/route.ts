@@ -6,7 +6,7 @@ import { isOfficeSiteRowConfigured, resolveOfficeSiteRowFully } from '@/lib/offi
 import { processForgottenOfficeSessionClose } from '@/lib/officeClock/forgottenSyntheticClose'
 import type { ProfileFromTable } from '@/lib/auth/roles'
 
-export const runtime = 'nodejs'
+
 
 /**
  * Allows the signed-in portal user (non-client) to close their **own** open office attendance

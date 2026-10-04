@@ -5,7 +5,7 @@ import { generateQRCode } from '@/lib/generateQRCode'
 import { getContactQrPayload } from '@/lib/contact-qr'
 import type { Contact, ContactQrType, ContactStatus } from '@/lib/types/contact.types'
 
-export const runtime = 'nodejs'
+
 
 function normalizeSlug(value: string): string {
   return value

@@ -3,7 +3,7 @@ import { requireInventoryAccess } from '@/lib/auth/inventoryAccess'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import type { ContactQrType, ContactStatus } from '@/lib/types/contact.types'
 
-export const runtime = 'nodejs'
+
 
 function normalizeSlug(value: string): string {
   return value

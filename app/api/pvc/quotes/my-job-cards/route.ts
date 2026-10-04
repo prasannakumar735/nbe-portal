@@ -3,7 +3,7 @@ import { requirePortalStaff } from '@/lib/security/requirePortalStaff'
 import { unauthorizedOrForbiddenResponse } from '@/lib/security/httpAuthErrors'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 
-export const runtime = 'nodejs'
+
 
 /**
  * GET /api/pvc/quotes/my-job-cards

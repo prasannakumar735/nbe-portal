@@ -3,7 +3,7 @@ import { fail, ok, requireManagerOrAdminApi } from '@/app/api/admin/_utils'
 import { deactivateSalesAiPrompt } from '@/lib/sales/repositories/salesAiPromptRepository'
 import { salesAiPromptIdParamSchema } from '@/lib/sales/validators'
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ id: string }> }
 

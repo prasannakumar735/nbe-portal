@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { fetchIsManagerOrAdmin } from '@/lib/auth/supabase-role'
 
-export const runtime = 'nodejs'
+
 
 type Body = {
   weekStart?: string

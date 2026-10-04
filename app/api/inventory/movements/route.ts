@@ -10,7 +10,7 @@ const movementSchema = z.object({
   note: z.string().trim().max(500).optional(),
 })
 
-export const runtime = 'nodejs'
+
 
 export async function GET(request: Request) {
   try {

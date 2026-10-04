@@ -9,7 +9,7 @@ import { listRecentSalesAgentRuns } from '@/lib/sales/repositories/salesAgentRun
 import { dispatchSalesAgentBodySchema } from '@/lib/sales/validators/salesAgent.validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
-export const runtime = 'nodejs'
+
 export const maxDuration = 60
 
 export async function GET(request: Request) {

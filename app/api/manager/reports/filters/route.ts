@@ -9,7 +9,7 @@ import {
   type SecurityRequest,
 } from '@/lib/security/withSecurityLogging'
 
-export const runtime = 'nodejs'
+
 
 async function getFilters(request: SecurityRequest, _sec: ApiSecurityBinding) {
   try {

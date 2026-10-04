@@ -7,7 +7,7 @@ import { requireUser } from '@/lib/security/requireUser'
 import { jsonError500 } from '@/lib/security/safeApiError'
 import { isCalendarNotificationsDisabled } from '@/lib/notifications/isCalendarNotificationsDisabled'
 
-export const runtime = 'nodejs'
+
 
 async function recipientUserIdsForEvent(
   service: ReturnType<typeof createServiceRoleClient>,

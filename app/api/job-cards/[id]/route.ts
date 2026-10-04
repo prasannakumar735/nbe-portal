@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import type { JobCardGpsPayload, JobCardStatus } from '@/lib/job-cards/types'
 import { loadJobDetailExport } from '@/app/api/job-cards/detail'
 
-export const runtime = 'nodejs'
+
 
 type PatchBody = {
   status?: JobCardStatus

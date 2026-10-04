@@ -4,7 +4,7 @@ import { dispatchFollowupQueue } from '@/lib/sales/followup/followupQueueDispatc
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { jsonError500 } from '@/lib/security/safeApiError'
 
-export const runtime = 'nodejs'
+
 export const maxDuration = 60
 
 const DEFAULT_BATCH = 10

@@ -21,7 +21,7 @@ import {
 } from '@/lib/timecard/dedupeTimesheetEntries'
 import { assertSubProjectSelection, SubProjectValidationError } from '@/lib/clients/subProjectGate'
 
-export const runtime = 'nodejs'
+
 
 function normalizeTime(value: unknown): string {
   if (typeof value !== 'string') return '09:00'

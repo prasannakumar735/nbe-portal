@@ -6,7 +6,7 @@ import {
 } from '@/lib/sales/engagement/campaignEngagementAnalytics'
 import { promptEngagementMetricsQuerySchema } from '@/lib/sales/validators/engagement.validators'
 
-export const runtime = 'nodejs'
+
 
 export async function GET(request: Request) {
   const auth = await requireManagerOrAdminApi(request)

@@ -3,7 +3,7 @@ import { requireManagerOrAdmin } from '@/lib/users/staff'
 import { updateClientUser } from '@/lib/clients/service'
 import type { ClientUserStatus } from '@/lib/types/client-users.types'
 
-export const runtime = 'nodejs'
+
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await requireManagerOrAdmin()

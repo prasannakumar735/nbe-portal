@@ -6,7 +6,7 @@ import { runMailboxDeltaSyncPage } from '@/lib/sales/replies/mailboxDeltaSyncSer
 import { upsertSalesMailboxSyncState } from '@/lib/sales/repositories/salesMailboxSyncStateRepository'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 
-export const runtime = 'nodejs'
+
 export const maxDuration = 60
 
 export async function GET(request: NextRequest) {

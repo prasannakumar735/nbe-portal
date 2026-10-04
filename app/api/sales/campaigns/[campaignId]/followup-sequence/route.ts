@@ -7,7 +7,7 @@ import {
 import { upsertSalesFollowupSequenceBodySchema } from '@/lib/sales/validators/followup.validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ campaignId: string }> }
 

@@ -10,7 +10,7 @@ const createOrderSchema = z.object({
   order_reference: z.string().trim().min(1).optional(),
 })
 
-export const runtime = 'nodejs'
+
 
 export async function POST(request: Request) {
   try {

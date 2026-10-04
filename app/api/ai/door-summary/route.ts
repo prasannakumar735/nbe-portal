@@ -1,7 +1,7 @@
 import Groq from 'groq-sdk'
 import { NextResponse } from 'next/server'
 
-export const runtime = 'nodejs'
+
 
 type DoorSummaryRequest = {
   door_number?: string

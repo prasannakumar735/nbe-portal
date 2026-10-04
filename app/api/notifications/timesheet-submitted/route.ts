@@ -6,7 +6,7 @@ import { unauthorizedOrForbiddenResponse } from '@/lib/security/httpAuthErrors'
 import { requireUser } from '@/lib/security/requireUser'
 import { jsonError500 } from '@/lib/security/safeApiError'
 
-export const runtime = 'nodejs'
+
 
 export async function POST(request: NextRequest) {
   try {

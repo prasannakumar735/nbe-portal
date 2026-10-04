@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { purgeSoftDeletedMergedReportsOlderThan } from '@/lib/merged-reports/deleteMergedReport'
 
-export const runtime = 'nodejs'
+
 
 const DEFAULT_DAYS = 30
 

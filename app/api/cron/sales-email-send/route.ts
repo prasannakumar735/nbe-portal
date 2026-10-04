@@ -4,7 +4,7 @@ import { dispatchEmailSendQueue } from '@/lib/sales/sending/emailSendQueueDispat
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { jsonError500 } from '@/lib/security/safeApiError'
 
-export const runtime = 'nodejs'
+
 export const maxDuration = 60
 
 const DEFAULT_CRON_BATCH = 15

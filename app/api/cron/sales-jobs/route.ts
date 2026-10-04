@@ -4,7 +4,7 @@ import { processSalesJobs } from '@/lib/sales/jobs/jobProcessor'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { jsonError500 } from '@/lib/security/safeApiError'
 
-export const runtime = 'nodejs'
+
 export const maxDuration = 60
 
 const DEFAULT_CRON_BATCH = 20

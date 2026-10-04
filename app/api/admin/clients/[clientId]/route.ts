@@ -3,7 +3,7 @@ import { fail, ok, requireManagerOrAdminApi } from '@/app/api/admin/_utils'
 import { mapClientDbRowToApi } from '@/lib/supabase/clientsDb'
 import { updateClientSchema } from '@/lib/validation/admin-clients'
 
-export const runtime = 'nodejs'
+
 
 type Params = { params: Promise<{ clientId: string }> }
 

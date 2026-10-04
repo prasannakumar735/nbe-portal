@@ -5,7 +5,7 @@ import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { getContactDisplayName } from '@/lib/contact-qr'
 import type { Contact } from '@/lib/types/contact.types'
 
-export const runtime = 'nodejs'
+
 
 export async function GET(_: Request, { params }: { params: Promise<{ slug: string }> }) {
   try {

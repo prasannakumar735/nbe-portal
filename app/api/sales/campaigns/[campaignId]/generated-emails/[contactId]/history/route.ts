@@ -3,7 +3,7 @@ import { fail, ok, requireManagerOrAdminApi } from '@/app/api/admin/_utils'
 import { listSalesGeneratedEmailHistory } from '@/lib/sales/repositories/salesGeneratedEmailRepository'
 import { campaignContactParamSchema } from '@/lib/sales/validators'
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ campaignId: string; contactId: string }> }
 

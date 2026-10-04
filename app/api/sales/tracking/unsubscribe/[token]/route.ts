@@ -6,7 +6,7 @@ import { addSalesEmailSuppression } from '@/lib/sales/repositories/salesEmailSup
 import { listSalesContactsByIds } from '@/lib/sales/repositories/salesContactRepository'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ token: string }> }
 

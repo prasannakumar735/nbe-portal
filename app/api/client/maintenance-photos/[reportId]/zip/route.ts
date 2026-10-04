@@ -6,7 +6,7 @@ import { listMaintenanceReportPhotoStoragePaths } from '@/lib/maintenance/listMa
 import { clientCanViewApprovedReportPhotos } from '@/lib/client-portal/clientMaintenancePortal'
 import { loadClientPortalPdfScope } from '@/lib/client-portal/loadClientPortalPdfScope'
 
-export const runtime = 'nodejs'
+
 
 const BUCKET = 'maintenance-images'
 

@@ -5,7 +5,7 @@ import { getErrorMessage } from '@/lib/reports/errorMessage'
 import { parseFiltersFromSearchParams } from '@/lib/reports/parseFilters'
 import { fetchWorkTypesLevel1ForScope } from '@/lib/reports/supabase-queries'
 
-export const runtime = 'nodejs'
+
 
 export async function GET(request: NextRequest) {
   try {

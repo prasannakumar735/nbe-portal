@@ -4,7 +4,7 @@ import { EmailResendError, resendEmailSendQueueItem } from '@/lib/sales/sending/
 import { SalesEmailSendQueueError } from '@/lib/sales/repositories/salesEmailSendQueueRepository'
 import { emailSendQueueIdParamSchema } from '@/lib/sales/validators'
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ queueId: string }> }
 

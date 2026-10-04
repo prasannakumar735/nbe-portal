@@ -18,7 +18,7 @@ import { buildPromptNameKey } from '@/lib/sales/types/aiPrompt.types'
 import { formatPromptDescriptionLabel, formatResolvedPromptLabel } from '@/lib/sales/prompts/promptLabels'
 import { validateSalesAiPromptForActivation } from '@/lib/sales/prompts/promptValidation'
 
-export const runtime = 'nodejs'
+
 
 export async function GET(request: Request) {
   const auth = await requireManagerOrAdminApi(request)

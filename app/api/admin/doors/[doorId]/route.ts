@@ -7,7 +7,7 @@ import {
 } from '@/lib/admin/doorRegistryUnique'
 import { upsertDoorSchema } from '@/lib/validation/admin-clients'
 
-export const runtime = 'nodejs'
+
 
 type Params = { params: Promise<{ doorId: string }> }
 

@@ -5,7 +5,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { JOB_CARD_IMAGE_BUCKET } from '@/lib/storage/jobCardBucket'
 
-export const runtime = 'nodejs'
+
 
 const BUCKET = JOB_CARD_IMAGE_BUCKET
 

@@ -8,7 +8,7 @@ const previewSchema = z.object({
   quantity: z.number().positive(),
 })
 
-export const runtime = 'nodejs'
+
 
 export async function POST(request: Request) {
   try {

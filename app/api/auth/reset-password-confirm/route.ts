@@ -9,7 +9,7 @@ import { withSecurityLogging, type ApiSecurityBinding, type SecurityRequest } fr
 import { resetPasswordConfirmBodySchema } from '@/lib/security/schemas/authSchemas'
 import { jsonError500 } from '@/lib/security/safeApiError'
 
-export const runtime = 'nodejs'
+
 
 function hashToken(token: string): string {
   return createHash('sha256').update(token, 'utf8').digest('hex')

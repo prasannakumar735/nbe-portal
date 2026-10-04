@@ -4,7 +4,7 @@ import { runContactDiscoveryAgent } from '@/lib/sales/agents/contactDiscoveryAge
 import { contactDiscoveryRequestSchema } from '@/lib/sales/validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
-export const runtime = 'nodejs'
+
 export const maxDuration = 60
 
 export async function POST(request: Request) {

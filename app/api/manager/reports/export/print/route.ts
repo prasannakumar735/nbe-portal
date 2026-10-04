@@ -14,7 +14,7 @@ import {
 } from '@/lib/reports/supabase-queries'
 import { getGpsPrimaryDisplayLocation } from '@/lib/reports/gpsDisplay'
 
-export const runtime = 'nodejs'
+
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')

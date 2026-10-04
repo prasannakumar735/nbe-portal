@@ -4,8 +4,8 @@ import { runBusinessDiscoveryAgent } from '@/lib/sales/agents/businessDiscoveryA
 import { discoveryScanBodySchema } from '@/lib/sales/validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
-export const runtime = 'nodejs'
-export const maxDuration = 300
+
+export const maxDuration = 60
 
 const LOG_PREFIX = '[businessDiscovery]'
 

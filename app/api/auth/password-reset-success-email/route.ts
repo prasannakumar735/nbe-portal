@@ -9,7 +9,7 @@ import {
 } from '@/lib/security/withSecurityLogging'
 import { jsonError500 } from '@/lib/security/safeApiError'
 
-export const runtime = 'nodejs'
+
 
 /**
  * POST — send “password reset successful” email to the signed-in user.

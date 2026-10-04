@@ -11,7 +11,7 @@ const createComponentSchema = z.object({
   min_stock: z.number().min(0).optional(),
 })
 
-export const runtime = 'nodejs'
+
 
 export async function GET() {
   try {

@@ -4,7 +4,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { listMaintenanceReportPhotoStoragePaths } from '@/lib/maintenance/listMaintenanceReportPhotoStoragePaths'
 
-export const runtime = 'nodejs'
+
 
 const BUCKET = 'maintenance-images'
 

@@ -5,7 +5,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { KNOWLEDGE_MEDIA_BUCKET } from '@/lib/storage/knowledgeBucket'
 
-export const runtime = 'nodejs'
+
 
 async function loadArticle(supabase: Awaited<ReturnType<typeof createServerClient>>, id: string) {
   const { data: article, error } = await supabase.from('knowledge_articles').select('*').eq('id', id).maybeSingle()

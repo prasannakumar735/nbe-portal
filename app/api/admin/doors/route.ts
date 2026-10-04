@@ -7,7 +7,7 @@ import {
 } from '@/lib/admin/doorRegistryUnique'
 import { upsertDoorSchema } from '@/lib/validation/admin-clients'
 
-export const runtime = 'nodejs'
+
 
 export async function POST(request: Request) {
   const auth = await requireManagerOrAdminApi(request)

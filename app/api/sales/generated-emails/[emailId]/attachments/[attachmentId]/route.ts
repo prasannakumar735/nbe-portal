@@ -13,7 +13,7 @@ import {
 } from '@/lib/sales/validators/emailAttachment.validators'
 import { ZodError } from 'zod'
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ emailId: string; attachmentId: string }> }
 

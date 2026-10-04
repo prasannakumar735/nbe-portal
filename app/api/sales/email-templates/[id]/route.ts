@@ -4,7 +4,7 @@ import { updateSalesEmailTemplate } from '@/lib/sales/repositories/salesEmailTem
 import { updateSalesEmailTemplateBodySchema } from '@/lib/sales/validators/emailTemplate.validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ id: string }> }
 

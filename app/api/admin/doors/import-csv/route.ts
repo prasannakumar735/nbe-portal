@@ -4,7 +4,7 @@ import { clientNameFromDbRow } from '@/lib/supabase/clientsDb'
 import { locationLabelFromDbRow } from '@/lib/supabase/clientLocationsDb'
 import { csvDoorImportRequestSchema, type CsvDoorRowInput } from '@/lib/validation/admin-clients'
 
-export const runtime = 'nodejs'
+
 
 type ImportError = { rowIndex: number; message: string }
 

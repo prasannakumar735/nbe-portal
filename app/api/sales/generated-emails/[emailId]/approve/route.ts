@@ -4,7 +4,7 @@ import { approveGeneratedEmail } from '@/lib/sales/review/generatedEmailReviewSe
 import { generatedEmailReviewIdParamSchema } from '@/lib/sales/validators'
 import { SalesGeneratedEmailReviewError } from '@/lib/sales/repositories/salesGeneratedEmailRepository'
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ emailId: string }> }
 

@@ -1,7 +1,7 @@
 import { requireManagerOrAdminApi, ok, fail } from '@/app/api/admin/_utils'
 import { melbourneCalendarDate } from '@/lib/officeClock/melbourneWallClock'
 
-export const runtime = 'nodejs'
+
 
 function addMonths(isoDate: string, months: number): string {
   const [y, m, d] = isoDate.split('-').map(Number)

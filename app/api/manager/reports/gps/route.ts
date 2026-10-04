@@ -5,7 +5,7 @@ import { parseFiltersFromSearchParams } from '@/lib/reports/parseFilters'
 import { getErrorMessage } from '@/lib/reports/errorMessage'
 import { fetchGpsReport } from '@/lib/reports/supabase-queries'
 
-export const runtime = 'nodejs'
+
 
 export async function GET(request: NextRequest) {
   try {

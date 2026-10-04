@@ -3,7 +3,7 @@ import { fail, ok, requireManagerOrAdminApi } from '@/app/api/admin/_utils'
 import type { ClientServiceDueReminderRow } from '@/lib/serviceReminders/types'
 import { updateServiceDueReminderSchema } from '@/lib/validation/service-due-reminders'
 
-export const runtime = 'nodejs'
+
 
 type Params = { params: Promise<{ id: string }> }
 

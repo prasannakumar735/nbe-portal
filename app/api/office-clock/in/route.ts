@@ -4,7 +4,7 @@ import { isOfficeSiteRowConfigured, resolveOfficeSiteRowFully } from '@/lib/offi
 import { assertJsonContentLength, PayloadTooLargeError } from '@/lib/security/httpRequestLimits'
 import { jsonError500 } from '@/lib/security/safeApiError'
 
-export const runtime = 'nodejs'
+
 
 type Body = { siteSlug?: string }
 

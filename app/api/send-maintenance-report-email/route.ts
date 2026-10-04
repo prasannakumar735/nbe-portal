@@ -4,7 +4,7 @@ import { Resend } from 'resend'
 import { buildMaintenanceReportEmailTemplate } from '@/lib/email/maintenanceReportEmailTemplate'
 import { resolveClientLocationForReport } from '@/lib/maintenance/resolveClientLocationForReport'
 
-export const runtime = 'nodejs'
+
 
 function createWriteClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL

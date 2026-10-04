@@ -7,7 +7,7 @@ import {
 import { salesAiPromptIdParamSchema, updateSalesAiPromptBodySchema } from '@/lib/sales/validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ id: string }> }
 

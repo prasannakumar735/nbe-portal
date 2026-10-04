@@ -4,7 +4,7 @@ import { createClientUser, generateClientPassword } from '@/lib/clients/service'
 import { sendClientCredentialsEmail } from '@/lib/email/sendClientCredentialsEmail'
 import type { ClientUserStatus } from '@/lib/types/client-users.types'
 
-export const runtime = 'nodejs'
+
 
 export async function POST(request: NextRequest) {
   const gate = await requireManagerOrAdmin()

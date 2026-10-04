@@ -13,7 +13,7 @@ import { verifyTurnstileToken } from '@/lib/security/verifyTurnstile'
 import { withSecurityLogging, type ApiSecurityBinding, type SecurityRequest } from '@/lib/security/withSecurityLogging'
 import { jsonError500 } from '@/lib/security/safeApiError'
 
-export const runtime = 'nodejs'
+
 
 const FORGOT_COOLDOWN_MS = 60_000
 const lastForgotByEmail = new Map<string, number>()

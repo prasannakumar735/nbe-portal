@@ -15,7 +15,7 @@ import {
 import { officeClockBreakForTimeRange } from '@/lib/officeClock/breakPolicy'
 import type { ProfileFromTable } from '@/lib/auth/roles'
 
-export const runtime = 'nodejs'
+
 
 type Body = { workTypeLevel2Id?: string | null }
 

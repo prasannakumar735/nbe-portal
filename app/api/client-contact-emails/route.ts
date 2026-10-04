@@ -2,7 +2,7 @@ import { ZodError } from 'zod'
 import { fail, ok, requireManagerOrAdminApi } from '@/app/api/admin/_utils'
 import { createClientContactEmailSchema } from '@/lib/validation/service-due-reminders'
 
-export const runtime = 'nodejs'
+
 
 export async function GET(request: Request) {
   const auth = await requireManagerOrAdminApi(request)

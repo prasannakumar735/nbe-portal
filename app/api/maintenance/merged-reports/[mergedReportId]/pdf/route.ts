@@ -8,7 +8,7 @@ import { createPdfBinaryResponse } from '@/lib/http/pdfBinaryResponse'
 import { loadMaintenanceReportDraftPayload } from '@/lib/maintenance/loadMaintenanceReportDraftPayload'
 import { MERGED_MAINTENANCE_REPORTS_BUCKET } from '@/lib/merged-reports/storage'
 
-export const runtime = 'nodejs'
+
 
 function createServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL

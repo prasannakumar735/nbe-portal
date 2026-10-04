@@ -15,7 +15,7 @@ import {
   validateSalesAttachmentFileMeta,
 } from '@/lib/sales/validators/emailAttachment.validators'
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ offerTypeId: string }> }
 

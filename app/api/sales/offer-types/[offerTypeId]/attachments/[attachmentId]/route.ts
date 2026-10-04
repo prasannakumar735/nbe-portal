@@ -7,7 +7,7 @@ import {
 import { getSalesOfferTypeById } from '@/lib/sales/repositories/salesOfferTypeRepository'
 import { salesOfferAttachmentIdParamSchema } from '@/lib/sales/validators/emailAttachment.validators'
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ offerTypeId: string; attachmentId: string }> }
 

@@ -4,7 +4,7 @@ import { runSalesAssistant } from '@/lib/sales/assistant/salesAssistantService'
 import { runSalesAssistantBodySchema } from '@/lib/sales/validators/salesAssistant.validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
-export const runtime = 'nodejs'
+
 
 export async function POST(request: Request) {
   const auth = await requireManagerOrAdminApi(request)

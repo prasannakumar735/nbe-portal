@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { requireUser, UnauthorizedError } from '@/lib/security/requireUser'
 
-export const runtime = 'nodejs'
+
 
 type SummaryRequest = {
   notes?: string

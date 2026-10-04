@@ -13,7 +13,7 @@ import {
 } from '@/lib/reports/supabase-queries'
 import { getGpsPrimaryDisplayLocation } from '@/lib/reports/gpsDisplay'
 
-export const runtime = 'nodejs'
+
 
 export async function GET(request: NextRequest) {
   try {

@@ -7,7 +7,7 @@ import {
 } from '@/lib/sales/validators/replyManagement.validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ threadId: string }> }
 

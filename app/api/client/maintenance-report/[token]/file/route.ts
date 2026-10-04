@@ -8,7 +8,7 @@ import { createPdfBinaryResponse } from '@/lib/http/pdfBinaryResponse'
 import { loadClientPortalPdfScope } from '@/lib/client-portal/loadClientPortalPdfScope'
 import { getSingleFeatureFlag } from '@/lib/featureFlags'
 
-export const runtime = 'nodejs'
+
 
 export async function GET(
   _request: NextRequest,

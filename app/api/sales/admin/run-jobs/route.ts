@@ -9,7 +9,7 @@ import { listSalesEmailSendQueue } from '@/lib/sales/repositories/salesEmailSend
 import { dispatchEmailSendQueue } from '@/lib/sales/sending/emailSendQueueDispatcher'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 
-export const runtime = 'nodejs'
+
 export const maxDuration = 60
 
 function toErrorMessage(error: unknown): string {

@@ -3,7 +3,7 @@ import { fail, ok, requireManagerOrAdminApi } from '@/app/api/admin/_utils'
 import { mapClientDbRowToApi } from '@/lib/supabase/clientsDb'
 import { createClientSchema } from '@/lib/validation/admin-clients'
 
-export const runtime = 'nodejs'
+
 
 export async function POST(request: Request) {
   const auth = await requireManagerOrAdminApi(request)

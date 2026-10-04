@@ -6,7 +6,7 @@ import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { KNOWLEDGE_MEDIA_BUCKET } from '@/lib/storage/knowledgeBucket'
 import type { KnowledgeMediaType } from '@/lib/knowledge/types'
 
-export const runtime = 'nodejs'
+
 
 function guessMediaType(file: File): KnowledgeMediaType {
   const t = (file.type || '').toLowerCase()

@@ -3,7 +3,7 @@ import { fail, ok, requireManagerOrAdminApi } from '@/app/api/admin/_utils'
 import { clientNameFromDbRow } from '@/lib/supabase/clientsDb'
 import { csvLocationImportRequestSchema, type CsvLocationRowInput } from '@/lib/validation/admin-clients'
 
-export const runtime = 'nodejs'
+
 
 type ImportError = { rowIndex: number; message: string }
 

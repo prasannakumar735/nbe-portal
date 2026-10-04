@@ -3,7 +3,7 @@ import { assertCronSecret } from '@/lib/cron/assertCronSecret'
 import { runServiceDueRemindersJob } from '@/lib/cron/jobs/serviceDueRemindersJob'
 import { jsonError500 } from '@/lib/security/safeApiError'
 
-export const runtime = 'nodejs'
+
 export const maxDuration = 60
 
 export async function GET(request: NextRequest) {

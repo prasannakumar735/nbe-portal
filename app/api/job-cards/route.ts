@@ -4,7 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { isManagerOrAdmin } from '@/app/api/job-cards/helpers'
 import { loadJobDetailExport, mapJob } from '@/app/api/job-cards/detail'
 
-export const runtime = 'nodejs'
+
 
 async function technicianIdsForEvent(
   sb: SupabaseClient,

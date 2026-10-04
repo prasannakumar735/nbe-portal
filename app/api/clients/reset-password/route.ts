@@ -4,7 +4,7 @@ import { generateClientPassword, resetClientPassword } from '@/lib/clients/servi
 import { sendClientCredentialsEmail } from '@/lib/email/sendClientCredentialsEmail'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 
-export const runtime = 'nodejs'
+
 
 export async function POST(request: Request) {
   const gate = await requireManagerOrAdmin()

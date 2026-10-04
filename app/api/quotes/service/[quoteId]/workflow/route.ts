@@ -17,7 +17,7 @@ import {
 } from '@/lib/quotes/serviceQuoteWorkflowService'
 import type { ServiceQuoteClosedStatus, ServiceQuoteInvoiceStatus } from '@/lib/quotes/serviceQuoteWorkflow'
 
-export const runtime = 'nodejs'
+
 
 function fail(message: string, status = 400) {
   return NextResponse.json({ ok: false, error: message }, { status })

@@ -5,7 +5,7 @@ import { listSalesEmailSendQueue } from '@/lib/sales/repositories/salesEmailSend
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { jsonError500 } from '@/lib/security/safeApiError'
 
-export const runtime = 'nodejs'
+
 export const maxDuration = 60
 
 export async function GET(request: NextRequest) {

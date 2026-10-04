@@ -7,7 +7,7 @@ import {
 } from '@/lib/supabase/clientLocationsDb'
 import { updateLocationSchema } from '@/lib/validation/admin-clients'
 
-export const runtime = 'nodejs'
+
 
 type Params = { params: Promise<{ locationId: string }> }
 

@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@/lib/supabase/server'
 import { maintenanceReportClientViewUrl } from '@/lib/app/publicAppBaseUrl'
 
-export const runtime = 'nodejs'
+
 
 function createServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL

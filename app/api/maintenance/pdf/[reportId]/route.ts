@@ -10,7 +10,7 @@ import { createPdfBinaryResponse } from '@/lib/http/pdfBinaryResponse'
 import type { MaintenanceFormValues } from '@/lib/types/maintenance.types'
 import { doorLabelOrderKey } from '@/lib/door/doorLabelSort'
 
-export const runtime = 'nodejs'
+
 
 function createServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL

@@ -1,7 +1,7 @@
 import { fail, ok, requireManagerOrAdminApi } from '@/app/api/admin/_utils'
 import { listPipelineOwnerOptions } from '@/lib/sales/pipeline/pipelineService'
 
-export const runtime = 'nodejs'
+
 
 export async function GET(request: Request) {
   const auth = await requireManagerOrAdminApi(request)

@@ -9,7 +9,7 @@ import type { CreateSalesCampaignResult } from '@/lib/sales/types/campaign.types
 import { createSalesCampaignBodySchema } from '@/lib/sales/validators/campaign.validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
-export const runtime = 'nodejs'
+
 
 function setsEqual(a: Set<string>, b: Set<string>): boolean {
   if (a.size !== b.size) return false

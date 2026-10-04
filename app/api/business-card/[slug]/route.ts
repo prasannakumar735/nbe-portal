@@ -8,7 +8,7 @@ import { getContactDisplayName, getContactQrPayload } from '@/lib/contact-qr'
 import { generateQRCode } from '@/lib/generateQRCode'
 import type { Contact } from '@/lib/types/contact.types'
 
-export const runtime = 'nodejs'
+
 
 const BUSINESS_CARD_WIDTH = 1050
 const BUSINESS_CARD_HEIGHT = 600

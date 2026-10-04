@@ -5,7 +5,7 @@ import { parseFiltersFromSearchParams, parseGroupBy } from '@/lib/reports/parseF
 import { getErrorMessage } from '@/lib/reports/errorMessage'
 import { fetchTimecardReport } from '@/lib/reports/supabase-queries'
 
-export const runtime = 'nodejs'
+
 
 export async function GET(request: NextRequest) {
   try {

@@ -3,7 +3,7 @@ import { assertCronSecret } from '@/lib/cron/assertCronSecret'
 import { runForgottenOfficeCloseJob } from '@/lib/cron/jobs/forgottenOfficeCloseJob'
 import { jsonError500 } from '@/lib/security/safeApiError'
 
-export const runtime = 'nodejs'
+
 
 /**
  * Processes open office attendance sessions eligible for synthetic "forgotten sign-out".

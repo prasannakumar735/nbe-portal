@@ -4,7 +4,7 @@ import { processSalesJobs } from '@/lib/sales/jobs/jobProcessor'
 import { processSalesJobsBodySchema } from '@/lib/sales/validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
-export const runtime = 'nodejs'
+
 export const maxDuration = 60
 
 function routeErrorMessage(error: unknown, fallback: string): string {

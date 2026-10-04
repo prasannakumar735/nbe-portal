@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 
-export const runtime = 'nodejs'
+
 
 function tokenize(title: string, workType: string | null): string[] {
   const raw = `${title} ${workType ?? ''}`.toLowerCase()

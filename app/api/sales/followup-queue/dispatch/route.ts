@@ -4,7 +4,7 @@ import { dispatchFollowupQueue } from '@/lib/sales/followup/followupQueueDispatc
 import { dispatchSalesFollowupQueueBodySchema } from '@/lib/sales/validators/followup.validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
-export const runtime = 'nodejs'
+
 
 export async function POST(request: Request) {
   const auth = await requireManagerOrAdminApi(request)

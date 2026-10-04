@@ -5,7 +5,7 @@ import { dispatchEmailSendQueueBodySchema } from '@/lib/sales/validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 import { listQueuedSalesEmailSendItems } from '@/lib/sales/repositories/salesEmailSendQueueRepository'
 
-export const runtime = 'nodejs'
+
 
 export async function POST(request: Request) {
   const auth = await requireManagerOrAdminApi(request)

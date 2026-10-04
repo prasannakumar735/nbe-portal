@@ -9,7 +9,7 @@ import { formatResolvedPromptLabel } from '@/lib/sales/prompts/promptLabels'
 import { salesAiPromptIdParamSchema } from '@/lib/sales/validators'
 import { z } from 'zod'
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ id: string }> }
 

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireManagerOrAdmin } from '@/lib/users/staff'
 import { listClientUsers } from '@/lib/clients/service'
 
-export const runtime = 'nodejs'
+
 
 export async function GET() {
   const gate = await requireManagerOrAdmin()

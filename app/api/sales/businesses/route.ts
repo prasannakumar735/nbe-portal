@@ -3,7 +3,7 @@ import { fail, ok, requireManagerOrAdminApi } from '@/app/api/admin/_utils'
 import { listSalesBusinesses } from '@/lib/sales/repositories/salesBusinessRepository'
 import { salesBusinessListQuerySchema } from '@/lib/sales/validators'
 
-export const runtime = 'nodejs'
+
 
 export async function GET(request: Request) {
   const auth = await requireManagerOrAdminApi(request)

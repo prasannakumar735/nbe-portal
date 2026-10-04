@@ -4,7 +4,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { canApproveMaintenanceReport } from '@/lib/auth/roles'
 import { restoreMergedReport } from '@/lib/merged-reports/deleteMergedReport'
 
-export const runtime = 'nodejs'
+
 
 function createServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL

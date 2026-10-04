@@ -10,7 +10,7 @@ import { syncCampaignEngagementFromDeliveryArtifacts } from '@/lib/sales/engagem
 import { recordEngagementEventBodySchema } from '@/lib/sales/validators/engagement.validators'
 import { assertJsonContentLength } from '@/lib/security/httpRequestLimits'
 
-export const runtime = 'nodejs'
+
 
 type RouteContext = { params: Promise<{ campaignId: string }> }
 

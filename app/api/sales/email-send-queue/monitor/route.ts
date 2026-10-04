@@ -3,7 +3,7 @@ import { fail, ok, requireManagerOrAdminApi } from '@/app/api/admin/_utils'
 import { getEmailSendQueueMonitorSnapshot } from '@/lib/sales/sending/emailSendMonitorService'
 import { emailSendQueueMonitorQuerySchema } from '@/lib/sales/validators'
 
-export const runtime = 'nodejs'
+
 
 export async function GET(request: Request) {
   const auth = await requireManagerOrAdminApi(request)

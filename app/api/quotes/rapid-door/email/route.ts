@@ -7,7 +7,7 @@ import { escapeHtml } from '@/lib/html/escapeHtml'
 import fs from 'fs'
 import path from 'path'
 
-export const runtime = 'nodejs'
+
 export const maxDuration = 60
 
 function parseEmails(raw: string): string[] {
