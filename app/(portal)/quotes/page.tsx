@@ -548,7 +548,7 @@ export default function NewQuotesPage() {
 
   function loadWorkflowState(quoteId: string) {
     setWorkflowLoading(true)
-    fetch(`/api/quotes/${quoteId}/workflow`)
+    fetch(`/api/quotes/service/${quoteId}/workflow`)
       .then(r => r.json())
       .then(j => { if (j.ok) setWorkflowState(j.workflow as ServiceQuoteWorkflowState | null) })
       .catch(() => {})
@@ -1726,7 +1726,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
       const validDate = new Date(); validDate.setDate(validDate.getDate() + 30)
       const validUntil = `${String(validDate.getDate()).padStart(2,'0')}/${String(validDate.getMonth()+1).padStart(2,'0')}/${validDate.getFullYear()}`
 
-      const res = await fetch('/api/quotes/pvc-flex/save', {
+      const res = await fetch('/api/quotes/pvc-flex', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1749,7 +1749,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
 
   function loadRecentPvcFlexQuotes() {
     setRecentPvcFlexLoading(true)
-    fetch('/api/quotes/pvc-flex/list?limit=10')
+    fetch('/api/quotes/pvc-flex?limit=10')
       .then(r => r.json())
       .then(j => { if (j.ok) setRecentPvcFlexQuotes(j.data) })
       .catch(() => {})
