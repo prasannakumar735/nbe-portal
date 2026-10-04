@@ -18,7 +18,7 @@ import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { purgeSoftDeletedMergedReportsOlderThan } from '@/lib/merged-reports/deleteMergedReport'
 
 
-export const maxDuration = 60
+
 
 type JobResult = Record<string, unknown> | { ok: false; error: string }
 

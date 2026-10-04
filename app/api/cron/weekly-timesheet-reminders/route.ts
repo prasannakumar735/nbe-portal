@@ -4,7 +4,7 @@ import { runWeeklyTimesheetRemindersJob } from '@/lib/cron/jobs/weeklyTimesheetR
 import { jsonError500 } from '@/lib/security/safeApiError'
 
 
-export const maxDuration = 60
+
 
 export async function GET(request: NextRequest) {
   try {

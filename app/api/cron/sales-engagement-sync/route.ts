@@ -6,7 +6,7 @@ import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { jsonError500 } from '@/lib/security/safeApiError'
 
 
-export const maxDuration = 60
+
 
 export async function GET(request: NextRequest) {
   try {

@@ -7,7 +7,7 @@ import { upsertSalesMailboxSyncState } from '@/lib/sales/repositories/salesMailb
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 
 
-export const maxDuration = 60
+
 
 export async function GET(request: NextRequest) {
   try {

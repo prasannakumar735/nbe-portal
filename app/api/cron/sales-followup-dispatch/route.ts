@@ -5,7 +5,7 @@ import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { jsonError500 } from '@/lib/security/safeApiError'
 
 
-export const maxDuration = 60
+
 
 const DEFAULT_BATCH = 10
 
