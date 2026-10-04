@@ -2,17 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requirePortalStaff } from '@/lib/security/requirePortalStaff'
 import { unauthorizedOrForbiddenResponse } from '@/lib/security/httpAuthErrors'
 import { generatePvcFlexQuotePdf, type PvcFlexQuotePdfInput } from '@/lib/pdf/generatePvcFlexQuotePdf'
-import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
-import { resolveQuoteTcPdfBytes } from '@/lib/quotes/resolveQuoteTcPdfBytes'
 
 export async function POST(request: NextRequest) {
   try {
     await requirePortalStaff()
 
-    const body = await request.json() as PvcFlexQuotePdfInput & { tcPdfBytes?: Buffer }
-
-    const sb = createServiceRoleClient()
-    body.tcPdfBytes = await resolveQuoteTcPdfBytes(sb, 'PVC_FLEX_SYSTEM', body.endUser) ?? undefined
+    const body = await request.json() as PvcFlexQuotePdfInput
 
     const pdfBytes = await generatePvcFlexQuotePdf(body)
 

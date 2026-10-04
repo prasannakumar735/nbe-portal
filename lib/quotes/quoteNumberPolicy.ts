@@ -33,34 +33,20 @@ function padSequence(prefix: QuoteNumberPrefix, n: number): string {
   return String(Math.max(1, n)).padStart(3, '0')
 }
 
-/** Drops the century from a YYYYMMDD date key, e.g. "20261001" -> "261001". */
-export function shortDateKey(dateKey: string): string {
-  return dateKey.length === 8 ? dateKey.slice(2) : dateKey
-}
-
-/**
- * New format (no separators, 2-digit year): e.g. QPTS261001001.
- * `dateKey` is still the full YYYYMMDD; the century is dropped here only.
- */
 export function buildQuoteNumber(prefix: QuoteNumberPrefix, dateKey: string, sequence: number): string {
-  return `${prefix}${shortDateKey(dateKey)}${padSequence(prefix, sequence)}`
+  return `${prefix}-${dateKey}-${padSequence(prefix, sequence)}`
 }
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 /**
- * Max numeric suffix for quote numbers with this prefix + date. Matches both the
- * current no-dash/short-year format (e.g. QPTS261001001) and the legacy
- * `PREFIX-YYYYMMDD-###` format, so existing quotes keep counting correctly.
+ * Max numeric suffix for `PREFIX-YYYYMMDD-###` rows. Returns 0 if none.
  */
 export function maxSequenceForPrefixDate(quoteNumbers: string[], prefix: QuoteNumberPrefix, dateKey: string): number {
-  const seqDigits = prefix === 'SWD' ? '{2}' : '{3}'
-  const reNew = new RegExp(`^${escapeRegExp(prefix)}${escapeRegExp(shortDateKey(dateKey))}(\\d${seqDigits})$`)
-  const reLegacy = new RegExp(`^${escapeRegExp(prefix)}-${escapeRegExp(dateKey)}-(\\d+)$`)
+  const re = new RegExp(`^${escapeRegExp(prefix)}-${escapeRegExp(dateKey)}-(\\d+)$`)
   let max = 0
   for (const q of quoteNumbers) {
-    const trimmed = String(q ?? '').trim()
-    const m = trimmed.match(reNew) ?? trimmed.match(reLegacy)
+    const m = String(q ?? '').trim().match(re)
     if (!m) continue
     const n = parseInt(m[1], 10)
     if (Number.isFinite(n) && n > max) max = n

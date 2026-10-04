@@ -1,4 +1,4 @@
-import { sendMailViaGraph } from '@/lib/graph/sendMail'
+import nodemailer from 'nodemailer'
 import type { QuoteData } from '@/lib/types/quote.types'
 
 function currency(value: number): string {
@@ -14,12 +14,28 @@ export async function sendQuoteEmail(
   pdfBuffer: Uint8Array,
   fileName: string,
 ): Promise<void> {
-  const to = process.env.PVC_QUOTE_NOTIFY_EMAIL || 'accounts@nbeaustralia.com.au'
+  const host = process.env.SMTP_HOST
+  const port = Number(process.env.SMTP_PORT || '587')
+  const user = process.env.SMTP_USER
+  const pass = process.env.SMTP_PASS
+  const from = process.env.SMTP_FROM || user
 
-  await sendMailViaGraph({
-    to,
+  if (!host || !user || !pass || !from) {
+    throw new Error('Missing SMTP configuration. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and SMTP_FROM.')
+  }
+
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
+  })
+
+  await transporter.sendMail({
+    from,
+    to: 'accountsreceivable@nbeaustralia.com.au',
     subject: 'New PVC Strip Door Quote Generated',
-    bodyText: [
+    text: [
       'A new PVC strip door quote has been generated from the NBE Portal.',
       '',
       `Width: ${quoteData.input.width_mm} mm`,
@@ -30,9 +46,9 @@ export async function sendQuoteEmail(
     ].join('\n'),
     attachments: [
       {
-        name: fileName,
+        filename: fileName,
+        content: Buffer.from(pdfBuffer),
         contentType: 'application/pdf',
-        contentBytes: Buffer.from(pdfBuffer).toString('base64'),
       },
     ],
   })

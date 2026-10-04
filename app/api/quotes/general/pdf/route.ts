@@ -2,17 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requirePortalStaff } from '@/lib/security/requirePortalStaff'
 import { unauthorizedOrForbiddenResponse } from '@/lib/security/httpAuthErrors'
 import { generateGeneralQuotePdf, type GeneralQuotePdfInput } from '@/lib/pdf/generateGeneralQuotePdf'
-import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
-import { resolveQuoteTcPdfBytes } from '@/lib/quotes/resolveQuoteTcPdfBytes'
 
 export async function POST(request: NextRequest) {
   try {
     await requirePortalStaff()
 
     const body = await request.json() as GeneralQuotePdfInput
-
-    const sb = createServiceRoleClient()
-    body.tcPdfBytes = await resolveQuoteTcPdfBytes(sb, body.tcType, body.endUser) ?? undefined
 
     const pdfBytes = await generateGeneralQuotePdf(body)
 

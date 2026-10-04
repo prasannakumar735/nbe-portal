@@ -6,7 +6,7 @@ import { sendQuoteEmail } from '@/lib/email/sendQuoteEmail'
 import { pvcQuoteFinalizeRowFromPdf } from '@/lib/pvc/pvcQuotesDb'
 import type { ProposalDoor, QuoteData, QuoteGenerateRequest, QuoteGenerateResponse } from '@/lib/types/quote.types'
 
-
+export const runtime = 'nodejs'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -17,8 +17,8 @@ function hasGraphCredentials(): boolean {
   )
 }
 
-function hasGraphMailCredentials(): boolean {
-  return hasGraphCredentials() && Boolean(process.env.MS_GRAPH_MAIL_USER_ID || process.env.MS_ONEDRIVE_USER_ID)
+function hasSmtpCredentials(): boolean {
+  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS)
 }
 
 function hasSupabaseWriteCredentials(): boolean {
@@ -253,7 +253,7 @@ export async function POST(request: NextRequest) {
     let emailStatus: 'sent' | 'skipped' | 'failed' = 'skipped'
     let emailReason: string | undefined
 
-    if (hasGraphMailCredentials()) {
+    if (hasSmtpCredentials()) {
       try {
         await sendQuoteEmail(quoteData, pdfBytes, fileName)
         emailStatus = 'sent'
@@ -262,7 +262,7 @@ export async function POST(request: NextRequest) {
         emailReason = mailError instanceof Error ? mailError.message : 'Email delivery failed.'
       }
     } else {
-      emailReason = 'Microsoft Graph mail credentials not configured.'
+      emailReason = 'SMTP credentials not configured.'
     }
 
     const response: QuoteGenerateResponse = {
