@@ -3,7 +3,7 @@ import path from 'node:path'
 import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont } from 'pdf-lib'
 import { embedRobotoForPdfLib } from '@/lib/pdf/robotoPdf'
 
-const PVC_COLOR = rgb(0.0, 0.51, 0.51)  // #008282 teal — PVC Flex identity
+const PVC_COLOR = rgb(0x00/255, 0xB0/255, 0x50/255)  // #00B050 green — PVC Flex identity
 const DARK  = rgb(0.08, 0.08, 0.08)
 const GREY  = rgb(0.40, 0.40, 0.40)
 const WHITE = rgb(1,    1,    1)
@@ -33,6 +33,8 @@ export type PvcFlexQuotePdfInput = {
   discountPct?:     number
   terms?:           string
   endUser?:         'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER'
+  /** Pre-fetched T&C PDF bytes from Supabase storage (admin-uploaded override); takes priority over bundled files. */
+  tcPdfBytes?:      Buffer
   senderName?:      string
   senderAddress?:   string
   senderEmail?:     string
@@ -376,17 +378,22 @@ export async function generatePvcFlexQuotePdf(input: PvcFlexQuotePdfInput): Prom
   drawPageFooterBar()
 
   // ── Append T&C pages ─────────────────────────────────────────────────────────
+  // PVC Flex System has no Distributor T&C document.
   const TC_FILES: Record<string, string> = {
-    CUSTOMER:    'Rapid Door_T&C for CUSTOMERS.pdf',
-    DISTRIBUTOR: 'Rapid Door_T&C for DISTRIBUTOR.pdf',
-    TENDER:      'Rapid Door_T&C for TENDER.pdf',
+    CUSTOMER: 'PVC Flex Systems_T&C for CUSTOMERS.pdf',
+    TENDER:   'PVC Flex Systems_T&C for TENDER.pdf',
   }
-  const tcFile = input.endUser ? TC_FILES[input.endUser] : null
-  if (tcFile) {
+  let tcSource: Buffer | Uint8Array | null = input.tcPdfBytes ?? null
+  if (!tcSource) {
+    const tcFile = input.endUser ? TC_FILES[input.endUser] : null
+    if (tcFile) {
+      tcSource = await readFile(path.join(process.cwd(), 'public', 'documents', tcFile)).catch(() => null)
+    }
+  }
+  if (tcSource) {
     try {
-      const tcBytes = await readFile(path.join(process.cwd(), 'public', 'documents', tcFile))
-      const tcDoc   = await PDFDocument.load(tcBytes)
-      const pages   = await pdfDoc.copyPages(tcDoc, tcDoc.getPageIndices())
+      const tcDoc = await PDFDocument.load(tcSource)
+      const pages = await pdfDoc.copyPages(tcDoc, tcDoc.getPageIndices())
       pages.forEach(p => pdfDoc.addPage(p))
     } catch {}
   }
