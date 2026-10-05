@@ -568,9 +568,10 @@ export default function NewQuotesPage() {
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get('q')
     if (!q) return
-    createSupabaseClient()
-      .from('quotes').select('*').eq('quote_number', q).maybeSingle()
-      .then(({ data }) => {
+    void (async () => {
+      try {
+        const { data } = await createSupabaseClient()
+          .from('quotes').select('*').eq('quote_number', q).maybeSingle()
         if (!data) return
         const qt = String((data as Record<string, unknown>).quote_type ?? '')
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -581,8 +582,8 @@ export default function NewQuotesPage() {
         else if (qt === 'PARTS')           loadPartsQuote(data as any)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         else if (qt === 'PVC_FLEX_SYSTEM') loadPvcFlexQuote(data as any)
-      })
-      .catch(() => {})
+      } catch { /* ignore */ }
+    })()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-generate the PDF preview when a saved quote is first loaded (read-only mode)
