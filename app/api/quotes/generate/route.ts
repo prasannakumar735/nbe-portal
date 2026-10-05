@@ -17,8 +17,8 @@ function hasGraphCredentials(): boolean {
   )
 }
 
-function hasSmtpCredentials(): boolean {
-  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS)
+function hasGraphMailCredentials(): boolean {
+  return hasGraphCredentials() && Boolean(process.env.MS_GRAPH_MAIL_USER_ID || process.env.MS_ONEDRIVE_USER_ID)
 }
 
 function hasSupabaseWriteCredentials(): boolean {
@@ -253,7 +253,7 @@ export async function POST(request: NextRequest) {
     let emailStatus: 'sent' | 'skipped' | 'failed' = 'skipped'
     let emailReason: string | undefined
 
-    if (hasSmtpCredentials()) {
+    if (hasGraphMailCredentials()) {
       try {
         await sendQuoteEmail(quoteData, pdfBytes, fileName)
         emailStatus = 'sent'
@@ -262,7 +262,7 @@ export async function POST(request: NextRequest) {
         emailReason = mailError instanceof Error ? mailError.message : 'Email delivery failed.'
       }
     } else {
-      emailReason = 'SMTP credentials not configured.'
+      emailReason = 'Microsoft Graph mail credentials not configured.'
     }
 
     const response: QuoteGenerateResponse = {
