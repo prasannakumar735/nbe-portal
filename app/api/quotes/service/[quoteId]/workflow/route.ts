@@ -153,6 +153,7 @@ export async function POST(
           assigned_user_id: assignedUserId,
         })
         // Send notification email to assignee (best-effort — don't fail the approval if email fails)
+        let emailStatus: string | null = null
         if (assignedUserId) {
           try {
             const srClient = createServiceRoleClient()
@@ -162,7 +163,9 @@ export async function POST(
             ])
             const assigneeEmail = String(userData?.user?.email ?? '').trim()
             const assigneeName  = await profileDisplayName(srClient, assignedUserId)
-            if (assigneeEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(assigneeEmail)) {
+            if (!assigneeEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(assigneeEmail)) {
+              emailStatus = `skipped:no_email_for_user`
+            } else {
               await sendQuoteApprovalEmail({
                 assigneeEmail,
                 assigneeName,
@@ -173,10 +176,13 @@ export async function POST(
                 poReference,
                 approvalMessage: approvalMsg,
               })
+              emailStatus = `sent:${assigneeEmail}`
             }
-          } catch { /* non-fatal — approval already saved */ }
+          } catch (emailErr) {
+            emailStatus = `failed:${emailErr instanceof Error ? emailErr.message : String(emailErr)}`
+          }
         }
-        break
+        return NextResponse.json({ ok: true, emailStatus })
       }
 
       case 'put_on_hold':
