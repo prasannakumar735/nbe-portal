@@ -5,6 +5,7 @@ import { loadDoorImageStyle } from '@/app/(portal)/admin/settings/QuoteSettingsC
 import { createSupabaseClient } from '@/lib/supabase/client'
 import type { DoorLineItem } from '@/lib/pdf/generateRapidDoorQuotePdf'
 import type { DoorOptionsMap, DoorOption } from '@/app/api/quotes/rapid-door/options/route'
+import { ServiceQuoteWorkflowPanel, type ServiceQuoteWorkflowState } from '@/components/quotes/ServiceQuoteWorkflowPanel'
 
 // ── Quote number helpers ──────────────────────────────────────────────────────
 async function fetchNextRapidDoorQuoteNumber(): Promise<string> {
@@ -400,6 +401,7 @@ export default function NewQuotesPage() {
   const [editingGeneralTerms, setEditingGeneralTerms] = useState(false)
   const [tempGeneralTerms,    setTempGeneralTerms]    = useState('')
   const [generalEndUser,      setGeneralEndUser]      = useState<'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER' | ''>('CUSTOMER')
+  const [generalTcType,       setGeneralTcType]       = useState<'INDUSTRIAL_RAPID_DOOR' | 'PVC_FLEX_SYSTEM'>('INDUSTRIAL_RAPID_DOOR')
 
   // General quote — save state
   const generalQuoteIdRef     = useRef<string | null>(null)
@@ -427,6 +429,7 @@ export default function NewQuotesPage() {
   const [editingPartsTerms, setEditingPartsTerms] = useState(false)
   const [tempPartsTerms,    setTempPartsTerms]    = useState('')
   const [partsEndUser,      setPartsEndUser]      = useState<'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER' | ''>('CUSTOMER')
+  const [partsTcType,       setPartsTcType]       = useState<'INDUSTRIAL_RAPID_DOOR' | 'PVC_FLEX_SYSTEM'>('INDUSTRIAL_RAPID_DOOR')
 
   // Parts quote — editable sender / company info
   const [partsSenderName,    setPartsSenderName]    = useState('NBE AUSTRALIA')
@@ -456,6 +459,13 @@ export default function NewQuotesPage() {
   const [partsSaveMsg,       setPartsSaveMsg]       = useState<{ ok: boolean; text: string } | null>(null)
   const [recentPartsQuotes,  setRecentPartsQuotes]  = useState<SavedQuoteRow[]>([])
   const [recentPartsLoading, setRecentPartsLoading] = useState(false)
+
+  // PVC Flex quote — save state
+  const pvcFlexQuoteIdRef     = useRef<string | null>(null)
+  const pvcFlexQuoteNumberRef = useRef<string | null>(null)
+  const [pvcFlexSaveMsg,       setPvcFlexSaveMsg]       = useState<{ ok: boolean; text: string } | null>(null)
+  const [recentPvcFlexQuotes,  setRecentPvcFlexQuotes]  = useState<SavedQuoteRow[]>([])
+  const [recentPvcFlexLoading, setRecentPvcFlexLoading] = useState(false)
 
   function loadNotesFromStorage(qn: string) {
     try {
@@ -522,6 +532,39 @@ export default function NewQuotesPage() {
   }
   const [recentQuotes, setRecentQuotes]     = useState<AllQuoteRow[]>([])
   const [recentLoading, setRecentLoading]   = useState(true)
+
+  // ── Shared workflow panel (reuses the existing Quote approval workflow) ──────
+  const [isWorkflowManager, setIsWorkflowManager] = useState(false)
+  const [workflowQuoteId,   setWorkflowQuoteId]   = useState<string | null>(null)
+  const [workflowState,     setWorkflowState]     = useState<ServiceQuoteWorkflowState | null>(null)
+  const [workflowLoading,   setWorkflowLoading]   = useState(false)
+
+  useEffect(() => {
+    fetch('/api/pvc/quotes/meta')
+      .then(r => r.json())
+      .then(data => { if (data.isManager) setIsWorkflowManager(true) })
+      .catch(() => {})
+  }, [])
+
+  function loadWorkflowState(quoteId: string) {
+    setWorkflowLoading(true)
+    fetch(`/api/quotes/service/${quoteId}/workflow`)
+      .then(r => r.json())
+      .then(j => { if (j.ok) setWorkflowState(j.workflow as ServiceQuoteWorkflowState | null) })
+      .catch(() => {})
+      .finally(() => setWorkflowLoading(false))
+  }
+
+  function openWorkflowModal(quoteId: string) {
+    setWorkflowQuoteId(quoteId)
+    setWorkflowState(null)
+    loadWorkflowState(quoteId)
+  }
+
+  function closeWorkflowModal() {
+    setWorkflowQuoteId(null)
+    setWorkflowState(null)
+  }
 
   function loadRecentQuotes() {
     setRecentLoading(true)
@@ -841,7 +884,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
 
   // ── Unified open from list ─────────────────────────────────────────────────
   const [groupsOpen, setGroupsOpen] = useState<Record<string, boolean>>({
-    rapid_door: true, general: true, maintenance: true, parts: true,
+    rapid_door: true, general: true, maintenance: true, parts: true, pvc_flex: true,
   })
   function toggleGroup(kind: string) {
     setGroupsOpen(prev => ({ ...prev, [kind]: !prev[kind] }))
@@ -862,6 +905,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     if (q.quote_kind === 'general')     { loadGeneralQuote(row as GeneralRecentRow); setSelected('GENERAL'); setView('form') }
     if (q.quote_kind === 'maintenance') { loadMaintQuote(row as SavedQuoteRow);      setSelected('MAINTENANCE_SERVICE_REPAIR'); setView('form') }
     if (q.quote_kind === 'parts')       { loadPartsQuote(row as SavedQuoteRow);       setSelected('PARTS'); setView('form') }
+    if (q.quote_kind === 'pvc_flex')    { loadPvcFlexQuote(row as SavedQuoteRow);      setSelected('PVC_FLEX_SYSTEM'); setView('form') }
   }
 
   useEffect(() => {
@@ -1185,6 +1229,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
           discountColor: (showPartsDiscount && parseFloat(partsDiscountPct) > 0) ? partsDiscountColor : undefined,
           terms: partsTerms || DEFAULT_PARTS_TERMS,
           endUser: partsEndUser || undefined,
+          tcType: partsTcType,
           senderName: partsSenderName, senderAddress: partsSenderAddress, senderEmail: partsSenderEmail,
           contactName: partsContactName, contactPhone: partsContactPhone, contactEmail: partsContactEmail,
         }),
@@ -1292,7 +1337,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
 
   function buildPartsSnapshot() {
     return {
-      partsItems, partsTerms, partsEndUser,
+      partsItems, partsTerms, partsEndUser, partsTcType,
       partsSenderName, partsSenderAddress, partsSenderEmail,
       partsContactName, partsContactPhone, partsContactEmail,
       custName, custAttn, custAddress, custPostcode, custPhone, custEmail, custCanBeBlank,
@@ -1356,6 +1401,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     if (snap.partsItems)          setPartsItems(snap.partsItems as typeof partsItems)
     if (snap.partsTerms !== undefined) setPartsTerms(snap.partsTerms as string)
     if (snap.partsEndUser)        setPartsEndUser(snap.partsEndUser as typeof partsEndUser)
+    if (snap.partsTcType)         setPartsTcType(snap.partsTcType as typeof partsTcType)
     if (snap.partsSenderName)     setPartsSenderName(snap.partsSenderName as string)
     if (snap.partsSenderAddress)  setPartsSenderAddress(snap.partsSenderAddress as string)
     if (snap.partsSenderEmail)    setPartsSenderEmail(snap.partsSenderEmail as string)
@@ -1405,6 +1451,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
           discountColor: (showGeneralDiscount && parseFloat(generalDiscountPct) > 0) ? generalDiscountColor : undefined,
           terms: generalTerms || DEFAULT_GENERAL_TERMS,
           endUser: generalEndUser || undefined,
+          tcType: generalTcType,
           senderName: generalSenderName, senderAddress: generalSenderAddress, senderEmail: generalSenderEmail,
           contactName: generalContactName, contactPhone: generalContactPhone, contactEmail: generalContactEmail,
         }),
@@ -1429,7 +1476,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     return {
       generalItems, generalColDefs,
       showGeneralDiscount, generalDiscountPct, generalDiscountColor,
-      generalTerms, generalEndUser,
+      generalTerms, generalEndUser, generalTcType,
       generalSenderName, generalSenderAddress, generalSenderEmail,
       generalContactName, generalContactPhone, generalContactEmail,
       custName, custAttn, custAddress, custPostcode, custPhone, custEmail, custCanBeBlank,
@@ -1515,6 +1562,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     if (snap.generalDiscountColor)   setGeneralDiscountColor(snap.generalDiscountColor as string)
     if (snap.generalTerms !== undefined) setGeneralTerms(snap.generalTerms as string)
     if (snap.generalEndUser)         setGeneralEndUser(snap.generalEndUser as typeof generalEndUser)
+    if (snap.generalTcType)          setGeneralTcType(snap.generalTcType as typeof generalTcType)
     if (snap.generalSenderName)      setGeneralSenderName(snap.generalSenderName as string)
     if (snap.generalSenderAddress)   setGeneralSenderAddress(snap.generalSenderAddress as string)
     if (snap.generalSenderEmail)     setGeneralSenderEmail(snap.generalSenderEmail as string)
@@ -1621,6 +1669,134 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     } finally {
       setGenerating(false)
     }
+  }
+
+  // ── PVC Flex save/load ───────────────────────────────────────────────────────
+
+  function buildPvcFlexSnapshot() {
+    return {
+      savedPvcDoors,
+      pvcW, pvcH, pvcStripW, pvcThick, pvcGrade, pvcProfile, pvcHanger,
+      pvcSupply, pvcMount, pvcSliding, pvcRaisedHR, pvcQtyStr,
+      pvcDiscountPct, pvcDelivery, pvcInstallation, pvcTerms, pvcEndUser,
+      pvcSenderName, pvcSenderAddress, pvcSenderEmail,
+      pvcContactName, pvcContactPhone, pvcContactEmail,
+      custName, custAttn, custAddress, custPostcode, custPhone, custEmail, custCanBeBlank,
+    }
+  }
+
+  async function handleSavePvcFlex() {
+    setPvcFlexSaveMsg(null)
+    try {
+      if (!pvcFlexQuoteNumberRef.current) {
+        const r = await fetch('/api/quotes/next-number?prefix=QPVC')
+        if (!r.ok) throw new Error('Failed to allocate quote number')
+        const { quoteNumber: qn } = await r.json() as { quoteNumber: string }
+        pvcFlexQuoteNumberRef.current = qn
+        quoteNumberRef.current = qn
+        setQuoteNumber(qn)
+      }
+      const qn = pvcFlexQuoteNumberRef.current!
+
+      const { calcPvcNewQuote, discountedSellPrice, autoRaisedHeadrailSize } = await import('@/lib/pvc/pvcNewQuoteCalculator')
+      const discPct = parseFloat(pvcDiscountPct) || 0
+      const activeDoor: PvcFlexDoorItem | null = pvcW && pvcH ? {
+        id: 'active', openingW: pvcW, openingH: pvcH,
+        stripWidth: pvcStripW, thickness: pvcThick, grade: pvcGrade, profile: pvcProfile,
+        hanger: pvcHanger, supplyType: pvcSupply, mountingType: pvcMount,
+        sliding: pvcSliding, raisedHeadrail: pvcRaisedHR, qty: parseInt(pvcQtyStr) || 1,
+      } : null
+      const allPvcDoors = [...savedPvcDoors, ...(activeDoor ? [activeDoor] : [])]
+      const filledDoors = allPvcDoors.filter(d => d.openingW && d.openingH)
+      const subtotal = filledDoors.reduce((sum, d) => {
+        const raisedHR = d.raisedHeadrail
+          ? autoRaisedHeadrailSize(parseFloat(d.openingW) || 0)
+          : 'NA' as const
+        const spec = {
+          openingW: parseFloat(d.openingW) || 0, openingH: parseFloat(d.openingH) || 0,
+          stripWidth: d.stripWidth, thickness: d.thickness, grade: d.grade, profile: d.profile,
+          hanger: d.hanger, supplyType: d.supplyType, mountingType: d.mountingType,
+          sliding: d.sliding, raisedHeadrail: raisedHR,
+        }
+        const calc = calcPvcNewQuote(spec)
+        const unitPrice = discountedSellPrice(spec, calc, discPct)
+        return sum + unitPrice * d.qty
+      }, (parseFloat(pvcDelivery) || 0) + (parseFloat(pvcInstallation) || 0))
+
+      const validDate = new Date(); validDate.setDate(validDate.getDate() + 30)
+      const validUntil = `${String(validDate.getDate()).padStart(2,'0')}/${String(validDate.getMonth()+1).padStart(2,'0')}/${validDate.getFullYear()}`
+
+      const res = await fetch('/api/quotes/list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quoteId: pvcFlexQuoteIdRef.current ?? undefined,
+          quoteNumber: qn, date: todayISO(), validUntil: displayToISO(validUntil),
+          customerName: custName, customerAddress: custAddress,
+          subtotal, endUser: pvcEndUser || undefined,
+          formSnapshot: buildPvcFlexSnapshot(),
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Save failed')
+      if (json.quoteId && !pvcFlexQuoteIdRef.current) pvcFlexQuoteIdRef.current = json.quoteId
+      setPvcFlexSaveMsg({ ok: true, text: `Saved as ${qn}` })
+      loadRecentPvcFlexQuotes()
+    } catch (e) {
+      setPvcFlexSaveMsg({ ok: false, text: e instanceof Error ? e.message : 'Save failed' })
+    }
+  }
+
+  function loadRecentPvcFlexQuotes() {
+    setRecentPvcFlexLoading(true)
+    fetch('/api/quotes/list?kind=pvc_flex&limit=10')
+      .then(r => r.json())
+      .then(j => { if (j.ok) setRecentPvcFlexQuotes(j.data) })
+      .catch(() => {})
+      .finally(() => setRecentPvcFlexLoading(false))
+  }
+
+  function loadPvcFlexQuote(row: SavedQuoteRow) {
+    const snap = row.form_snapshot
+    if (!snap) return
+    pvcFlexQuoteIdRef.current     = row.id
+    pvcFlexQuoteNumberRef.current = row.quote_number
+    quoteNumberRef.current        = row.quote_number
+    setQuoteNumber(row.quote_number)
+    setShowPreview(false); setPreviewUrl(null); setPvcFlexSaveMsg(null)
+    if (snap.savedPvcDoors)      setSavedPvcDoors(snap.savedPvcDoors as typeof savedPvcDoors)
+    if (snap.pvcW !== undefined) setPvcW(snap.pvcW as string)
+    if (snap.pvcH !== undefined) setPvcH(snap.pvcH as string)
+    if (snap.pvcStripW)          setPvcStripW(snap.pvcStripW as number)
+    if (snap.pvcThick)           setPvcThick(snap.pvcThick as number)
+    if (snap.pvcGrade)           setPvcGrade(snap.pvcGrade as typeof pvcGrade)
+    if (snap.pvcProfile)         setPvcProfile(snap.pvcProfile as typeof pvcProfile)
+    if (snap.pvcHanger)          setPvcHanger(snap.pvcHanger as typeof pvcHanger)
+    if (snap.pvcSupply)          setPvcSupply(snap.pvcSupply as typeof pvcSupply)
+    if (snap.pvcMount)           setPvcMount(snap.pvcMount as typeof pvcMount)
+    if (snap.pvcSliding)         setPvcSliding(snap.pvcSliding as typeof pvcSliding)
+    if (snap.pvcRaisedHR !== undefined) setPvcRaisedHR(snap.pvcRaisedHR as boolean)
+    if (snap.pvcQtyStr)          setPvcQtyStr(snap.pvcQtyStr as string)
+    if (snap.pvcDiscountPct !== undefined) setPvcDiscountPct(snap.pvcDiscountPct as string)
+    if (snap.pvcDelivery !== undefined)    setPvcDelivery(snap.pvcDelivery as string)
+    if (snap.pvcInstallation !== undefined) setPvcInstallation(snap.pvcInstallation as string)
+    if (snap.pvcTerms !== undefined)       setPvcTerms(snap.pvcTerms as string)
+    if (snap.pvcEndUser)                   setPvcEndUser(snap.pvcEndUser as typeof pvcEndUser)
+    if (snap.pvcSenderName)      setPvcSenderName(snap.pvcSenderName as string)
+    if (snap.pvcSenderAddress)   setPvcSenderAddress(snap.pvcSenderAddress as string)
+    if (snap.pvcSenderEmail)     setPvcSenderEmail(snap.pvcSenderEmail as string)
+    if (snap.pvcContactName)     setPvcContactName(snap.pvcContactName as string)
+    if (snap.pvcContactPhone)    setPvcContactPhone(snap.pvcContactPhone as string)
+    if (snap.pvcContactEmail)    setPvcContactEmail(snap.pvcContactEmail as string)
+    if (snap.custName !== undefined)     setCustName(snap.custName as string)
+    if (snap.custAttn !== undefined)     setCustAttn(snap.custAttn as string)
+    if (snap.custAddress !== undefined)  setCustAddress(snap.custAddress as string)
+    if (snap.custPostcode !== undefined) setCustPostcode(snap.custPostcode as string)
+    if (snap.custPhone !== undefined)    setCustPhone(snap.custPhone as string)
+    if (snap.custEmail !== undefined)    setCustEmail(snap.custEmail as string)
+    if (snap.custCanBeBlank !== undefined) setCustCanBeBlank(snap.custCanBeBlank as boolean)
+    setSelected('PVC_FLEX_SYSTEM')
+    setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100)
   }
 
   // ── Derived values ──────────────────────────────────────────────────────────
@@ -1947,6 +2123,7 @@ const autoDescLines = [
               { kind: 'general',     label: 'General',                  icon: 'description',   accent: 'violet' },
               { kind: 'maintenance', label: 'Maintenance Service/Repair',icon: 'build',         accent: 'orange' },
               { kind: 'parts',       label: 'Parts',                    icon: 'inventory_2',   accent: 'emerald' },
+              { kind: 'pvc_flex',    label: 'PVC Flex System',          icon: 'view_column',   accent: 'sky' },
             ] as { kind: string; label: string; icon: string; accent: string }[]).map(({ kind, label, icon, accent }) => {
               const rows = filteredQuotes.filter(q => q.quote_kind === kind)
               if (rows.length === 0 && search.trim()) return null
@@ -1956,12 +2133,14 @@ const autoDescLines = [
                 violet:  'bg-violet-50 border-violet-200 text-violet-700',
                 orange:  'bg-orange-50 border-orange-200 text-orange-700',
                 emerald: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+                sky:     'bg-sky-50 border-sky-200 text-sky-700',
               }
               const headerMap: Record<string, string> = {
                 indigo:  'bg-indigo-600',
                 violet:  'bg-violet-600',
                 orange:  'bg-orange-500',
                 emerald: 'bg-emerald-600',
+                sky:     'bg-sky-600',
               }
               return (
                 <div key={kind} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -2013,7 +2192,13 @@ const autoDescLines = [
                                       </span>
                                     </td>
                                     <td className="px-4 py-3">
-                                      <div className="flex items-center justify-end">
+                                      <div className="flex items-center justify-end gap-1.5">
+                                        {kind !== 'rapid_door' && (
+                                          <button type="button" onClick={() => openWorkflowModal(q.id)}
+                                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 transition">
+                                            <span className="material-symbols-outlined text-[13px]">timeline</span>Workflow
+                                          </button>
+                                        )}
                                         <button type="button" onClick={() => openQuoteFromList(q)}
                                           className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 transition">
                                           <span className="material-symbols-outlined text-[13px]">edit</span>Open
@@ -2037,10 +2222,18 @@ const autoDescLines = [
                                   <p className="font-mono text-xs font-semibold text-indigo-700">{q.quote_number}</p>
                                   <p className="mt-0.5 text-sm font-medium text-slate-800">{q.customer_name || <span className="text-slate-400 italic font-normal">No customer</span>}</p>
                                   <p className="mt-0.5 text-xs text-slate-500">{dateStr}</p>
-                                  <button type="button" onClick={() => openQuoteFromList(q)}
-                                    className="mt-2 inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 transition">
-                                    <span className="material-symbols-outlined text-[13px]">edit</span>Open
-                                  </button>
+                                  <div className="mt-2 flex items-center gap-1.5">
+                                    {kind !== 'rapid_door' && (
+                                      <button type="button" onClick={() => openWorkflowModal(q.id)}
+                                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 transition">
+                                        <span className="material-symbols-outlined text-[13px]">timeline</span>Workflow
+                                      </button>
+                                    )}
+                                    <button type="button" onClick={() => openQuoteFromList(q)}
+                                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 transition">
+                                      <span className="material-symbols-outlined text-[13px]">edit</span>Open
+                                    </button>
+                                  </div>
                                 </div>
                                 <div className="shrink-0 text-right">
                                   <p className="text-sm font-semibold text-slate-800">${Number(q.total ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
@@ -2058,6 +2251,36 @@ const autoDescLines = [
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {/* Workflow modal — reuses the existing Quote approval workflow */}
+        {workflowQuoteId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeWorkflowModal}>
+            <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-xl" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                <h2 className="text-sm font-semibold text-slate-800">Quote Workflow</h2>
+                <button type="button" onClick={closeWorkflowModal}
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition">
+                  <span className="material-symbols-outlined text-[18px]">close</span>
+                </button>
+              </div>
+              <div className="p-5">
+                {workflowLoading && !workflowState ? (
+                  <div className="flex items-center justify-center gap-2 py-10 text-slate-400">
+                    <span className="material-symbols-outlined animate-spin text-xl">progress_activity</span>
+                    <span className="text-sm">Loading workflow…</span>
+                  </div>
+                ) : (
+                  <ServiceQuoteWorkflowPanel
+                    quoteId={workflowQuoteId}
+                    workflow={workflowState}
+                    isManager={isWorkflowManager}
+                    onUpdated={() => { loadWorkflowState(workflowQuoteId); loadRecentQuotes() }}
+                  />
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -2955,14 +3178,40 @@ const autoDescLines = [
                     )
                   })()}
 
+                  {/* T&C product type selector */}
+                  <div className="px-6 pt-5">
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-slate-400">
+                        Terms &amp; Conditions <span className="normal-case font-normal text-slate-400">— which product line&apos;s T&amp;C applies to this quote</span>
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        {([
+                          { key: 'PVC_FLEX_SYSTEM' as const,     label: 'PVC Flex System', icon: 'view_column' },
+                          { key: 'INDUSTRIAL_RAPID_DOOR' as const, label: 'Rapid Door',     icon: 'garage' },
+                        ]).map(opt => (
+                          <button key={opt.key} type="button"
+                            onClick={() => { setPartsTcType(opt.key); if (opt.key === 'PVC_FLEX_SYSTEM') setPartsEndUser(prev => prev === 'DISTRIBUTOR' ? '' : prev) }}
+                            className={`flex items-center justify-center gap-2 rounded-xl border py-3 text-sm font-semibold transition ${
+                              partsTcType === opt.key
+                                ? 'border-indigo-500 bg-indigo-600 text-white shadow-sm'
+                                : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50'
+                            }`}>
+                            <span className="material-symbols-outlined text-[18px]">{opt.icon}</span>
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
                   {/* End User T&C selector */}
                   <div className="px-6 pt-5">
                     <div>
                       <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-slate-400">
                         End User <span className="normal-case font-normal text-slate-400">— selects which T&amp;C document is appended</span>
                       </label>
-                      <div className="grid grid-cols-3 gap-3">
-                        {(['CUSTOMER', 'DISTRIBUTOR', 'TENDER'] as const).map(type => (
+                      <div className={`grid gap-3 ${partsTcType === 'PVC_FLEX_SYSTEM' ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                        {(partsTcType === 'PVC_FLEX_SYSTEM' ? (['CUSTOMER', 'TENDER'] as const) : (['CUSTOMER', 'DISTRIBUTOR', 'TENDER'] as const)).map(type => (
                           <button key={type} type="button"
                             onClick={() => setPartsEndUser(prev => prev === type ? '' : type)}
                             className={`flex items-center justify-center gap-2 rounded-xl border py-3 text-sm font-semibold transition ${
@@ -3420,14 +3669,40 @@ const autoDescLines = [
                       </div>
                     </div>
 
+                  {/* T&C product type selector */}
+                  <div className="px-6 pt-5">
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-slate-400">
+                        Terms &amp; Conditions <span className="normal-case font-normal text-slate-400">— which product line&apos;s T&amp;C applies to this quote</span>
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        {([
+                          { key: 'PVC_FLEX_SYSTEM' as const,     label: 'PVC Flex System', icon: 'view_column' },
+                          { key: 'INDUSTRIAL_RAPID_DOOR' as const, label: 'Rapid Door',     icon: 'garage' },
+                        ]).map(opt => (
+                          <button key={opt.key} type="button"
+                            onClick={() => { setGeneralTcType(opt.key); if (opt.key === 'PVC_FLEX_SYSTEM') setGeneralEndUser(prev => prev === 'DISTRIBUTOR' ? '' : prev) }}
+                            className={`flex items-center justify-center gap-2 rounded-xl border py-3 text-sm font-semibold transition ${
+                              generalTcType === opt.key
+                                ? 'border-indigo-500 bg-indigo-600 text-white shadow-sm'
+                                : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50'
+                            }`}>
+                            <span className="material-symbols-outlined text-[18px]">{opt.icon}</span>
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
                   {/* End User T&C selector */}
                   <div className="px-6 pt-5">
                     <div>
                       <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-slate-400">
                         End User <span className="normal-case font-normal text-slate-400">— selects which T&amp;C document is appended</span>
                       </label>
-                      <div className="grid grid-cols-3 gap-3">
-                        {(['CUSTOMER', 'DISTRIBUTOR', 'TENDER'] as const).map(type => (
+                      <div className={`grid gap-3 ${generalTcType === 'PVC_FLEX_SYSTEM' ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                        {(generalTcType === 'PVC_FLEX_SYSTEM' ? (['CUSTOMER', 'TENDER'] as const) : (['CUSTOMER', 'DISTRIBUTOR', 'TENDER'] as const)).map(type => (
                           <button key={type} type="button"
                             onClick={() => setGeneralEndUser(prev => prev === type ? '' : type)}
                             className={`flex items-center justify-center gap-2 rounded-xl border py-3 text-sm font-semibold transition ${
@@ -3949,7 +4224,7 @@ const autoDescLines = [
                 <div className="px-6 py-4 border-b border-slate-100">
                   <label className={LABEL_CLS}>Terms & Conditions — End User Type</label>
                   <div className="flex gap-3 flex-wrap">
-                    {(['CUSTOMER','DISTRIBUTOR','TENDER'] as const).map(eu => (
+                    {(['CUSTOMER','TENDER'] as const).map(eu => (
                       <button key={eu} type="button"
                         onClick={() => setPvcEndUser(prev => prev === eu ? '' : eu)}
                         className={`rounded-xl border px-4 py-2 text-xs font-semibold transition ${pvcEndUser === eu ? 'border-teal-500 bg-teal-50 text-teal-700' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'}`}>
@@ -4795,6 +5070,13 @@ const autoDescLines = [
                   {partsQuoteIdRef.current ? 'Update' : 'Save Quote'}
                 </button>
               )}
+              {isPvcFlex && (
+                <button type="button" onClick={handleSavePvcFlex}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 shadow-sm transition hover:bg-emerald-100">
+                  <span className="material-symbols-outlined text-[16px]">save</span>
+                  {pvcFlexQuoteIdRef.current ? 'Update' : 'Save Quote'}
+                </button>
+              )}
               <button type="button" onClick={handleDownload}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 shadow-sm transition hover:bg-indigo-100">
                 <span className="material-symbols-outlined text-[16px]">download</span>
@@ -4817,6 +5099,12 @@ const autoDescLines = [
             <div className={`px-6 py-2 text-sm font-medium flex items-center gap-2 ${partsSaveMsg.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
               <span className="material-symbols-outlined text-[16px]">{partsSaveMsg.ok ? 'check_circle' : 'error'}</span>
               {partsSaveMsg.text}
+            </div>
+          )}
+          {(isPvcFlex && pvcFlexSaveMsg) && (
+            <div className={`px-6 py-2 text-sm font-medium flex items-center gap-2 ${pvcFlexSaveMsg.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+              <span className="material-symbols-outlined text-[16px]">{pvcFlexSaveMsg.ok ? 'check_circle' : 'error'}</span>
+              {pvcFlexSaveMsg.text}
             </div>
           )}
           {isSafari ? (
