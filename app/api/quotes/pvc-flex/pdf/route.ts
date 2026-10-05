@@ -10,21 +10,24 @@ async function resolveTcPdfBytes(endUser: QuoteTcEndUser | '' | undefined): Prom
   if (!endUser) return null
   try {
     const sb = createServiceRoleClient()
-    const { data: tcRow } = await sb
-      .from('quote_tc_documents')
-      .select('storage_path')
-      .eq('quote_type', 'PVC_FLEX_SYSTEM')
-      .eq('end_user_type', endUser)
-      .maybeSingle()
+    // Try specific end-user type first, then fall back to ALL
+    const candidates = [endUser, 'ALL']
+    for (const candidate of candidates) {
+      const { data: tcRow } = await sb
+        .from('quote_tc_documents')
+        .select('storage_path')
+        .eq('quote_type', 'PVC_FLEX_SYSTEM')
+        .eq('end_user_type', candidate)
+        .maybeSingle()
 
-    if (!tcRow?.storage_path) return null
-
-    const { data: fileData } = await sb.storage
-      .from('quote-tc-documents')
-      .download(tcRow.storage_path)
-
-    if (!fileData) return null
-    return Buffer.from(await fileData.arrayBuffer())
+      if (tcRow?.storage_path) {
+        const { data: fileData } = await sb.storage
+          .from('quote-tc-documents')
+          .download(tcRow.storage_path)
+        if (fileData) return Buffer.from(await fileData.arrayBuffer())
+      }
+    }
+    return null
   } catch {
     return null
   }

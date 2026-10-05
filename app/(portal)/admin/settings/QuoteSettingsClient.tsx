@@ -473,7 +473,14 @@ const TC_QUOTE_TYPES: { key: string; label: string; endUserTypes: { key: string;
       { key: 'TENDER',      label: 'Tender' },
     ],
   },
-  { key: 'PVC_FLEX_SYSTEM',            label: 'PVC Flex System',        endUserTypes: [{ key: 'ALL', label: 'General T&C' }] },
+  {
+    key: 'PVC_FLEX_SYSTEM',
+    label: 'PVC Flex System',
+    endUserTypes: [
+      { key: 'CUSTOMER', label: 'Customer' },
+      { key: 'TENDER',   label: 'Tender' },
+    ],
+  },
   { key: 'MAINTENANCE_SERVICE_REPAIR', label: 'Maintenance / Repair',   endUserTypes: [{ key: 'ALL', label: 'General T&C' }] },
   { key: 'PARTS',                      label: 'Parts',                  endUserTypes: [{ key: 'ALL', label: 'General T&C' }] },
   { key: 'GENERAL',                    label: 'General',                endUserTypes: [{ key: 'ALL', label: 'General T&C' }] },
