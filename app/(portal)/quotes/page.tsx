@@ -538,6 +538,8 @@ export default function NewQuotesPage() {
   const [workflowQuoteId,   setWorkflowQuoteId]   = useState<string | null>(null)
   const [workflowState,     setWorkflowState]     = useState<ServiceQuoteWorkflowState | null>(null)
   const [workflowLoading,   setWorkflowLoading]   = useState(false)
+  // ID of the saved quote currently loaded in the form (null = fresh/unsaved)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/pvc/quotes/meta')
@@ -737,6 +739,11 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     setQuoteNumber(null)
     quoteNumberRef.current = null
     quoteIdRef.current = null
+    setEditingId(null)
+    generalQuoteIdRef.current = null; generalQuoteNumberRef.current = null
+    maintQuoteIdRef.current   = null; maintQuoteNumberRef.current   = null
+    partsQuoteIdRef.current   = null; partsQuoteNumberRef.current   = null
+    pvcFlexQuoteIdRef.current = null; pvcFlexQuoteNumberRef.current = null
     setSavedDoors([])
     setPreviewUrl(null)
     setShowPreview(false)
@@ -821,6 +828,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     setQuoteNumber(q.quote_number)
     quoteNumberRef.current = q.quote_number
     quoteIdRef.current = q.id
+    setEditingId(q.id)
     // Customer
     setCustName(q.customer_name ?? '')
     setCustAddress(q.site_address ?? '')
@@ -1311,6 +1319,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     maintQuoteIdRef.current     = row.id
     maintQuoteNumberRef.current = row.quote_number
     quoteNumberRef.current      = row.quote_number
+    setEditingId(row.id)
     setQuoteNumber(row.quote_number)
     setShowPreview(false); setPreviewUrl(null); setMaintSaveMsg(null)
     if (snap.maintItems)          setMaintItems(snap.maintItems as typeof maintItems)
@@ -1396,6 +1405,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     partsQuoteIdRef.current     = row.id
     partsQuoteNumberRef.current = row.quote_number
     quoteNumberRef.current      = row.quote_number
+    setEditingId(row.id)
     setQuoteNumber(row.quote_number)
     setShowPreview(false); setPreviewUrl(null); setPartsSaveMsg(null)
     if (snap.partsItems)          setPartsItems(snap.partsItems as typeof partsItems)
@@ -1551,6 +1561,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     generalQuoteIdRef.current     = row.id
     generalQuoteNumberRef.current = row.quote_number
     quoteNumberRef.current        = row.quote_number
+    setEditingId(row.id)
     setQuoteNumber(row.quote_number)
     setShowPreview(false)
     setPreviewUrl(null)
@@ -1763,6 +1774,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     pvcFlexQuoteIdRef.current     = row.id
     pvcFlexQuoteNumberRef.current = row.quote_number
     quoteNumberRef.current        = row.quote_number
+    setEditingId(row.id)
     setQuoteNumber(row.quote_number)
     setShowPreview(false); setPreviewUrl(null); setPvcFlexSaveMsg(null)
     if (snap.savedPvcDoors)      setSavedPvcDoors(snap.savedPvcDoors as typeof savedPvcDoors)
@@ -3816,6 +3828,13 @@ const autoDescLines = [
                     <span className="material-symbols-outlined text-[16px]">send</span>
                     Send Email
                   </button>
+                  {generalQuoteIdRef.current && (
+                    <button type="button" onClick={() => openWorkflowModal(generalQuoteIdRef.current!)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700 shadow-sm transition hover:bg-violet-100">
+                      <span className="material-symbols-outlined text-[16px]">timeline</span>
+                      Workflow
+                    </button>
+                  )}
                 </div>
               </div>
               {generalSaveMsg && (
@@ -3843,7 +3862,7 @@ const autoDescLines = [
           )}
 
           {/* ── Recent General Quotes ────────────────────────────────────── */}
-          {isGeneral && (
+          {isGeneral && !editingId && (
             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
               <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -5088,6 +5107,13 @@ const autoDescLines = [
                 <span className="material-symbols-outlined text-[16px]">send</span>
                 Send Email
               </button>
+              {editingId && (
+                <button type="button" onClick={() => openWorkflowModal(editingId)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700 shadow-sm transition hover:bg-violet-100">
+                  <span className="material-symbols-outlined text-[16px]">timeline</span>
+                  Workflow
+                </button>
+              )}
             </div>
           </div>
           {(isMaintenance && maintSaveMsg) && (
@@ -5127,7 +5153,7 @@ const autoDescLines = [
       )}
 
       {/* ── Recent Maintenance Quotes ───────────────────────────────────────── */}
-      {isMaintenance && (() => {
+      {isMaintenance && !editingId && (() => {
         const RecentTable = ({ rows, loading, onOpen, onRefresh }: { rows: SavedQuoteRow[]; loading: boolean; onOpen: (r: SavedQuoteRow) => void; onRefresh: () => void; label: string }) => (
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
@@ -5184,7 +5210,7 @@ const autoDescLines = [
       })()}
 
       {/* ── Recent Parts Quotes ─────────────────────────────────────────────── */}
-      {isParts && (() => {
+      {isParts && !editingId && (() => {
         const RecentTable = ({ rows, loading, onOpen, onRefresh }: { rows: SavedQuoteRow[]; loading: boolean; onOpen: (r: SavedQuoteRow) => void; onRefresh: () => void }) => (
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
