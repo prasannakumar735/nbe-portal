@@ -1550,6 +1550,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     // Restore quote identifiers
     generalQuoteIdRef.current     = row.id
     generalQuoteNumberRef.current = row.quote_number
+    quoteNumberRef.current        = row.quote_number
     setQuoteNumber(row.quote_number)
     setShowPreview(false)
     setPreviewUrl(null)
