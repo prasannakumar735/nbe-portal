@@ -2056,9 +2056,7 @@ const autoDescLines = [
       .trim()
       .replace(/\s+/g, '_')
       .slice(0, 50)
-    const activeEndUser = isGeneral ? generalEndUser : endUser
-    const euPart = activeEndUser ? `_${activeEndUser}` : ''
-    a.download = `${quoteNumber}_${safeCust}${euPart}.pdf`
+    a.download = `${quoteNumber}_${safeCust}.pdf`
     a.click()
   }
 
@@ -2732,7 +2730,7 @@ const autoDescLines = [
                           <span className="text-sm text-slate-500">GST (10%)</span>
                           <span className="tabular-nums text-slate-600">{fmtM(maintAfterDiscount * 0.1)}</span>
                         </div>
-                        <div className="flex items-center justify-between px-4 py-3 bg-indigo-600">
+                        <div className="flex items-center justify-between px-4 py-3 bg-indigo-500">
                           <span className="text-sm font-bold text-indigo-100 uppercase tracking-wide">Total inc. GST</span>
                           <span className="tabular-nums font-bold text-xl text-white">{fmtM(maintAfterDiscount * 1.1)}</span>
                         </div>
@@ -2818,7 +2816,7 @@ const autoDescLines = [
                   <button type="button"
                     disabled={generating || (!custCanBeBlank && !customerFilled)}
                     onClick={handleGenerateMaintenance}
-                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-40"
                     title={!custCanBeBlank && !customerFilled ? 'Customer name and address are required' : undefined}>
                     {generating
                       ? <><span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>Generating…</>
@@ -3181,7 +3179,7 @@ const autoDescLines = [
                           <span className="text-sm text-slate-500">GST (10%)</span>
                           <span className="tabular-nums text-slate-600">{fmtP(partsAfterDiscount * 0.1)}</span>
                         </div>
-                        <div className="flex items-center justify-between px-4 py-3 bg-indigo-600">
+                        <div className="flex items-center justify-between px-4 py-3 bg-indigo-500">
                           <span className="text-sm font-bold text-indigo-100 uppercase tracking-wide">Total inc. GST</span>
                           <span className="tabular-nums font-bold text-xl text-white">{fmtP(partsAfterDiscount * 1.1)}</span>
                         </div>
@@ -3206,7 +3204,7 @@ const autoDescLines = [
                             onClick={() => { setPartsTcType(opt.key); if (opt.key === 'PVC_FLEX_SYSTEM') setPartsEndUser(prev => prev === 'DISTRIBUTOR' ? '' : prev) }}
                             className={`flex items-center justify-center gap-2 rounded-xl border py-3 text-sm font-semibold transition ${
                               partsTcType === opt.key
-                                ? 'border-indigo-500 bg-indigo-600 text-white shadow-sm'
+                                ? 'border-indigo-400 bg-indigo-500 text-white shadow-sm'
                                 : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50'
                             }`}>
                             <span className="material-symbols-outlined text-[18px]">{opt.icon}</span>
@@ -3293,7 +3291,7 @@ const autoDescLines = [
                   <button type="button"
                     disabled={generating || (!custCanBeBlank && !customerFilled)}
                     onClick={handleGenerateParts}
-                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-40"
                     title={!custCanBeBlank && !customerFilled ? 'Customer name and address are required' : undefined}>
                     {generating
                       ? <><span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>Generating…</>
@@ -3675,7 +3673,7 @@ const autoDescLines = [
                           <span className="text-sm text-slate-500">GST (10%)</span>
                           <span className="tabular-nums text-slate-600">{fmtG(generalAfterDiscount * 0.1)}</span>
                         </div>
-                        <div className="flex items-center justify-between px-4 py-3 bg-indigo-600">
+                        <div className="flex items-center justify-between px-4 py-3 bg-indigo-500">
                           <span className="text-sm font-bold text-indigo-100 uppercase tracking-wide">Total inc. GST</span>
                           <span className="tabular-nums font-bold text-xl text-white">{fmtG(generalAfterDiscount * 1.1)}</span>
                         </div>
@@ -3697,7 +3695,7 @@ const autoDescLines = [
                             onClick={() => { setGeneralTcType(opt.key); if (opt.key === 'PVC_FLEX_SYSTEM') setGeneralEndUser(prev => prev === 'DISTRIBUTOR' ? '' : prev) }}
                             className={`flex items-center justify-center gap-2 rounded-xl border py-3 text-sm font-semibold transition ${
                               generalTcType === opt.key
-                                ? 'border-indigo-500 bg-indigo-600 text-white shadow-sm'
+                                ? 'border-indigo-400 bg-indigo-500 text-white shadow-sm'
                                 : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50'
                             }`}>
                             <span className="material-symbols-outlined text-[18px]">{opt.icon}</span>
@@ -3720,7 +3718,7 @@ const autoDescLines = [
                             onClick={() => setGeneralEndUser(prev => prev === type ? '' : type)}
                             className={`flex items-center justify-center gap-2 rounded-xl border py-3 text-sm font-semibold transition ${
                               generalEndUser === type
-                                ? 'border-indigo-500 bg-indigo-600 text-white shadow-sm'
+                                ? 'border-indigo-400 bg-indigo-500 text-white shadow-sm'
                                 : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50'
                             }`}>
                             <span className="material-symbols-outlined text-[18px]">
@@ -3784,7 +3782,7 @@ const autoDescLines = [
                   <button type="button"
                     disabled={generating || (!custCanBeBlank && !customerFilled)}
                     onClick={handleGenerateGeneral}
-                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-40"
                     title={!custCanBeBlank && !customerFilled ? 'Customer name and address are required' : undefined}>
                     {generating
                       ? <><span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>Generating…</>
@@ -3808,29 +3806,29 @@ const autoDescLines = [
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <button type="button" onClick={handleEditQuote}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50">
-                    <span className="material-symbols-outlined text-[16px]">edit</span>
-                    Edit Quote
-                  </button>
                   <button type="button" onClick={handleSaveGeneral}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 shadow-sm transition hover:bg-emerald-100">
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700">
                     <span className="material-symbols-outlined text-[16px]">save</span>
                     {generalQuoteIdRef.current ? 'Update' : 'Save Quote'}
                   </button>
                   <button type="button" onClick={handleDownload}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 shadow-sm transition hover:bg-indigo-100">
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-500 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-600">
                     <span className="material-symbols-outlined text-[16px]">download</span>
                     Download PDF
                   </button>
                   <button type="button" onClick={openEmailModal}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50">
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50">
                     <span className="material-symbols-outlined text-[16px]">send</span>
                     Send Email
                   </button>
+                  <button type="button" onClick={handleEditQuote}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50">
+                    <span className="material-symbols-outlined text-[16px]">edit</span>
+                    Edit
+                  </button>
                   {generalQuoteIdRef.current && (
                     <button type="button" onClick={() => openWorkflowModal(generalQuoteIdRef.current!)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700 shadow-sm transition hover:bg-violet-100">
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700">
                       <span className="material-symbols-outlined text-[16px]">timeline</span>
                       Workflow
                     </button>
@@ -4299,7 +4297,7 @@ const autoDescLines = [
                   <button type="button"
                     disabled={!canGeneratePvc}
                     onClick={handleGeneratePvcFlex}
-                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-40"
                     title={!hasAnyDoor ? 'Enter at least one door opening size' : (!custCanBeBlank && !customerFilled) ? 'Customer name and address are required' : undefined}>
                     {generating
                       ? <><span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>Generating…</>
@@ -4503,7 +4501,7 @@ const autoDescLines = [
             {selected && !isRapidDoor && (
               <div className="pt-2">
                 <button type="button" disabled={!selected}
-                  className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40">
+                  className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-40">
                   <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
                   Continue
                 </button>
@@ -5071,45 +5069,45 @@ const autoDescLines = [
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <button type="button" onClick={handleEditQuote}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50">
-                <span className="material-symbols-outlined text-[16px]">edit</span>
-                Edit Quote
-              </button>
               {isMaintenance && (
                 <button type="button" onClick={handleSaveMaintenance}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 shadow-sm transition hover:bg-emerald-100">
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700">
                   <span className="material-symbols-outlined text-[16px]">save</span>
                   {maintQuoteIdRef.current ? 'Update' : 'Save Quote'}
                 </button>
               )}
               {isParts && (
                 <button type="button" onClick={handleSaveParts}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 shadow-sm transition hover:bg-emerald-100">
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700">
                   <span className="material-symbols-outlined text-[16px]">save</span>
                   {partsQuoteIdRef.current ? 'Update' : 'Save Quote'}
                 </button>
               )}
               {isPvcFlex && (
                 <button type="button" onClick={handleSavePvcFlex}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 shadow-sm transition hover:bg-emerald-100">
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700">
                   <span className="material-symbols-outlined text-[16px]">save</span>
                   {pvcFlexQuoteIdRef.current ? 'Update' : 'Save Quote'}
                 </button>
               )}
               <button type="button" onClick={handleDownload}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 shadow-sm transition hover:bg-indigo-100">
+                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-500 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-600">
                 <span className="material-symbols-outlined text-[16px]">download</span>
                 Download PDF
               </button>
               <button type="button" onClick={openEmailModal}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50">
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50">
                 <span className="material-symbols-outlined text-[16px]">send</span>
                 Send Email
               </button>
+              <button type="button" onClick={handleEditQuote}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50">
+                <span className="material-symbols-outlined text-[16px]">edit</span>
+                Edit
+              </button>
               {editingId && (
                 <button type="button" onClick={() => openWorkflowModal(editingId)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700 shadow-sm transition hover:bg-violet-100">
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700">
                   <span className="material-symbols-outlined text-[16px]">timeline</span>
                   Workflow
                 </button>
