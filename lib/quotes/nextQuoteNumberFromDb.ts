@@ -3,23 +3,34 @@ import {
   buildQuoteNumber,
   isQuoteNumberPrefix,
   maxSequenceForPrefixDate,
+  shortDateKey,
   type QuoteNumberPrefix,
 } from '@/lib/quotes/quoteNumberPolicy'
 
 /**
  * Next quote number for this prefix + calendar day, based on existing `quotes.quote_number` values.
+ * Matches both the current format (e.g. QPTS261001%) and the legacy `PREFIX-YYYYMMDD-%` format,
+ * so sequence numbers keep counting correctly across the format change.
  */
 export async function nextQuoteNumberFromDb(
   supabase: SupabaseClient,
   prefix: QuoteNumberPrefix,
   dateKey: string,
 ): Promise<string> {
-  const pattern = `${prefix}-${dateKey}-%`
-  const { data, error } = await supabase.from('quotes').select('quote_number').like('quote_number', pattern).limit(2000)
+  const newPattern    = `${prefix}${shortDateKey(dateKey)}%`
+  const legacyPattern = `${prefix}-${dateKey}-%`
 
-  if (error) throw error
+  const [newRes, legacyRes] = await Promise.all([
+    supabase.from('quotes').select('quote_number').like('quote_number', newPattern).limit(2000),
+    supabase.from('quotes').select('quote_number').like('quote_number', legacyPattern).limit(2000),
+  ])
 
-  const numbers = (data ?? []).map(r => String((r as { quote_number?: string }).quote_number ?? ''))
+  if (newRes.error) throw newRes.error
+  if (legacyRes.error) throw legacyRes.error
+
+  const numbers = [...(newRes.data ?? []), ...(legacyRes.data ?? [])].map(r =>
+    String((r as { quote_number?: string }).quote_number ?? ''),
+  )
   const nextSeq = maxSequenceForPrefixDate(numbers, prefix, dateKey) + 1
   return buildQuoteNumber(prefix, dateKey, nextSeq)
 }
