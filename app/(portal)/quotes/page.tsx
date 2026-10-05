@@ -2369,7 +2369,7 @@ const autoDescLines = [
     <div className="space-y-6">
       {/* Form header with back button */}
       <div className="flex items-center gap-4">
-        <button type="button" onClick={() => { loadRecentQuotes(); setView('list') }}
+        <button type="button" onClick={() => { loadRecentQuotes(); closeWorkflowModal(); setView('list') }}
           className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50">
           <span className="material-symbols-outlined text-[16px]">arrow_back</span>
           All Quotes
@@ -5628,6 +5628,36 @@ const autoDescLines = [
                 <span className="material-symbols-outlined text-[15px]">delete</span>
                 Discard
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Workflow modal — available from preview panel Workflow button */}
+      {workflowQuoteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeWorkflowModal}>
+          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <h2 className="text-sm font-semibold text-slate-800">Quote Workflow</h2>
+              <button type="button" onClick={closeWorkflowModal}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition">
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+            <div className="p-5">
+              {workflowLoading && !workflowState ? (
+                <div className="flex items-center justify-center gap-2 py-10 text-slate-400">
+                  <span className="material-symbols-outlined animate-spin text-xl">progress_activity</span>
+                  <span className="text-sm">Loading workflow…</span>
+                </div>
+              ) : (
+                <ServiceQuoteWorkflowPanel
+                  quoteId={workflowQuoteId}
+                  workflow={workflowState}
+                  isManager={isWorkflowManager}
+                  onUpdated={() => { loadWorkflowState(workflowQuoteId!); loadRecentQuotes() }}
+                />
+              )}
             </div>
           </div>
         </div>
