@@ -19,6 +19,31 @@ function fail(message: string, status = 400) {
   return NextResponse.json({ ok: false, error: message }, { status })
 }
 
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ quoteId: string }> },
+) {
+  const user = await getServerUser()
+  if (!user?.id) return fail('Unauthenticated', 401)
+
+  const supabase = await createClient()
+  const { quoteId } = await params
+
+  const { data: quote, error } = await supabase
+    .from('quotes')
+    .select('*')
+    .eq('id', quoteId)
+    .maybeSingle()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  if (!quote) return NextResponse.json({ error: 'Quote not found.' }, { status: 404 })
+
+  const assignedUserId = (quote.assigned_user_id as string | null) ?? null
+  const assigneeName = assignedUserId ? await profileDisplayName(supabase, assignedUserId) : null
+
+  return NextResponse.json({ ok: true, workflow: { ...quote, assigneeName } })
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ quoteId: string }> },
