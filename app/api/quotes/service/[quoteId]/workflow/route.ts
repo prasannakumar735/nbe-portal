@@ -17,11 +17,69 @@ import {
   setServiceQuoteOnHold,
 } from '@/lib/quotes/serviceQuoteWorkflowService'
 import type { ServiceQuoteClosedStatus, ServiceQuoteInvoiceStatus } from '@/lib/quotes/serviceQuoteWorkflow'
-
-
+import { sendMailViaGraph } from '@/lib/graph/sendMail'
+import { escapeHtml } from '@/lib/html/escapeHtml'
+import { publicAppBaseUrl } from '@/lib/app/publicAppBaseUrl'
 
 function fail(message: string, status = 400) {
   return NextResponse.json({ ok: false, error: message }, { status })
+}
+
+async function sendQuoteApprovalEmail(params: {
+  assigneeEmail: string
+  assigneeName: string
+  approverName: string
+  customerName: string
+  quoteNumber: string
+  quoteId: string
+  poReference: string
+  approvalMessage: string
+}): Promise<void> {
+  const quoteUrl = `${publicAppBaseUrl()}/quotes?q=${encodeURIComponent(params.quoteNumber)}`
+  const po = params.poReference
+    ? `<p style="margin:0 0 12px"><strong>PO / Reference:</strong> ${escapeHtml(params.poReference)}</p>`
+    : ''
+  const notes = params.approvalMessage
+    ? `<p style="margin:16px 0 4px"><strong>Notes from manager:</strong></p>
+       <p style="margin:0 0 16px;padding:12px 16px;background:#f8fafc;border-left:3px solid #1e3a8a;border-radius:4px">${escapeHtml(params.approvalMessage)}</p>`
+    : ''
+  const html = `<!DOCTYPE html><html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NBE Portal</title></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px">
+  <tr><td align="center">
+    <table width="100%" style="max-width:600px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+      <tr>
+        <td style="background:#1e3a8a;padding:20px 28px">
+          <p style="margin:0;color:#fff;font-size:20px;font-weight:700;letter-spacing:-0.3px">NBE Australia</p>
+          <p style="margin:4px 0 0;color:rgba(255,255,255,.85);font-size:13px">Quote Approved &amp; Assigned</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:28px 28px 24px;color:#111827;font-size:15px;line-height:1.6">
+          <p style="margin:0 0 16px">Hi ${escapeHtml(params.assigneeName)},</p>
+          <p style="margin:0 0 16px">Quote <strong>${escapeHtml(params.quoteNumber)}</strong> for <strong>${escapeHtml(params.customerName || 'a customer')}</strong> has been approved and assigned to you by ${escapeHtml(params.approverName)}.</p>
+          ${po}${notes}
+          <p style="margin:24px 0 0">
+            <a href="${escapeHtml(quoteUrl)}" style="display:inline-block;background:#1e3a8a;color:#fff;font-weight:600;padding:10px 20px;border-radius:6px;text-decoration:none">View Quote</a>
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:16px 28px 24px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:12px">
+          This is an automated notification from the NBE Portal. Do not reply to this email.
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`
+
+  await sendMailViaGraph({
+    to: params.assigneeEmail,
+    subject: `Quote assigned: ${params.quoteNumber} — ${params.customerName || 'New quote'}`,
+    bodyHtml: html,
+  })
 }
 
 /**
@@ -85,13 +143,41 @@ export async function POST(
 
   try {
     switch (action) {
-      case 'approve':
+      case 'approve': {
+        const assignedUserId = String(body.assigned_user_id ?? '')
+        const poReference    = String(body.approval_po_reference ?? '')
+        const approvalMsg    = String(body.approval_message ?? '')
         await approveServiceQuote(supabase, quoteId, user.id, actorName, {
-          approval_po_reference: String(body.approval_po_reference ?? ''),
-          approval_message: String(body.approval_message ?? ''),
-          assigned_user_id: String(body.assigned_user_id ?? ''),
+          approval_po_reference: poReference,
+          approval_message: approvalMsg,
+          assigned_user_id: assignedUserId,
         })
+        // Send notification email to assignee (best-effort — don't fail the approval if email fails)
+        if (assignedUserId) {
+          try {
+            const srClient = createServiceRoleClient()
+            const [{ data: userData }, { data: quoteRow }] = await Promise.all([
+              srClient.auth.admin.getUserById(assignedUserId),
+              srClient.from('quotes').select('quote_number,customer_name').eq('id', quoteId).maybeSingle(),
+            ])
+            const assigneeEmail = String(userData?.user?.email ?? '').trim()
+            const assigneeName  = await profileDisplayName(srClient, assignedUserId)
+            if (assigneeEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(assigneeEmail)) {
+              await sendQuoteApprovalEmail({
+                assigneeEmail,
+                assigneeName,
+                approverName: actorName,
+                customerName: String((quoteRow as Record<string,unknown> | null)?.customer_name ?? ''),
+                quoteNumber:  String((quoteRow as Record<string,unknown> | null)?.quote_number ?? quoteId),
+                quoteId,
+                poReference,
+                approvalMessage: approvalMsg,
+              })
+            }
+          } catch { /* non-fatal — approval already saved */ }
+        }
         break
+      }
 
       case 'put_on_hold':
         await setServiceQuoteOnHold(supabase, quoteId, user.id, actorName, String(body.closure_note ?? ''))
