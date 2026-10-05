@@ -575,13 +575,13 @@ export default function NewQuotesPage() {
         if (!data) return
         const qt = String((data as Record<string, unknown>).quote_type ?? '')
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if      (qt === 'GENERAL')         loadGeneralQuote(data as any)
+        if      (qt === 'GENERAL')         { loadGeneralQuote(data as any);  setView('form') }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        else if (qt === 'MAINTENANCE')     loadMaintQuote(data as any)
+        else if (qt === 'MAINTENANCE')     { loadMaintQuote(data as any);    setView('form') }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        else if (qt === 'PARTS')           loadPartsQuote(data as any)
+        else if (qt === 'PARTS')           { loadPartsQuote(data as any);    setView('form') }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        else if (qt === 'PVC_FLEX_SYSTEM') loadPvcFlexQuote(data as any)
+        else if (qt === 'PVC_FLEX_SYSTEM') { loadPvcFlexQuote(data as any);  setView('form') }
       } catch { /* ignore */ }
     })()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
