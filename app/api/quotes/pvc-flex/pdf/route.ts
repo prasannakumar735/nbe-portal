@@ -4,30 +4,30 @@ import { unauthorizedOrForbiddenResponse } from '@/lib/security/httpAuthErrors'
 import { generatePvcFlexQuotePdf, type PvcFlexQuotePdfInput } from '@/lib/pdf/generatePvcFlexQuotePdf'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 
-type QuoteTcEndUser = 'CUSTOMER' | 'DISTRIBUTOR' | 'TENDER'
-
-async function resolveTcPdfBytes(endUser: QuoteTcEndUser | '' | undefined): Promise<Buffer | null> {
+async function resolveTcPdfBytes(endUser: string | '' | undefined): Promise<Buffer | null> {
   if (!endUser) return null
   try {
     const sb = createServiceRoleClient()
-    // Try specific end-user type first, then fall back to ALL
-    const candidates = [endUser, 'ALL']
-    for (const candidate of candidates) {
-      const { data: tcRow } = await sb
-        .from('quote_tc_documents')
-        .select('storage_path')
-        .eq('quote_type', 'PVC_FLEX_SYSTEM')
-        .eq('end_user_type', candidate)
-        .maybeSingle()
+    const { data: rows } = await sb
+      .from('quote_tc_documents')
+      .select('storage_path, end_user_type')
+      .eq('quote_type', 'PVC_FLEX_SYSTEM')
 
-      if (tcRow?.storage_path) {
-        const { data: fileData } = await sb.storage
-          .from('quote-tc-documents')
-          .download(tcRow.storage_path)
-        if (fileData) return Buffer.from(await fileData.arrayBuffer())
-      }
-    }
-    return null
+    if (!rows?.length) return null
+
+    // Case-insensitive match against the free-text label, then fall back to any row labelled ALL
+    const normalised = endUser.toLowerCase()
+    const match =
+      rows.find(r => r.end_user_type.toLowerCase() === normalised) ??
+      rows.find(r => r.end_user_type.toLowerCase() === 'all')
+
+    if (!match?.storage_path) return null
+
+    const { data: fileData } = await sb.storage
+      .from('quote-tc-documents')
+      .download(match.storage_path)
+
+    return fileData ? Buffer.from(await fileData.arrayBuffer()) : null
   } catch {
     return null
   }

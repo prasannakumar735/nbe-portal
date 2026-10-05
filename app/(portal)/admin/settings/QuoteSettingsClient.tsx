@@ -453,7 +453,7 @@ export function QuoteSettingsClient() {
   )
 }
 
-// ── Terms & Conditions Upload (unchanged) ─────────────────────────────────────
+// ── Terms & Conditions Upload ──────────────────────────────────────────────────
 
 type TcRow = {
   quote_type:    string
@@ -463,50 +463,34 @@ type TcRow = {
   storage_path:  string
 }
 
-const TC_QUOTE_TYPES: { key: string; label: string; endUserTypes: { key: string; label: string }[] }[] = [
-  {
-    key: 'INDUSTRIAL_RAPID_DOOR',
-    label: 'Industrial Rapid Door',
-    endUserTypes: [
-      { key: 'CUSTOMER',    label: 'Customer' },
-      { key: 'DISTRIBUTOR', label: 'Distributor' },
-      { key: 'TENDER',      label: 'Tender' },
-    ],
-  },
-  {
-    key: 'PVC_FLEX_SYSTEM',
-    label: 'PVC Flex System',
-    endUserTypes: [
-      { key: 'CUSTOMER', label: 'Customer' },
-      { key: 'TENDER',   label: 'Tender' },
-    ],
-  },
-  { key: 'MAINTENANCE_SERVICE_REPAIR', label: 'Maintenance / Repair',   endUserTypes: [{ key: 'ALL', label: 'General T&C' }] },
-  { key: 'PARTS',                      label: 'Parts',                  endUserTypes: [{ key: 'ALL', label: 'General T&C' }] },
-  { key: 'GENERAL',                    label: 'General',                endUserTypes: [{ key: 'ALL', label: 'General T&C' }] },
+const TC_QUOTE_TYPES = [
+  { key: 'INDUSTRIAL_RAPID_DOOR',      label: 'Industrial Rapid Door' },
+  { key: 'PVC_FLEX_SYSTEM',            label: 'PVC Flex System' },
+  { key: 'MAINTENANCE_SERVICE_REPAIR', label: 'Maintenance / Repair' },
+  { key: 'PARTS',                      label: 'Parts' },
+  { key: 'GENERAL',                    label: 'General' },
 ]
 
 function TcUploadSection() {
   const [activeTcType, setActiveTcType] = useState('INDUSTRIAL_RAPID_DOOR')
   const [tcDocs, setTcDocs]             = useState<TcRow[]>([])
-  const [uploading, setUploading]       = useState<string | null>(null)
-  const [uploadMsg, setUploadMsg]       = useState<{ key: string; ok: boolean; text: string } | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const pendingUpload = useRef<{ quoteType: string; endUserType: string } | null>(null)
+  const [newLabel, setNewLabel]         = useState('')
+  const [newFile, setNewFile]           = useState<File | null>(null)
+  const [adding, setAdding]             = useState(false)
+  const [addMsg, setAddMsg]             = useState<{ ok: boolean; text: string } | null>(null)
+  const [replacing, setReplacing]       = useState<string | null>(null)
+  const [deleting, setDeleting]         = useState<string | null>(null)
+  const replaceInputRef = useRef<HTMLInputElement>(null)
+  const pendingReplace  = useRef<string | null>(null)
 
   useEffect(() => { fetchTcDocs() }, [])
 
   async function fetchTcDocs() {
     try {
-      const res = await fetch('/api/admin/quote-tc/list')
+      const res  = await fetch('/api/admin/quote-tc/list')
       const json = await res.json()
       if (json.ok) setTcDocs(json.data)
     } catch { /* silent */ }
-  }
-
-  function triggerUpload(quoteType: string, endUserType: string) {
-    pendingUpload.current = { quoteType, endUserType }
-    fileInputRef.current?.click()
   }
 
   async function downloadTcDoc(storagePath: string, fileName: string) {
@@ -514,97 +498,172 @@ function TcUploadSection() {
       const res = await fetch(`/api/admin/quote-tc/download?path=${encodeURIComponent(storagePath)}`)
       if (!res.ok) return
       const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
       a.href = url; a.download = fileName; a.click()
       URL.revokeObjectURL(url)
     } catch { /* silent */ }
   }
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    const target = pendingUpload.current
-    if (!file || !target) return
-    e.target.value = ''
-    const key = `${target.quoteType}|${target.endUserType}`
-    setUploading(key); setUploadMsg(null)
+  async function handleAdd() {
+    if (!newLabel.trim() || !newFile) return
+    setAdding(true); setAddMsg(null)
     const fd = new FormData()
-    fd.append('file', file)
-    fd.append('quoteType', target.quoteType)
-    fd.append('endUserType', target.endUserType)
+    fd.append('file', newFile)
+    fd.append('quoteType', activeTcType)
+    fd.append('endUserType', newLabel.trim())
     try {
       const res  = await fetch('/api/admin/quote-tc/upload', { method: 'POST', body: fd })
       const json = await res.json()
-      if (json.ok) { setUploadMsg({ key, ok: true, text: 'Uploaded successfully' }); await fetchTcDocs() }
-      else setUploadMsg({ key, ok: false, text: json.error ?? 'Upload failed' })
-    } catch { setUploadMsg({ key, ok: false, text: 'Network error' }) }
-    finally { setUploading(null); pendingUpload.current = null }
+      if (json.ok) {
+        setAddMsg({ ok: true, text: 'Uploaded successfully' })
+        setNewLabel(''); setNewFile(null)
+        await fetchTcDocs()
+      } else {
+        setAddMsg({ ok: false, text: json.error ?? 'Upload failed' })
+      }
+    } catch { setAddMsg({ ok: false, text: 'Network error' }) }
+    finally { setAdding(false) }
   }
 
-  const activeConfig = TC_QUOTE_TYPES.find(t => t.key === activeTcType)!
+  function triggerReplace(endUserType: string) {
+    pendingReplace.current = endUserType
+    replaceInputRef.current?.click()
+  }
+
+  async function handleReplaceFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    const endUserType = pendingReplace.current
+    if (!file || !endUserType) return
+    e.target.value = ''
+    setReplacing(endUserType)
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('quoteType', activeTcType)
+    fd.append('endUserType', endUserType)
+    try {
+      const res  = await fetch('/api/admin/quote-tc/upload', { method: 'POST', body: fd })
+      const json = await res.json()
+      if (json.ok) await fetchTcDocs()
+    } catch { /* silent */ }
+    finally { setReplacing(null); pendingReplace.current = null }
+  }
+
+  async function handleDelete(endUserType: string) {
+    setDeleting(endUserType)
+    try {
+      const res  = await fetch('/api/admin/quote-tc/upload', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quoteType: activeTcType, endUserType }),
+      })
+      const json = await res.json()
+      if (json.ok) await fetchTcDocs()
+    } catch { /* silent */ }
+    finally { setDeleting(null) }
+  }
+
+  const activeDocs = tcDocs.filter(d => d.quote_type === activeTcType)
 
   return (
     <div className="space-y-4">
       <div>
         <h2 className="text-base font-semibold text-slate-800">Terms &amp; Conditions Documents</h2>
-        <p className="mt-0.5 text-sm text-slate-500">Upload updated T&amp;C PDFs per quote type and end-user category. Uploaded files override the bundled defaults when generating quotes.</p>
+        <p className="mt-0.5 text-sm text-slate-500">Upload T&amp;C PDFs per quote type. Add as many labelled files as needed — each label identifies which T&amp;C applies when generating quotes.</p>
       </div>
+
+      {/* Quote type tabs */}
       <div className="flex gap-1 flex-wrap">
         {TC_QUOTE_TYPES.map(t => (
-          <button key={t.key} type="button" onClick={() => setActiveTcType(t.key)}
+          <button key={t.key} type="button" onClick={() => { setActiveTcType(t.key); setAddMsg(null) }}
             className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${activeTcType === t.key ? 'bg-indigo-600 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
             {t.label}
           </button>
         ))}
       </div>
-      <div className="rounded-2xl border border-slate-200 bg-white divide-y divide-slate-100">
-        {activeConfig.endUserTypes.map(eu => {
-          const key     = `${activeTcType}|${eu.key}`
-          const current = tcDocs.find(d => d.quote_type === activeTcType && d.end_user_type === eu.key)
-          const isUp    = uploading === key
-          const msg     = uploadMsg?.key === key ? uploadMsg : null
-          return (
-            <div key={eu.key} className="flex items-center gap-4 px-5 py-4">
-              <div className="w-36 shrink-0">
-                <p className="text-sm font-semibold text-slate-700">{eu.label}</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">{eu.key === 'ALL' ? 'All end users' : `End user: ${eu.key}`}</p>
-              </div>
-              <div className="flex-1 min-w-0">
-                {current ? (
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[16px] text-green-500">check_circle</span>
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-slate-700 truncate">{current.file_name}</p>
-                      <p className="text-[11px] text-slate-400">Uploaded {new Date(current.uploaded_at).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <span className="material-symbols-outlined text-[16px]">upload_file</span>
-                    <p className="text-xs">Using bundled default T&amp;C</p>
-                  </div>
-                )}
-                {msg && <p className={`text-[11px] mt-1 font-medium ${msg.ok ? 'text-green-600' : 'text-red-500'}`}>{msg.text}</p>}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {current && (
-                  <button type="button" onClick={() => downloadTcDoc(current.storage_path, current.file_name)}
+
+      {/* Uploaded docs list */}
+      {activeDocs.length > 0 && (
+        <div className="rounded-2xl border border-slate-200 bg-white divide-y divide-slate-100">
+          {activeDocs.map(doc => {
+            const isReplacing = replacing === doc.end_user_type
+            const isDeleting  = deleting  === doc.end_user_type
+            return (
+              <div key={doc.end_user_type} className="flex items-center gap-4 px-5 py-4">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-700">{doc.end_user_type}</p>
+                  <p className="text-xs text-slate-500 truncate mt-0.5">{doc.file_name}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Uploaded {new Date(doc.uploaded_at).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button type="button" onClick={() => downloadTcDoc(doc.storage_path, doc.file_name)}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition">
                     <span className="material-symbols-outlined text-[14px]">download</span>Download
                   </button>
-                )}
-                <button type="button" disabled={isUp} onClick={() => triggerUpload(activeTcType, eu.key)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition disabled:opacity-50">
-                  {isUp ? <><span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>Uploading…</>
-                        : <><span className="material-symbols-outlined text-[14px]">upload</span>{current ? 'Replace' : 'Upload PDF'}</>}
-                </button>
+                  <button type="button" disabled={isReplacing} onClick={() => triggerReplace(doc.end_user_type)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition disabled:opacity-50">
+                    {isReplacing
+                      ? <><span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>Replacing…</>
+                      : <><span className="material-symbols-outlined text-[14px]">upload</span>Replace</>}
+                  </button>
+                  <button type="button" disabled={isDeleting} onClick={() => handleDelete(doc.end_user_type)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-500 shadow-sm hover:bg-red-50 transition disabled:opacity-50">
+                    {isDeleting
+                      ? <><span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>Deleting…</>
+                      : <><span className="material-symbols-outlined text-[14px]">delete</span>Delete</>}
+                  </button>
+                </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
+      )}
+
+      {activeDocs.length === 0 && (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-6 text-center">
+          <span className="material-symbols-outlined text-[28px] text-slate-300">upload_file</span>
+          <p className="mt-1 text-sm text-slate-400">No T&amp;C documents uploaded for this quote type yet.</p>
+        </div>
+      )}
+
+      {/* Add new T&C */}
+      <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 space-y-3">
+        <p className="text-sm font-semibold text-slate-700">Add T&amp;C Document</p>
+        <div className="flex gap-3 flex-wrap items-end">
+          <div className="flex-1 min-w-[180px]">
+            <label className="block text-[11px] font-medium text-slate-500 mb-1">Label</label>
+            <input
+              type="text"
+              placeholder="e.g. Customer, Tender, Distributor…"
+              maxLength={80}
+              value={newLabel}
+              onChange={e => setNewLabel(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            />
+          </div>
+          <div className="flex-1 min-w-[180px]">
+            <label className="block text-[11px] font-medium text-slate-500 mb-1">PDF File</label>
+            <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 cursor-pointer hover:bg-slate-100 transition">
+              <span className="material-symbols-outlined text-[16px]">attach_file</span>
+              <span className="truncate">{newFile ? newFile.name : 'Choose PDF…'}</span>
+              <input type="file" accept="application/pdf" className="hidden" onChange={e => setNewFile(e.target.files?.[0] ?? null)} />
+            </label>
+          </div>
+          <button
+            type="button"
+            disabled={adding || !newLabel.trim() || !newFile}
+            onClick={handleAdd}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition disabled:opacity-50 shrink-0">
+            {adding
+              ? <><span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>Uploading…</>
+              : <><span className="material-symbols-outlined text-[14px]">upload</span>Upload</>}
+          </button>
+        </div>
+        {addMsg && <p className={`text-[11px] font-medium ${addMsg.ok ? 'text-green-600' : 'text-red-500'}`}>{addMsg.text}</p>}
       </div>
-      <input ref={fileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleFileChange} />
-      <p className="text-[11px] text-slate-400">PDF files only · Max 20 MB · Uploaded files are stored in Supabase Storage and applied immediately to all new quotes.</p>
+
+      <input ref={replaceInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleReplaceFile} />
+      <p className="text-[11px] text-slate-400">PDF files only · Max 20 MB · Files are stored in Supabase Storage and applied immediately to all new quotes.</p>
     </div>
   )
 }
