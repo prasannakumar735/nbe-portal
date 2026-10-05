@@ -12,6 +12,7 @@ import {
   markServiceQuoteCompleted,
   profileDisplayName,
   resumeServiceQuoteFromHold,
+  revertServiceQuoteToDraft,
   setServiceQuoteInvoiceStatus,
   setServiceQuoteOnHold,
 } from '@/lib/quotes/serviceQuoteWorkflowService'
@@ -118,6 +119,10 @@ export async function POST(
 
       case 'mark_completed':
         await markServiceQuoteCompleted(supabase, quoteId, user.id, actorName)
+        break
+
+      case 'revert_to_draft':
+        await revertServiceQuoteToDraft(supabase, quoteId, user.id, actorName, String(body.note ?? ''))
         break
 
       case 'set_invoice':

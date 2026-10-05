@@ -539,7 +539,61 @@ export default function NewQuotesPage() {
   const [workflowState,     setWorkflowState]     = useState<ServiceQuoteWorkflowState | null>(null)
   const [workflowLoading,   setWorkflowLoading]   = useState(false)
   // ID of the saved quote currently loaded in the form (null = fresh/unsaved)
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingId,            setEditingId]            = useState<string | null>(null)
+  const [isReadOnly,           setIsReadOnly]           = useState(false)
+  const [pendingAutoGenerate,  setPendingAutoGenerate]  = useState<string | null>(null)
+
+  // true when a saved quote is open but the user hasn't clicked "Edit" yet
+  const formLocked = isReadOnly && !!editingId
+
+  // Keep the URL in sync with the open quote (e.g. /quotes?q=QGEN261005001)
+  useEffect(() => {
+    if (quoteNumber) {
+      window.history.replaceState(null, '', `/quotes?q=${encodeURIComponent(quoteNumber)}`)
+    } else {
+      window.history.replaceState(null, '', '/quotes')
+    }
+  }, [quoteNumber])
+
+  // Warn the user before an accidental browser refresh while a quote is open
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (quoteNumber) { e.preventDefault(); e.returnValue = '' }
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [quoteNumber])
+
+  // On mount: if the URL contains ?q=<quoteNumber>, auto-load that quote
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('q')
+    if (!q) return
+    createSupabaseClient()
+      .from('quotes').select('*').eq('quote_number', q).maybeSingle()
+      .then(({ data }) => {
+        if (!data) return
+        const qt = String((data as Record<string, unknown>).quote_type ?? '')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if      (qt === 'GENERAL')         loadGeneralQuote(data as any)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        else if (qt === 'MAINTENANCE')     loadMaintQuote(data as any)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        else if (qt === 'PARTS')           loadPartsQuote(data as any)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        else if (qt === 'PVC_FLEX_SYSTEM') loadPvcFlexQuote(data as any)
+      })
+      .catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-generate the PDF preview when a saved quote is first loaded (read-only mode)
+  useEffect(() => {
+    if (!pendingAutoGenerate) return
+    const type = pendingAutoGenerate
+    setPendingAutoGenerate(null)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fns: Record<string, () => void> = { general: handleGenerateGeneral as any, maint: handleGenerateMaintenance as any, parts: handleGenerateParts as any, pvcflex: handleGeneratePvcFlex as any }
+    fns[type]?.()
+  }, [pendingAutoGenerate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetch('/api/pvc/quotes/meta')
@@ -740,6 +794,8 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     quoteNumberRef.current = null
     quoteIdRef.current = null
     setEditingId(null)
+    setIsReadOnly(false)
+    setPendingAutoGenerate(null)
     generalQuoteIdRef.current = null; generalQuoteNumberRef.current = null
     maintQuoteIdRef.current   = null; maintQuoteNumberRef.current   = null
     partsQuoteIdRef.current   = null; partsQuoteNumberRef.current   = null
@@ -829,6 +885,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     quoteNumberRef.current = q.quote_number
     quoteIdRef.current = q.id
     setEditingId(q.id)
+    setIsReadOnly(true)
     // Customer
     setCustName(q.customer_name ?? '')
     setCustAddress(q.site_address ?? '')
@@ -1320,6 +1377,8 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     maintQuoteNumberRef.current = row.quote_number
     quoteNumberRef.current      = row.quote_number
     setEditingId(row.id)
+    setIsReadOnly(true)
+    setPendingAutoGenerate('maint')
     setQuoteNumber(row.quote_number)
     setShowPreview(false); setPreviewUrl(null); setMaintSaveMsg(null)
     if (snap.maintItems)          setMaintItems(snap.maintItems as typeof maintItems)
@@ -1406,6 +1465,8 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     partsQuoteNumberRef.current = row.quote_number
     quoteNumberRef.current      = row.quote_number
     setEditingId(row.id)
+    setIsReadOnly(true)
+    setPendingAutoGenerate('parts')
     setQuoteNumber(row.quote_number)
     setShowPreview(false); setPreviewUrl(null); setPartsSaveMsg(null)
     if (snap.partsItems)          setPartsItems(snap.partsItems as typeof partsItems)
@@ -1562,6 +1623,8 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     generalQuoteNumberRef.current = row.quote_number
     quoteNumberRef.current        = row.quote_number
     setEditingId(row.id)
+    setIsReadOnly(true)
+    setPendingAutoGenerate('general')
     setQuoteNumber(row.quote_number)
     setShowPreview(false)
     setPreviewUrl(null)
@@ -1775,6 +1838,8 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     pvcFlexQuoteNumberRef.current = row.quote_number
     quoteNumberRef.current        = row.quote_number
     setEditingId(row.id)
+    setIsReadOnly(true)
+    setPendingAutoGenerate('pvcflex')
     setQuoteNumber(row.quote_number)
     setShowPreview(false); setPreviewUrl(null); setPvcFlexSaveMsg(null)
     if (snap.savedPvcDoors)      setSavedPvcDoors(snap.savedPvcDoors as typeof savedPvcDoors)
@@ -2061,6 +2126,7 @@ const autoDescLines = [
   }
 
   function handleEditQuote() {
+    setIsReadOnly(false)
     setShowPreview(false)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -2387,7 +2453,19 @@ const autoDescLines = [
               const maintAfterDiscount = maintSubtotal * (1 - discPctM / 100)
               const fmtM = (n: number) => n === 0 ? '$0.00' : `$${n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
               return (
-                <div className="space-y-0 divide-y divide-slate-100">
+                <div className={`space-y-0 divide-y divide-slate-100${formLocked ? ' pointer-events-none opacity-75 select-none' : ''}`}>
+                  {formLocked && (
+                    <div className="pointer-events-auto flex items-center justify-between gap-3 bg-amber-50 px-6 py-3">
+                      <div className="flex items-center gap-2 text-sm font-medium text-amber-800">
+                        <span className="material-symbols-outlined text-[15px]">lock</span>
+                        Read-only — viewing saved quote
+                      </div>
+                      <button type="button" onClick={() => { setIsReadOnly(false); setShowPreview(false); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-700 transition">
+                        <span className="material-symbols-outlined text-[15px]">edit</span>Edit Quote
+                      </button>
+                    </div>
+                  )}
 
                   {/* ── Sender / Company Info ── */}
                   <div className="px-6 pt-5 pb-5">
@@ -2836,7 +2914,19 @@ const autoDescLines = [
               const partsAfterDiscount = partsSubtotal * (1 - discPctP / 100)
               const fmtP = (n: number) => n === 0 ? '$0.00' : `$${n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
               return (
-                <div className="space-y-0 divide-y divide-slate-100">
+                <div className={`space-y-0 divide-y divide-slate-100${formLocked ? ' pointer-events-none opacity-75 select-none' : ''}`}>
+                  {formLocked && (
+                    <div className="pointer-events-auto flex items-center justify-between gap-3 bg-amber-50 px-6 py-3">
+                      <div className="flex items-center gap-2 text-sm font-medium text-amber-800">
+                        <span className="material-symbols-outlined text-[15px]">lock</span>
+                        Read-only — viewing saved quote
+                      </div>
+                      <button type="button" onClick={() => { setIsReadOnly(false); setShowPreview(false); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-700 transition">
+                        <span className="material-symbols-outlined text-[15px]">edit</span>Edit Quote
+                      </button>
+                    </div>
+                  )}
 
                   {/* ── Sender / Company Info ── */}
                   <div className="px-6 pt-5 pb-5">
@@ -3315,7 +3405,19 @@ const autoDescLines = [
               const discPct = showGeneralDiscount ? (parseFloat(generalDiscountPct) || 0) : 0
               const generalAfterDiscount = generalSubtotal * (1 - discPct / 100)
               return (
-                <div className="space-y-0 divide-y divide-slate-100">
+                <div className={`space-y-0 divide-y divide-slate-100${formLocked ? ' pointer-events-none opacity-75 select-none' : ''}`}>
+                  {formLocked && (
+                    <div className="pointer-events-auto flex items-center justify-between gap-3 bg-amber-50 px-6 py-3">
+                      <div className="flex items-center gap-2 text-sm font-medium text-amber-800">
+                        <span className="material-symbols-outlined text-[15px]">lock</span>
+                        Read-only — viewing saved quote
+                      </div>
+                      <button type="button" onClick={() => { setIsReadOnly(false); setShowPreview(false); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-700 transition">
+                        <span className="material-symbols-outlined text-[15px]">edit</span>Edit Quote
+                      </button>
+                    </div>
+                  )}
 
                   {/* ── Sender / Company Info ── */}
                   <div className="px-6 pt-5 pb-5">
@@ -3859,8 +3961,8 @@ const autoDescLines = [
             </div>
           )}
 
-          {/* ── Recent General Quotes ────────────────────────────────────── */}
-          {isGeneral && !editingId && (
+          {/* ── Recent General Quotes — shown on dashboard only ─────────── */}
+          {false && isGeneral && !editingId && (
             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
               <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -3986,7 +4088,19 @@ const autoDescLines = [
             const hasAnyDoor = savedPvcDoors.length > 0 || (!!pvcW && !!pvcH)
             const canGeneratePvc = !generating && hasAnyDoor && (custCanBeBlank || customerFilled)
             return (
-              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+              <div className={`rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden${formLocked ? ' pointer-events-none opacity-75 select-none' : ''}`}>
+                {formLocked && (
+                  <div className="pointer-events-auto flex items-center justify-between gap-3 bg-amber-50 px-6 py-3 border-b border-amber-100">
+                    <div className="flex items-center gap-2 text-sm font-medium text-amber-800">
+                      <span className="material-symbols-outlined text-[15px]">lock</span>
+                      Read-only — viewing saved quote
+                    </div>
+                    <button type="button" onClick={() => { setIsReadOnly(false); setShowPreview(false); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-700 transition">
+                      <span className="material-symbols-outlined text-[15px]">edit</span>Edit Quote
+                    </button>
+                  </div>
+                )}
 
                 {/* ── Sender Details ── */}
                 <div className="px-6 pt-6 pb-4 border-b border-slate-100">
@@ -5150,8 +5264,8 @@ const autoDescLines = [
         </div>
       )}
 
-      {/* ── Recent Maintenance Quotes ───────────────────────────────────────── */}
-      {isMaintenance && !editingId && (() => {
+      {/* ── Recent Maintenance Quotes — shown on dashboard only ─────────────── */}
+      {false && isMaintenance && !editingId && (() => {
         const RecentTable = ({ rows, loading, onOpen, onRefresh }: { rows: SavedQuoteRow[]; loading: boolean; onOpen: (r: SavedQuoteRow) => void; onRefresh: () => void; label: string }) => (
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
@@ -5207,8 +5321,8 @@ const autoDescLines = [
         return <RecentTable rows={recentMaintQuotes} loading={recentMaintLoading} onOpen={loadMaintQuote} onRefresh={loadRecentMaintQuotes} label="Maintenance / Repair" />
       })()}
 
-      {/* ── Recent Parts Quotes ─────────────────────────────────────────────── */}
-      {isParts && !editingId && (() => {
+      {/* ── Recent Parts Quotes — shown on dashboard only ───────────────────── */}
+      {false && isParts && !editingId && (() => {
         const RecentTable = ({ rows, loading, onOpen, onRefresh }: { rows: SavedQuoteRow[]; loading: boolean; onOpen: (r: SavedQuoteRow) => void; onRefresh: () => void }) => (
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">

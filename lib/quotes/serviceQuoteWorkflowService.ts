@@ -267,6 +267,48 @@ export async function setServiceQuoteInvoiceStatus(
   if (error) throw error
 }
 
+export async function revertServiceQuoteToDraft(
+  supabase: SupabaseClient,
+  quoteId: string,
+  actorId: string,
+  actorName: string,
+  note?: string,
+): Promise<void> {
+  const { data: row, error: loadErr } = await supabase.from('quotes').select('*').eq('id', quoteId).maybeSingle()
+  if (loadErr) throw loadErr
+  if (!row) throw new Error('Quote not found.')
+  const ws = String(row.workflow_status ?? 'draft_review')
+  if (ws !== 'approved' && ws !== 'completed') {
+    throw new Error('Only approved or completed quotes can be reverted to draft.')
+  }
+
+  const trimmed = String(note ?? '').trim()
+  const history = appendServiceWorkflowHistory(row.workflow_history, {
+    status: 'draft_review',
+    at: new Date().toISOString(),
+    by_user_id: actorId,
+    by_name: actorName,
+    note: trimmed || 'Reverted to draft',
+  })
+
+  const { error } = await supabase
+    .from('quotes')
+    .update({
+      workflow_status: 'draft_review',
+      approved_at: null,
+      approved_by: null,
+      completed_at: null,
+      completed_by: null,
+      invoice_status: null,
+      invoice_status_at: null,
+      workflow_history: history,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', quoteId)
+
+  if (error) throw error
+}
+
 export async function listServiceQuotesPendingCompletion(
   supabase: SupabaseClient,
   olderThanDays = 3,

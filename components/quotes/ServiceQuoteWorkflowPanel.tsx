@@ -336,19 +336,32 @@ export function ServiceQuoteWorkflowPanel({
             </div>
           )}
 
-          {/* ── Approved: mark completed ───────────────────────── */}
+          {/* ── Approved: mark completed or revert ───────────── */}
           {status === 'approved' && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => postWorkflow({ action: 'mark_completed' })}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
-            >
-              Mark service completed
-            </button>
+            <div className="space-y-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => postWorkflow({ action: 'mark_completed' })}
+                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+              >
+                Mark service completed
+              </button>
+              <div className="border-t border-slate-100 pt-3">
+                <p className="mb-2 text-xs text-slate-500">Need to revise the quote?</p>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => postWorkflow({ action: 'revert_to_draft', note: 'Reverted from approved' })}
+                  className="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-60"
+                >
+                  Revert to Draft
+                </button>
+              </div>
+            </div>
           )}
 
-          {/* ── Completed: invoice status ──────────────────────── */}
+          {/* ── Completed: invoice status + revert ────────────── */}
           {status === 'completed' && !workflow.invoice_status && (
             <div className="space-y-2">
               <p className="text-sm font-medium text-slate-800">Update invoice status</p>
@@ -368,6 +381,17 @@ export function ServiceQuoteWorkflowPanel({
                   className="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-60"
                 >
                   Not invoiced
+                </button>
+              </div>
+              <div className="border-t border-slate-100 pt-3">
+                <p className="mb-2 text-xs text-slate-500">Need to revise the quote?</p>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => postWorkflow({ action: 'revert_to_draft', note: 'Reverted from completed' })}
+                  className="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-60"
+                >
+                  Revert to Draft
                 </button>
               </div>
             </div>
