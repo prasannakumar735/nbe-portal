@@ -266,6 +266,7 @@ export async function fetchManagerAttendance(
 
     const calcDist = (lat: unknown, lng: unknown): number | null => {
       if (siteLat == null || siteLng == null) return null
+      if (lat == null || lng == null) return null
       const la = Number(lat); const lo = Number(lng)
       if (!Number.isFinite(la) || !Number.isFinite(lo)) return null
       return haversineMetres(la, lo, siteLat, siteLng)
