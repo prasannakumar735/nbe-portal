@@ -244,13 +244,22 @@ export function discountedSellPrice(
 
 /** Human-readable spec description (multi-line) for PDF */
 export function buildPvcDoorDescription(spec: PvcNewQuoteSpec, calc: PvcNewQuoteResult): string {
+  const includeStrips   = spec.supplyType !== 'Headrail Only'
+  const includeHeadrail = spec.supplyType !== 'Strip Curtain Only'
+  const hangerDesc = includeHeadrail ? `${spec.hanger} hangers & headrail` : `${spec.hanger} hangers`
   const lines: string[] = [
     `Opening: ${spec.openingW} W × ${spec.openingH} H mm`,
     `Strip: ${spec.stripWidth}mm × ${spec.thickness}mm — ${spec.grade} / ${spec.profile}`,
-    `${spec.hanger} hangers & headrail — ${spec.supplyType} — ${spec.mountingType}`,
+    `${hangerDesc} — ${spec.supplyType} — ${spec.mountingType}`,
   ]
   if (spec.sliding !== 'NA')       lines.push(`Sliding System: ${spec.sliding}`)
   if (spec.raisedHeadrail !== 'NA') lines.push(`Raised Headrail: ${spec.raisedHeadrail} (${spec.openingW >= 4500 ? '≥4500mm' : '<4500mm'})`)
-  lines.push(`${calc.numStrips} strips × ${calc.cutLengthMm}mm cut length — Rail: ${calc.coverageM.toFixed(2)}m`)
+  if (includeStrips && includeHeadrail) {
+    lines.push(`${calc.numStrips} strips × ${calc.cutLengthMm}mm cut length — Rail: ${calc.coverageM.toFixed(2)}m`)
+  } else if (includeStrips) {
+    lines.push(`${calc.numStrips} strips × ${calc.cutLengthMm}mm cut length`)
+  } else {
+    lines.push(`Rail: ${calc.coverageM.toFixed(2)}m`)
+  }
   return lines.join('\n')
 }
