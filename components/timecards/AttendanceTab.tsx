@@ -228,6 +228,7 @@ export function AttendanceTab() {
                   <th className="px-3 py-2">Duration</th>
                   <th className="px-3 py-2">Site</th>
                   <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Distance from office</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -248,6 +249,26 @@ export function AttendanceTab() {
                         <span className="text-indigo-700">System logged out</span>
                       ) : (
                         <span className="text-slate-600">Closed</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      {r.clockInDistanceMetres != null || r.clockOutDistanceMetres != null ? (
+                        <div className="flex flex-col gap-0.5">
+                          {r.clockInDistanceMetres != null && (
+                            <span className={r.clockInDistanceMetres > 500 ? 'font-medium text-red-600' : 'text-slate-600'}>
+                              In: {r.clockInDistanceMetres < 1000 ? `${r.clockInDistanceMetres}m` : `${(r.clockInDistanceMetres / 1000).toFixed(1)}km`}
+                              {r.clockInDistanceMetres > 500 ? ' ⚠️' : ''}
+                            </span>
+                          )}
+                          {r.clockOutDistanceMetres != null && (
+                            <span className={r.clockOutDistanceMetres > 500 ? 'font-medium text-red-600' : 'text-slate-600'}>
+                              Out: {r.clockOutDistanceMetres < 1000 ? `${r.clockOutDistanceMetres}m` : `${(r.clockOutDistanceMetres / 1000).toFixed(1)}km`}
+                              {r.clockOutDistanceMetres > 500 ? ' ⚠️' : ''}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-300">—</span>
                       )}
                     </td>
                   </tr>

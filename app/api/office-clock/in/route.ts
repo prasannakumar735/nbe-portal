@@ -6,13 +6,15 @@ import { jsonError500 } from '@/lib/security/safeApiError'
 
 export const runtime = 'nodejs'
 
-type Body = { siteSlug?: string }
+type Body = { siteSlug?: string; lat?: number | null; lng?: number | null }
 
 export async function POST(request: NextRequest) {
   try {
     assertJsonContentLength(request, 4096)
     const raw = (await request.json().catch(() => null)) as Body | null
     const siteSlug = typeof raw?.siteSlug === 'string' ? raw.siteSlug.trim().toLowerCase() : ''
+    const clockInLat = typeof raw?.lat === 'number' && Number.isFinite(raw.lat) ? raw.lat : null
+    const clockInLng = typeof raw?.lng === 'number' && Number.isFinite(raw.lng) ? raw.lng : null
     if (!siteSlug) {
       return NextResponse.json({ error: 'siteSlug is required.' }, { status: 400 })
     }
@@ -76,6 +78,8 @@ export async function POST(request: NextRequest) {
         user_id: user.id,
         site_id: String(s.id),
         clock_in_at: new Date().toISOString(),
+        clock_in_lat: clockInLat,
+        clock_in_lng: clockInLng,
       })
       .select('id, clock_in_at')
       .single()

@@ -121,15 +121,26 @@ export function OfficeClockClient({ initialSiteSlug }: Props) {
   const selectedSite = useMemo(() => sites.find(s => s.slug === siteSlug), [sites, siteSlug])
   const configured = selectedSite?.configured ?? false
 
+  const getGps = (): Promise<{ lat: number; lng: number } | null> =>
+    new Promise(resolve => {
+      if (!navigator.geolocation) return resolve(null)
+      navigator.geolocation.getCurrentPosition(
+        p => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
+        () => resolve(null),
+        { timeout: 8000, maximumAge: 30000 },
+      )
+    })
+
   const signIn = async () => {
     setBusy(true)
     setError(null)
     setMessage(null)
     try {
+      const gps = await getGps()
       const res = await fetch('/api/office-clock/in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ siteSlug }),
+        body: JSON.stringify({ siteSlug, lat: gps?.lat ?? null, lng: gps?.lng ?? null }),
       })
       const j = (await res.json().catch(() => ({}))) as { error?: string; ok?: boolean }
       if (!res.ok) {
@@ -148,7 +159,11 @@ export function OfficeClockClient({ initialSiteSlug }: Props) {
     setError(null)
     setMessage(null)
     try {
-      const outBody: { workTypeLevel2Id?: string } = {}
+      const gps = await getGps()
+      const outBody: { workTypeLevel2Id?: string; lat: number | null; lng: number | null } = {
+        lat: gps?.lat ?? null,
+        lng: gps?.lng ?? null,
+      }
       if (isTechnician && fabTaskId.trim()) outBody.workTypeLevel2Id = fabTaskId.trim()
       const res = await fetch('/api/office-clock/out', {
         method: 'POST',

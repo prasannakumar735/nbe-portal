@@ -23,6 +23,18 @@ export type ManagerAttendanceRow = {
   durationHours: number | null
   durationGrossMinutes: number | null
   durationDisplay: string | null
+  clockInDistanceMetres: number | null
+  clockOutDistanceMetres: number | null
+}
+
+function haversineMetres(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000
+  const φ1 = (lat1 * Math.PI) / 180
+  const φ2 = (lat2 * Math.PI) / 180
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180
+  const Δλ = ((lng2 - lng1) * Math.PI) / 180
+  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)))
 }
 
 export type ManagerAttendanceResult = {
@@ -161,7 +173,7 @@ export async function fetchManagerAttendance(
   let q = admin
     .from('office_attendance_sessions')
     .select(
-      'id, user_id, clock_in_at, clock_out_at, close_kind, site_id, office_clock_sites(display_name, slug)',
+      'id, user_id, clock_in_at, clock_out_at, close_kind, site_id, clock_in_lat, clock_in_lng, clock_out_lat, clock_out_lng, office_clock_sites(display_name, slug, site_lat, site_lng)',
     )
     .gte('clock_in_at', startIso)
     .lt('clock_in_at', endExclusiveIso)
@@ -177,7 +189,7 @@ export async function fetchManagerAttendance(
   if (joined.error) {
     let flatQ = admin
       .from('office_attendance_sessions')
-      .select('id, user_id, clock_in_at, clock_out_at, close_kind, site_id')
+      .select('id, user_id, clock_in_at, clock_out_at, close_kind, site_id, clock_in_lat, clock_in_lng, clock_out_lat, clock_out_lng')
       .gte('clock_in_at', startIso)
       .lt('clock_in_at', endExclusiveIso)
       .order('clock_in_at', { ascending: false })
@@ -204,14 +216,18 @@ export async function fetchManagerAttendance(
   const siteIds = [
     ...new Set(sessions.map(s => s.site_id).filter(Boolean).map(id => String(id))),
   ]
+  const siteLatLngById = new Map<string, { lat: number; lng: number }>()
   if (siteIds.length > 0) {
     const { data: sites } = await admin
       .from('office_clock_sites')
-      .select('id, display_name')
+      .select('id, display_name, site_lat, site_lng')
       .in('id', siteIds)
     for (const s of sites ?? []) {
-      const row = s as { id: string; display_name?: string }
+      const row = s as { id: string; display_name?: string; site_lat?: number | null; site_lng?: number | null }
       siteNameById.set(String(row.id), String(row.display_name ?? '').trim() || 'Unknown site')
+      if (row.site_lat != null && row.site_lng != null) {
+        siteLatLngById.set(String(row.id), { lat: Number(row.site_lat), lng: Number(row.site_lng) })
+      }
     }
   }
 
@@ -236,6 +252,25 @@ export async function fetchManagerAttendance(
     const grossMin =
       closed && clockOut ? grossMinutesBetween(clockIn, clockOut) : null
 
+    // Resolve site coords — prefer joined, fall back to separately loaded
+    let siteLat: number | null = null
+    let siteLng: number | null = null
+    const joinedSite = row.office_clock_sites as Record<string, unknown> | null | undefined
+    if (joinedSite?.site_lat != null && joinedSite?.site_lng != null) {
+      siteLat = Number(joinedSite.site_lat)
+      siteLng = Number(joinedSite.site_lng)
+    } else if (row.site_id) {
+      const s = siteLatLngById.get(String(row.site_id))
+      if (s) { siteLat = s.lat; siteLng = s.lng }
+    }
+
+    const calcDist = (lat: unknown, lng: unknown): number | null => {
+      if (siteLat == null || siteLng == null) return null
+      const la = Number(lat); const lo = Number(lng)
+      if (!Number.isFinite(la) || !Number.isFinite(lo)) return null
+      return haversineMetres(la, lo, siteLat, siteLng)
+    }
+
     rows.push({
       sessionId,
       userId: uid,
@@ -248,6 +283,8 @@ export async function fetchManagerAttendance(
       durationHours: grossMin != null ? durationHoursFromMinutes(grossMin) : null,
       durationGrossMinutes: grossMin,
       durationDisplay: grossMin != null ? formatDurationHm(grossMin) : null,
+      clockInDistanceMetres: calcDist(row.clock_in_lat, row.clock_in_lng),
+      clockOutDistanceMetres: calcDist(row.clock_out_lat, row.clock_out_lng),
     })
   }
 

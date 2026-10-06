@@ -17,12 +17,14 @@ import type { ProfileFromTable } from '@/lib/auth/roles'
 
 export const runtime = 'nodejs'
 
-type Body = { workTypeLevel2Id?: string | null }
+type Body = { workTypeLevel2Id?: string | null; lat?: number | null; lng?: number | null }
 
 export async function POST(request: Request) {
   try {
     assertJsonContentLength(request, 4096)
     const raw = (await request.json().catch(() => ({}))) as Body
+    const clockOutLat = typeof raw.lat === 'number' && Number.isFinite(raw.lat) ? raw.lat : null
+    const clockOutLng = typeof raw.lng === 'number' && Number.isFinite(raw.lng) ? raw.lng : null
 
     const supabase = await createServerClient()
     const {
@@ -137,6 +139,18 @@ export async function POST(request: Request) {
 
     if (!done.ok) {
       return NextResponse.json({ error: done.message }, { status: done.status })
+    }
+
+    // Store GPS coords on the session (best-effort — don't fail sign-out if this errors)
+    if (clockOutLat != null && clockOutLng != null) {
+      try {
+        await supabase
+          .from('office_attendance_sessions')
+          .update({ clock_out_lat: clockOutLat, clock_out_lng: clockOutLng })
+          .eq('id', String(sess.id))
+      } catch {
+        // best-effort
+      }
     }
 
     return NextResponse.json({
