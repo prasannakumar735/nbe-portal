@@ -543,6 +543,11 @@ export default function NewQuotesPage() {
   const [isReadOnly,           setIsReadOnly]           = useState(false)
   const [pendingAutoGenerate,  setPendingAutoGenerate]  = useState<string | null>(null)
 
+  // ── Delete confirmation modal ────────────────────────────────────────────────
+  const [deleteConfirmRow,  setDeleteConfirmRow]  = useState<AllQuoteRow | null>(null)
+  const [deleteInProgress,  setDeleteInProgress]  = useState(false)
+  const [deleteError,       setDeleteError]        = useState<string | null>(null)
+
   // true when a saved quote is open but the user hasn't clicked "Edit" yet
   const formLocked = isReadOnly && !!editingId
 
@@ -972,6 +977,33 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     if (q.quote_kind === 'maintenance') { loadMaintQuote(row as SavedQuoteRow);      setSelected('MAINTENANCE_SERVICE_REPAIR'); setView('form') }
     if (q.quote_kind === 'parts')       { loadPartsQuote(row as SavedQuoteRow);       setSelected('PARTS'); setView('form') }
     if (q.quote_kind === 'pvc_flex')    { loadPvcFlexQuote(row as SavedQuoteRow);      setSelected('PVC_FLEX_SYSTEM'); setView('form') }
+  }
+
+  // Open a quote AND immediately auto-generate its PDF
+  function openPdfFromList(q: AllQuoteRow) {
+    const kindMap: Record<string, string> = {
+      general: 'general', maintenance: 'maint', parts: 'parts', pvc_flex: 'pvcflex',
+    }
+    const autoKey = kindMap[q.quote_kind]
+    if (!autoKey) { openQuoteFromList(q); return }
+    openQuoteFromList(q)
+    setPendingAutoGenerate(autoKey)
+  }
+
+  async function handleDeleteQuote(id: string) {
+    setDeleteInProgress(true)
+    setDeleteError(null)
+    try {
+      const res = await fetch(`/api/quotes/${id}`, { method: 'DELETE' })
+      const json = await res.json()
+      if (!json.ok) throw new Error(json.error ?? 'Delete failed.')
+      setDeleteConfirmRow(null)
+      setRecentQuotes(prev => prev.filter(q => q.id !== id))
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : 'Delete failed.')
+    } finally {
+      setDeleteInProgress(false)
+    }
   }
 
   useEffect(() => {
@@ -2277,10 +2309,29 @@ const autoDescLines = [
                                             <span className="material-symbols-outlined text-[13px]">timeline</span>Workflow
                                           </button>
                                         )}
+                                        {kind !== 'rapid_door' && (
+                                          <button type="button" onClick={() => openPdfFromList(q)}
+                                            className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 hover:bg-sky-100 transition">
+                                            <span className="material-symbols-outlined text-[13px]">picture_as_pdf</span>PDF
+                                          </button>
+                                        )}
                                         <button type="button" onClick={() => openQuoteFromList(q)}
                                           className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 transition">
                                           <span className="material-symbols-outlined text-[13px]">edit</span>Open
                                         </button>
+                                        {(() => {
+                                          const isDraft = ['draft', 'draft_review'].includes(q.workflow_status ?? '')
+                                          return (
+                                            <button
+                                              type="button"
+                                              disabled={!isDraft}
+                                              onClick={() => { setDeleteConfirmRow(q); setDeleteError(null) }}
+                                              title={isDraft ? 'Delete this draft' : `Cannot delete — status is "${q.workflow_status}"`}
+                                              className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${isDraft ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100' : 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300'}`}>
+                                              <span className="material-symbols-outlined text-[13px]">delete</span>Delete
+                                            </button>
+                                          )
+                                        })()}
                                       </div>
                                     </td>
                                   </tr>
@@ -2300,17 +2351,35 @@ const autoDescLines = [
                                   <p className="font-mono text-xs font-semibold text-indigo-700">{q.quote_number}</p>
                                   <p className="mt-0.5 text-sm font-medium text-slate-800">{q.customer_name || <span className="text-slate-400 italic font-normal">No customer</span>}</p>
                                   <p className="mt-0.5 text-xs text-slate-500">{dateStr}</p>
-                                  <div className="mt-2 flex items-center gap-1.5">
+                                  <div className="mt-2 flex items-center gap-1.5 flex-wrap">
                                     {kind !== 'rapid_door' && (
                                       <button type="button" onClick={() => openWorkflowModal(q.id)}
                                         className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 transition">
                                         <span className="material-symbols-outlined text-[13px]">timeline</span>Workflow
                                       </button>
                                     )}
+                                    {kind !== 'rapid_door' && (
+                                      <button type="button" onClick={() => openPdfFromList(q)}
+                                        className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 hover:bg-sky-100 transition">
+                                        <span className="material-symbols-outlined text-[13px]">picture_as_pdf</span>PDF
+                                      </button>
+                                    )}
                                     <button type="button" onClick={() => openQuoteFromList(q)}
                                       className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 transition">
                                       <span className="material-symbols-outlined text-[13px]">edit</span>Open
                                     </button>
+                                    {(() => {
+                                      const isDraft = ['draft', 'draft_review'].includes(q.workflow_status ?? '')
+                                      return (
+                                        <button
+                                          type="button"
+                                          disabled={!isDraft}
+                                          onClick={() => { setDeleteConfirmRow(q); setDeleteError(null) }}
+                                          className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${isDraft ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100' : 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300'}`}>
+                                          <span className="material-symbols-outlined text-[13px]">delete</span>Delete
+                                        </button>
+                                      )
+                                    })()}
                                   </div>
                                 </div>
                                 <div className="shrink-0 text-right">
@@ -2329,6 +2398,46 @@ const autoDescLines = [
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {/* Delete confirmation modal */}
+        {deleteConfirmRow && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            onClick={() => { if (!deleteInProgress) { setDeleteConfirmRow(null); setDeleteError(null) } }}>
+            <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="flex items-start gap-4 p-6">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100">
+                  <span className="material-symbols-outlined text-[20px] text-red-600">warning</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-base font-semibold text-slate-900">Delete Quote?</h2>
+                  <p className="mt-1.5 text-sm text-slate-600">
+                    You are about to permanently delete quote{' '}
+                    <span className="font-mono font-semibold text-indigo-700">{deleteConfirmRow.quote_number}</span>
+                    {deleteConfirmRow.customer_name ? ` for ${deleteConfirmRow.customer_name}` : ''}.
+                    This action cannot be undone.
+                  </p>
+                  {deleteError && (
+                    <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700">{deleteError}</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2.5 border-t border-slate-100 px-6 py-4">
+                <button type="button" disabled={deleteInProgress}
+                  onClick={() => { setDeleteConfirmRow(null); setDeleteError(null) }}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition">
+                  Cancel
+                </button>
+                <button type="button" disabled={deleteInProgress}
+                  onClick={() => handleDeleteQuote(deleteConfirmRow.id)}
+                  className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60 transition">
+                  {deleteInProgress
+                    ? <><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />Deleting…</>
+                    : <><span className="material-symbols-outlined text-[14px]">delete</span>Yes, Delete</>}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
