@@ -3,7 +3,8 @@ import { melbourneCalendarDate } from '@/lib/officeClock/melbourneWallClock'
 import { serviceReminderNotifyIsoDate } from '@/lib/serviceReminders/dueDate'
 import {
   notifyServiceDueReminderClient,
-  notifyServiceDueReminderManagers,
+  notifyServiceDueReminderManagersBatch,
+  type ServiceDueReminderItem,
 } from '@/lib/notifications/portalGraphNotifications'
 import { isCalendarNotificationsDisabled } from '@/lib/notifications/isCalendarNotificationsDisabled'
 
@@ -60,7 +61,10 @@ export async function runServiceDueRemindersJob(): Promise<Record<string, unknow
 
   let sent = 0
   const errors: string[] = []
+  const managerItems: ServiceDueReminderItem[] = []
+  const flaggedIds: string[] = []
 
+  // First pass: flag all reminders and collect client emails
   for (const raw of dueToday) {
     const row = raw as unknown as Record<string, unknown>
     const id = String(row.id ?? '')
@@ -79,10 +83,10 @@ export async function runServiceDueRemindersJob(): Promise<Record<string, unknow
       continue
     }
 
-    let ok = true
+    flaggedIds.push(id)
 
     if (row.send_manager_email !== false) {
-      const mgr = await notifyServiceDueReminderManagers(supabase, {
+      managerItems.push({
         clientName,
         title: String(row.title ?? 'Service due'),
         dueDate: String(row.due_date ?? ''),
@@ -90,13 +94,10 @@ export async function runServiceDueRemindersJob(): Promise<Record<string, unknow
         lastServiceDate: row.last_service_date ? String(row.last_service_date) : null,
         notes: row.notes ? String(row.notes) : null,
       })
-      if (mgr.status === 'failed') {
-        errors.push(`manager email failed for ${id}: ${mgr.error}`)
-        ok = false
-      }
     }
 
-    if (ok && row.send_client_email === true) {
+    // Client emails are still sent individually per reminder
+    if (row.send_client_email === true) {
       const em = String(row.client_contact_email ?? '').trim()
       if (em) {
         const clientRes = await notifyServiceDueReminderClient({
@@ -108,18 +109,26 @@ export async function runServiceDueRemindersJob(): Promise<Record<string, unknow
         })
         if (clientRes.status === 'failed') {
           errors.push(`client email failed for ${id}: ${clientRes.error}`)
-          ok = false
         }
       }
     }
 
-    if (!ok) {
-      await supabase
-        .from('client_service_due_reminders')
-        .update({ reminder_sent_at: null })
-        .eq('id', id)
-    } else {
-      sent++
+    sent++
+  }
+
+  // Send one consolidated manager email for all reminders due today
+  if (managerItems.length > 0) {
+    const mgr = await notifyServiceDueReminderManagersBatch(supabase, managerItems)
+    if (mgr.status === 'failed') {
+      errors.push(`manager batch email failed: ${mgr.error}`)
+      // Roll back flags for all reminders that were part of manager send
+      for (const id of flaggedIds) {
+        await supabase
+          .from('client_service_due_reminders')
+          .update({ reminder_sent_at: null })
+          .eq('id', id)
+      }
+      sent = 0
     }
   }
 

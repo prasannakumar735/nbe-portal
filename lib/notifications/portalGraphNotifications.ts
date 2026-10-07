@@ -357,6 +357,102 @@ export async function notifyServiceDueReminderManagers(
   }
 }
 
+export type ServiceDueReminderItem = {
+  clientName: string
+  title: string
+  dueDate: string
+  leadTimeDays: number
+  lastServiceDate: string | null
+  notes: string | null
+}
+
+/**
+ * Consolidated manager email: one email listing ALL service-due reminders firing today.
+ */
+export async function notifyServiceDueReminderManagersBatch(
+  supabase: SupabaseClient,
+  items: ServiceDueReminderItem[],
+): Promise<PortalNotifyResult> {
+  if (isCalendarNotificationsDisabled()) {
+    return { status: 'skipped', reason: 'notifications disabled (local testing)' }
+  }
+  if (items.length === 0) {
+    return { status: 'skipped', reason: 'No reminders to send.' }
+  }
+
+  let recipients: Array<{ email: string; full_name: string | null }>
+  try {
+    recipients = await getManagerPlusServiceRecipients(supabase)
+  } catch (e) {
+    return { status: 'failed', error: e instanceof Error ? e.message : 'Recipient lookup failed.' }
+  }
+  if (recipients.length === 0) {
+    return { status: 'skipped', reason: 'No manager/admin or service recipients.' }
+  }
+
+  const listUrl = `${publicAppBaseUrl()}/service-reminders`
+  const subject =
+    items.length === 1
+      ? `Service due soon: ${items[0]!.clientName} — ${items[0]!.title.slice(0, 50)}`
+      : `${items.length} service reminders due today`
+
+  const rows = items
+    .map(item => {
+      const dueDateLabel = formatDateForEmail(item.dueDate)
+      const lastLabel = item.lastServiceDate ? formatDateForEmail(item.lastServiceDate) : '—'
+      return (
+        `<tr style=”border-bottom:1px solid #e2e8f0”>` +
+        `<td style=”padding:8px 12px;font-weight:600;color:#111827”>${escapeHtml(item.clientName)}</td>` +
+        `<td style=”padding:8px 12px;color:#374151”>${escapeHtml(item.title)}</td>` +
+        `<td style=”padding:8px 12px;color:#374151”>${escapeHtml(dueDateLabel)}</td>` +
+        `<td style=”padding:8px 12px;color:#374151”>${escapeHtml(lastLabel)}</td>` +
+        `${item.notes ? `<td style=”padding:8px 12px;color:#6b7280;font-size:13px”>${escapeHtml(item.notes)}</td>` : `<td style=”padding:8px 12px;color:#9ca3af”>—</td>`}` +
+        `</tr>`
+      )
+    })
+    .join('')
+
+  const table =
+    `<table style=”width:100%;border-collapse:collapse;font-size:13px;margin:12px 0 20px”>` +
+    `<thead><tr style=”background:#f1f5f9”>` +
+    `<th style=”padding:8px 12px;text-align:left;color:#6b7280;font-weight:600;text-transform:uppercase;font-size:11px”>Client</th>` +
+    `<th style=”padding:8px 12px;text-align:left;color:#6b7280;font-weight:600;text-transform:uppercase;font-size:11px”>Reminder</th>` +
+    `<th style=”padding:8px 12px;text-align:left;color:#6b7280;font-weight:600;text-transform:uppercase;font-size:11px”>Due Date</th>` +
+    `<th style=”padding:8px 12px;text-align:left;color:#6b7280;font-weight:600;text-transform:uppercase;font-size:11px”>Last Service</th>` +
+    `<th style=”padding:8px 12px;text-align:left;color:#6b7280;font-weight:600;text-transform:uppercase;font-size:11px”>Notes</th>` +
+    `</tr></thead><tbody>${rows}</tbody></table>`
+
+  try {
+    for (const r of recipients) {
+      const name = String(r.full_name ?? '').trim() || 'there'
+      const html = buildServiceDueEmailHtml({
+        preheader: items.length === 1
+          ? `${items[0]!.clientName} scheduled service due ${formatDateForEmail(items[0]!.dueDate)}`
+          : `${items.length} client service reminders are due today`,
+        accentColour: '#0d9488',
+        headerSubtitle: 'Service due reminder',
+        footerLine: 'You received this email because client service-due reminders are configured in the NBE Portal.',
+        body: `
+          <p style=”margin:0 0 16px”>Hi ${escapeHtml(name)},</p>
+          <p style=”margin:0 0 4px”>
+            ${items.length === 1
+              ? `The following scheduled maintenance is coming due. Please prepare client communication:`
+              : `The following ${items.length} scheduled maintenance reminders are due today. Please prepare client communication:`}
+          </p>
+          ${table}
+          <p style=”margin:24px 0 0”>
+            <a href=”${escapeHtml(listUrl)}” style=”display:inline-block;background:#0d9488;color:#fff;font-weight:600;padding:10px 20px;border-radius:6px;text-decoration:none”>View service reminders</a>
+          </p>
+        `,
+      })
+      await sendMailViaGraph({ to: r.email, subject, bodyHtml: html })
+    }
+    return { status: 'sent', recipients: recipients.length }
+  } catch (e) {
+    return { status: 'failed', error: e instanceof Error ? e.message : 'Graph send failed.' }
+  }
+}
+
 /**
  * Optional client-facing “service due soon” email to the selected contact.
  */

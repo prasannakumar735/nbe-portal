@@ -1,7 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 import { melbourneCalendarDate } from '@/lib/officeClock/melbourneWallClock'
-import { notifyDoorServiceAlertManagers } from '@/lib/notifications/doorServiceAlertNotification'
+import {
+  notifyDoorServiceAlertManagersBatch,
+  type DoorServiceAlertGroup,
+} from '@/lib/notifications/doorServiceAlertNotification'
 import { isCalendarNotificationsDisabled } from '@/lib/notifications/isCalendarNotificationsDisabled'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -262,49 +265,50 @@ export async function runDoorServiceAlertsJob(): Promise<Record<string, unknown>
     if (door.due_date > group.latestDueDate) group.latestDueDate = door.due_date
   }
 
-  // ── 7. Send one email per client+location group, log each ─────────────────
+  // ── 7. Sort doors within each group, then send ONE consolidated email ────────
 
   let sent = 0
   const errors: string[] = []
 
   for (const group of groupsByLocation.values()) {
-    // Sort doors by due_date ascending
     group.doors.sort((a, b) => a.due_date.localeCompare(b.due_date))
+  }
 
-    const result = await notifyDoorServiceAlertManagers(supabase, {
-      clientName: group.clientName,
-      locationName: group.locationName,
-      doors: group.doors,
-      leadTimeDays,
-      serviceIntervalMonths,
-      customRecipients,
-    })
+  const allGroups: DoorServiceAlertGroup[] = [...groupsByLocation.values()].map(g => ({
+    clientName: g.clientName,
+    locationName: g.locationName,
+    doors: g.doors,
+    leadTimeDays,
+    serviceIntervalMonths,
+  }))
 
-    if (result.status === 'failed') {
-      errors.push(`${group.clientName} / ${group.locationName}: ${result.error}`)
-      continue
-    }
+  const result = await notifyDoorServiceAlertManagersBatch(supabase, allGroups, customRecipients)
 
-    // Log the alert so we don't re-send for the same doors
-    const { error: logErr } = await supabase.from('door_service_alert_log').insert({
-      client_id: group.clientId,
-      client_location_id: group.locationId,
-      door_ids: group.doors.map(d => d.id),
-      door_count: group.doors.length,
-      earliest_due_date: group.earliestDueDate,
-      latest_due_date: group.latestDueDate,
-      lead_time_days: leadTimeDays,
-      sent_at: new Date().toISOString(),
-    })
+  if (result.status === 'failed') {
+    errors.push(`batch email: ${result.error}`)
+  } else {
+    // Log each location group so we don't re-send for those doors
+    const now = new Date().toISOString()
+    for (const group of groupsByLocation.values()) {
+      const { error: logErr } = await supabase.from('door_service_alert_log').insert({
+        client_id: group.clientId,
+        client_location_id: group.locationId,
+        door_ids: group.doors.map(d => d.id),
+        door_count: group.doors.length,
+        earliest_due_date: group.earliestDueDate,
+        latest_due_date: group.latestDueDate,
+        lead_time_days: leadTimeDays,
+        sent_at: now,
+      })
 
-    if (logErr) {
-      errors.push(`Log insert failed for ${group.clientName}: ${logErr.message}`)
-    } else {
-      // Mark these doors as alerted so future runs skip them
-      const existing = alertedDoorIdsByLocation.get(group.locationId) ?? new Set<string>()
-      for (const d of group.doors) existing.add(d.id)
-      alertedDoorIdsByLocation.set(group.locationId, existing)
-      sent++
+      if (logErr) {
+        errors.push(`Log insert failed for ${group.clientName}: ${logErr.message}`)
+      } else {
+        const existing = alertedDoorIdsByLocation.get(group.locationId) ?? new Set<string>()
+        for (const d of group.doors) existing.add(d.id)
+        alertedDoorIdsByLocation.set(group.locationId, existing)
+        sent++
+      }
     }
   }
 

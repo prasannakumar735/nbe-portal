@@ -121,6 +121,135 @@ function buildHtml(p: {
 </body></html>`
 }
 
+export type DoorServiceAlertGroup = {
+  clientName: string
+  locationName: string
+  doors: AlertDoor[]
+  leadTimeDays: number
+  serviceIntervalMonths: number
+}
+
+/**
+ * Single consolidated email listing ALL client+location groups due in this cron run.
+ */
+export async function notifyDoorServiceAlertManagersBatch(
+  supabase: SupabaseClient,
+  groups: DoorServiceAlertGroup[],
+  customRecipients?: Array<{ email: string; name: string }>,
+): Promise<PortalNotifyResult> {
+  if (isCalendarNotificationsDisabled()) {
+    return { status: 'skipped', reason: 'notifications disabled (local testing)' }
+  }
+  if (groups.length === 0) {
+    return { status: 'skipped', reason: 'No door service alert groups.' }
+  }
+
+  let recipients: Array<{ email: string; name: string }>
+  if (customRecipients && customRecipients.length > 0) {
+    recipients = customRecipients
+  } else {
+    const { data: managers } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .in('role', ['manager', 'admin'])
+    const profileRows = (managers ?? []) as Array<{ id: string; full_name: string | null }>
+    recipients = []
+    await Promise.all(
+      profileRows.map(async m => {
+        const { data } = await supabase.auth.admin.getUserById(String(m.id))
+        const email = String(data?.user?.email ?? '').trim().toLowerCase()
+        if (!isValidEmail(email)) return
+        if (!email.endsWith('@nbeaustralia.com.au')) return
+        recipients.push({ email, name: String(m.full_name ?? '').trim() || 'there' })
+      }),
+    )
+  }
+
+  if (recipients.length === 0) {
+    return { status: 'skipped', reason: 'No nbeaustralia.com.au manager recipients found.' }
+  }
+
+  const totalDoors = groups.reduce((s, g) => s + g.doors.length, 0)
+  const subject =
+    groups.length === 1
+      ? `Door service alert: ${groups[0]!.clientName} — ${groups[0]!.locationName} (${groups[0]!.doors.length} ${groups[0]!.doors.length === 1 ? 'door' : 'doors'} due)`
+      : `Door service alert: ${groups.length} locations, ${totalDoors} doors due`
+
+  const baseUrl = publicAppBaseUrl()
+  const serviceRemindersUrl = `${baseUrl}/service-reminders`
+
+  // Build one section per location group
+  const groupSections = groups
+    .map(g => {
+      const doorWord = g.doors.length === 1 ? 'door' : 'doors'
+      return (
+        `<p style="margin:16px 0 6px;font-weight:700;color:#0f172a;font-size:14px">` +
+        `${escapeHtml(g.clientName)} — ${escapeHtml(g.locationName)}` +
+        `<span style="font-weight:400;color:#6b7280;font-size:13px"> (${g.doors.length} ${doorWord})</span></p>` +
+        buildDoorRows(g.doors)
+      )
+    })
+    .join('')
+
+  const leadTimeDays = groups[0]?.leadTimeDays ?? 0
+  const serviceIntervalMonths = groups[0]?.serviceIntervalMonths ?? 6
+
+  try {
+    for (const r of recipients) {
+      const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NBE Portal — Door Service Alert</title></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<span style="display:none;max-height:0;overflow:hidden">${escapeHtml(`${totalDoors} doors across ${groups.length} location${groups.length > 1 ? 's' : ''} require service attention`)}</span>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px">
+  <tr><td align="center">
+    <table width="100%" style="max-width:640px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+      <tr>
+        <td style="background:#0f172a;padding:20px 28px">
+          <p style="margin:0;color:#fff;font-size:20px;font-weight:700;letter-spacing:-0.3px">NBE Portal</p>
+          <p style="margin:4px 0 0;color:rgba(255,255,255,.75);font-size:13px">Door Service Alert — Action Required</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:28px 28px 8px;color:#111827;font-size:15px;line-height:1.6">
+          <p style="margin:0 0 16px">Hi ${escapeHtml(r.name)},</p>
+          <p style="margin:0 0 16px">
+            The following ${escapeHtml(String(totalDoors))} ${totalDoors === 1 ? 'door' : 'doors'} across
+            <strong>${escapeHtml(String(groups.length))} ${groups.length === 1 ? 'location' : 'locations'}</strong>
+            ${totalDoors === 1 ? 'is' : 'are'} approaching or past their
+            ${escapeHtml(String(serviceIntervalMonths))}-month service interval.
+            Notification sent <strong>${escapeHtml(String(leadTimeDays))} days</strong> before each due date.
+          </p>
+          ${groupSections}
+          <p style="margin:0 0 16px;font-size:14px;color:#374151">
+            Please review and schedule service visits as needed.
+          </p>
+          <p style="margin:0 0 24px">
+            <a href="${escapeHtml(serviceRemindersUrl)}"
+               style="display:inline-block;background:#0f172a;color:#fff;font-weight:600;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px">
+              View Service Reminders
+            </a>
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:16px 28px 24px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:12px;line-height:1.5">
+          Automated alert from NBE Portal. Notification timing is configurable in Portal Settings (currently ${escapeHtml(String(leadTimeDays))} days lead time).
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`
+      await sendMailViaGraph({ to: r.email, subject, bodyHtml: html })
+    }
+    return { status: 'sent', recipients: recipients.length }
+  } catch (e) {
+    return { status: 'failed', error: e instanceof Error ? e.message : 'Graph send failed.' }
+  }
+}
+
 /**
  * Send a door-service-due digest email to all nbeaustralia.com.au managers.
  * One email per client+location group listing ALL doors due in that batch.
