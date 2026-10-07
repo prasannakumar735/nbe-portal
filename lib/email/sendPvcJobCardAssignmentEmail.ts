@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendMailViaGraph } from '@/lib/graph/sendMail'
 import { escapeHtml } from '@/lib/html/escapeHtml'
 import { publicAppBaseUrl } from '@/lib/app/publicAppBaseUrl'
-import { generatePvcJobCardPdf, type PvcJobCardPdfInput } from '@/lib/pdf/generatePvcJobCardPdf'
+import { generatePvcJobCardPdf, type PvcJobCardInput as PvcJobCardPdfInput } from '@/lib/pdf/generatePvcJobCardPdf'
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)

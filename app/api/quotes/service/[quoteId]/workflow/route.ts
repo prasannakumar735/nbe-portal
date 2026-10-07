@@ -17,9 +17,11 @@ import {
   setServiceQuoteOnHold,
 } from '@/lib/quotes/serviceQuoteWorkflowService'
 import type { ServiceQuoteClosedStatus, ServiceQuoteInvoiceStatus } from '@/lib/quotes/serviceQuoteWorkflow'
-import { sendMailViaGraph } from '@/lib/graph/sendMail'
+import { sendMailViaGraph, type GraphSendMailAttachment } from '@/lib/graph/sendMail'
 import { escapeHtml } from '@/lib/html/escapeHtml'
 import { publicAppBaseUrl } from '@/lib/app/publicAppBaseUrl'
+import { generatePvcJobCardPdf, type PvcJobCardDoor } from '@/lib/pdf/generatePvcJobCardPdf'
+import { calcPvcNewQuote, autoRaisedHeadrailSize } from '@/lib/pvc/pvcNewQuoteCalculator'
 
 function fail(message: string, status = 400) {
   return NextResponse.json({ ok: false, error: message }, { status })
@@ -235,6 +237,134 @@ export async function POST(
           } catch (emailErr) {
             emailStatus = `failed:${emailErr instanceof Error ? emailErr.message : String(emailErr)}`
           }
+        }
+        // Generate PVC job card PDF and email to technician (best-effort)
+        try {
+          const srClient2 = createServiceRoleClient()
+          const { data: qRow } = await srClient2
+            .from('quotes')
+            .select('quote_number, quote_type, customer_name, site_address, form_snapshot, approval_po_reference')
+            .eq('id', quoteId)
+            .maybeSingle()
+          const qr = qRow as Record<string, unknown> | null
+          if (qr && String(qr.quote_type ?? '') === 'PVC_FLEX_SYSTEM') {
+            // ── Generate job card number JC-YYMMDD-NNN ────────────────────────
+            const today = new Intl.DateTimeFormat('en-CA', {
+              timeZone: 'Australia/Melbourne', year: 'numeric', month: '2-digit', day: '2-digit',
+            }).format(new Date()).replace(/-/g, '').slice(2)   // YYMMDD
+            const { data: existing } = await srClient2
+              .from('quotes')
+              .select('job_card_number')
+              .like('job_card_number', `JC-${today}-%`)
+            const nextSeq = ((existing ?? []).length) + 1
+            const jobCardNumber = `JC-${today}-${String(nextSeq).padStart(3, '0')}`
+            await srClient2.from('quotes').update({ job_card_number: jobCardNumber }).eq('id', quoteId)
+
+            // ── Build door specs from form_snapshot ───────────────────────────
+            const snap = qr.form_snapshot as Record<string, unknown> | null
+            type SnapDoor = {
+              id: string; openingW: string; openingH: string
+              stripWidth: number; thickness: number
+              grade: 'Ambient' | 'Freezer'
+              profile: 'Ribbed' | 'Flat' | 'Coloured'
+              hanger: 'Galvanised' | 'Stainless Steel'
+              supplyType: 'Complete Door' | 'Strip Curtain Only' | 'Headrail Only'
+              mountingType: 'Face Fixed' | 'Soffit Fixed'
+              sliding: 'NA' | 'Single' | 'Dual'
+              raisedHeadrail: boolean
+              qty: number
+            }
+            const snapDoors = (snap?.savedPvcDoors ?? []) as SnapDoor[]
+            const jobCardDoors: PvcJobCardDoor[] = snapDoors
+              .filter(d => d.openingW && d.openingH)
+              .map((d, i) => {
+                const raisedHR = d.raisedHeadrail ? autoRaisedHeadrailSize(parseFloat(d.openingW) || 0) : ('NA' as const)
+                const calc = calcPvcNewQuote({
+                  openingW: parseFloat(d.openingW) || 0,
+                  openingH: parseFloat(d.openingH) || 0,
+                  stripWidth: d.stripWidth, thickness: d.thickness,
+                  grade: d.grade, profile: d.profile, hanger: d.hanger,
+                  supplyType: d.supplyType, mountingType: d.mountingType,
+                  sliding: d.sliding, raisedHeadrail: raisedHR,
+                })
+                const headrailLabel = d.supplyType === 'Strip Curtain Only' ? 'N/A' : d.hanger
+                return {
+                  label:         `Door ${i + 1}`,
+                  materialType:  d.grade === 'Freezer' ? 'Coolroom' : 'Standard',
+                  profile:       d.profile,
+                  stripSizeMm:   d.stripWidth,
+                  thicknessMm:   d.thickness,
+                  stripLengthMm: calc.cutLengthMm,
+                  stripCount:    calc.numStrips,
+                  application:   d.supplyType,
+                  rivetsHangers: d.hanger,
+                  doorWidthMm:   parseFloat(d.openingW) || 0,
+                  doorHeightMm:  parseFloat(d.openingH) || 0,
+                  headrail:      headrailLabel,
+                  qty:           d.qty || 1,
+                }
+              })
+
+            const quoteNumber  = String(qr.quote_number ?? '')
+            const customerName = String(qr.customer_name ?? '')
+            const siteAddress  = String(qr.site_address ?? '')
+            const poRef        = String(qr.approval_po_reference ?? String(snap?.poReference ?? ''))
+            const custAttn     = String(snap?.custAttn ?? '')
+            const pvcNotes     = String(snap?.pvcTerms ?? '')
+            const dateStr      = new Date().toLocaleDateString('en-AU', {
+              day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Australia/Melbourne',
+            })
+
+            const pdfBytes = await generatePvcJobCardPdf({
+              jobCardNumber,
+              quoteNumber,
+              status:          'APPROVED',
+              assignedToName:  (await profileDisplayName(srClient2, assignedUserId)).toUpperCase(),
+              poReference:     poRef,
+              jobName:         `${customerName}${customerName && quoteNumber ? ' – ' : ''}${quoteNumber}`,
+              createdDate:     dateStr,
+              requiredBy:      '',
+              customerName,
+              siteContact:     custAttn,
+              siteAddress,
+              customerReference: poRef,
+              importantNote:   pvcNotes,
+              doors:           jobCardDoors,
+            })
+
+            // ── Email job card to technician ──────────────────────────────────
+            if (assignedUserId) {
+              const { data: techUser } = await srClient2.auth.admin.getUserById(assignedUserId)
+              const techEmail = String(techUser?.user?.email ?? '').trim()
+              if (techEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(techEmail)) {
+                const attachment: GraphSendMailAttachment = {
+                  name: `JobCard_${jobCardNumber}.pdf`,
+                  contentType: 'application/pdf',
+                  contentBytes: Buffer.from(pdfBytes).toString('base64'),
+                }
+                const techName = await profileDisplayName(srClient2, assignedUserId)
+                await sendMailViaGraph({
+                  to: techEmail,
+                  subject: `Job Card ${jobCardNumber} — ${customerName}`,
+                  bodyHtml: `<!DOCTYPE html><html><body style="font-family:sans-serif;color:#1a1a1a">
+<p>Hi ${escapeHtml(techName)},</p>
+<p>Please find attached your manufacturing job card for the following job:</p>
+<table style="border-collapse:collapse;margin:16px 0">
+  <tr><td style="padding:4px 12px 4px 0;color:#555;font-size:13px">Job Card</td><td style="padding:4px 0;font-size:13px"><strong>${escapeHtml(jobCardNumber)}</strong></td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#555;font-size:13px">Quote</td><td style="padding:4px 0;font-size:13px">${escapeHtml(quoteNumber)}</td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#555;font-size:13px">Customer</td><td style="padding:4px 0;font-size:13px">${escapeHtml(customerName)}</td></tr>
+  ${siteAddress ? `<tr><td style="padding:4px 12px 4px 0;color:#555;font-size:13px">Site</td><td style="padding:4px 0;font-size:13px">${escapeHtml(siteAddress)}</td></tr>` : ''}
+</table>
+<p>Please review the job card carefully before starting manufacturing.</p>
+<p>Regards,<br>NBE Australia</p>
+</body></html>`,
+                  attachments: [attachment],
+                })
+              }
+            }
+          }
+        } catch (jcErr) {
+          console.error('[pvc-job-card]', jcErr)
         }
         return NextResponse.json({ ok: true, emailStatus })
       }
