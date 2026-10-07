@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 
 type SiteInfo = {
@@ -34,6 +34,7 @@ export function OfficeClockClient({ initialSiteSlug }: Props) {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const actionInFlight = useRef(false)
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -132,6 +133,8 @@ export function OfficeClockClient({ initialSiteSlug }: Props) {
     })
 
   const signIn = async () => {
+    if (actionInFlight.current) return
+    actionInFlight.current = true
     setBusy(true)
     setError(null)
     setMessage(null)
@@ -150,11 +153,14 @@ export function OfficeClockClient({ initialSiteSlug }: Props) {
       setMessage('Signed in. Your timesheet will be updated when you sign out this evening.')
       await refresh()
     } finally {
+      actionInFlight.current = false
       setBusy(false)
     }
   }
 
   const signOut = async () => {
+    if (actionInFlight.current) return
+    actionInFlight.current = true
     setBusy(true)
     setError(null)
     setMessage(null)
@@ -189,6 +195,7 @@ export function OfficeClockClient({ initialSiteSlug }: Props) {
       )
       await refresh()
     } finally {
+      actionInFlight.current = false
       setBusy(false)
     }
   }
