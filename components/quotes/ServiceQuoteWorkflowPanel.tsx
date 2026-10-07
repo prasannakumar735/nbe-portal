@@ -361,6 +361,21 @@ export function ServiceQuoteWorkflowPanel({
             </div>
           )}
 
+          {/* ── Completed: clear invoice status ──────────────── */}
+          {status === 'completed' && workflow.invoice_status && (
+            <div className="border-t border-slate-100 pt-3">
+              <p className="mb-2 text-xs text-slate-500">Need to change the invoice status?</p>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => postWorkflow({ action: 'clear_invoice' })}
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                Revert invoice status
+              </button>
+            </div>
+          )}
+
           {/* ── Completed: invoice status + revert ────────────── */}
           {status === 'completed' && !workflow.invoice_status && (
             <div className="space-y-2">

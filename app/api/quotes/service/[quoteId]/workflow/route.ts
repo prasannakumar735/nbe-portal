@@ -274,6 +274,15 @@ export async function POST(
         await revertServiceQuoteToDraft(supabase, quoteId, user.id, actorName, String(body.note ?? ''))
         break
 
+      case 'clear_invoice': {
+        const { error: clrErr } = await supabase
+          .from('quotes')
+          .update({ invoice_status: null, invoice_status_at: null, updated_at: new Date().toISOString() })
+          .eq('id', quoteId)
+        if (clrErr) throw clrErr
+        break
+      }
+
       case 'set_invoice': {
         const invoiceStatus = String(body.invoice_status ?? '') as ServiceQuoteInvoiceStatus
         await setServiceQuoteInvoiceStatus(supabase, quoteId, user.id, actorName, invoiceStatus)
