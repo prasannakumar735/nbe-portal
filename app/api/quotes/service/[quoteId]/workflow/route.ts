@@ -22,6 +22,7 @@ import { escapeHtml } from '@/lib/html/escapeHtml'
 import { publicAppBaseUrl } from '@/lib/app/publicAppBaseUrl'
 import { generateServicePvcJobCardPdf, type ServicePvcJobCardDoor as PvcJobCardDoor } from '@/lib/pdf/generateServicePvcJobCardPdf'
 import { calcPvcNewQuote, autoRaisedHeadrailSize } from '@/lib/pvc/pvcNewQuoteCalculator'
+import { resolveAuthEmail } from '@/lib/timecard/timesheetCronHelpers'
 
 function fail(message: string, status = 400) {
   return NextResponse.json({ ok: false, error: message }, { status })
@@ -213,13 +214,12 @@ export async function POST(
         if (assignedUserId) {
           try {
             const srClient = createServiceRoleClient()
-            const [{ data: userData }, { data: quoteRow }] = await Promise.all([
-              srClient.auth.admin.getUserById(assignedUserId),
+            const [assigneeEmail, { data: quoteRow }] = await Promise.all([
+              resolveAuthEmail(srClient, assignedUserId),
               srClient.from('quotes').select('quote_number,customer_name').eq('id', quoteId).maybeSingle(),
             ])
-            const assigneeEmail = String(userData?.user?.email ?? '').trim()
             const assigneeName  = await profileDisplayName(srClient, assignedUserId)
-            if (!assigneeEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(assigneeEmail)) {
+            if (!assigneeEmail) {
               emailStatus = `skipped:no_email_for_user`
             } else {
               await sendQuoteApprovalEmail({
@@ -334,9 +334,8 @@ export async function POST(
 
             // ── Email job card to technician ──────────────────────────────────
             if (assignedUserId) {
-              const { data: techUser } = await srClient2.auth.admin.getUserById(assignedUserId)
-              const techEmail = String(techUser?.user?.email ?? '').trim()
-              if (techEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(techEmail)) {
+              const techEmail = await resolveAuthEmail(srClient2, assignedUserId)
+              if (techEmail) {
                 const attachment: GraphSendMailAttachment = {
                   name: `JobCard_${jobCardNumber}.pdf`,
                   contentType: 'application/pdf',
