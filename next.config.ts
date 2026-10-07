@@ -67,6 +67,9 @@ const nextConfig: NextConfig = {
 
 export default withSentryConfig(nextConfig, {
   silent: !process.env.CI,
-  /** Source map upload optional — set `SENTRY_AUTH_TOKEN` + org/project in CI when ready */
   widenClientFileUpload: false,
+  // Delete source maps after Sentry uploads them so they are not included in the Vercel function bundle
+  sourcemaps: {
+    deleteSourcemapsAfterUpload: true,
+  },
 })
