@@ -20,7 +20,7 @@ import type { ServiceQuoteClosedStatus, ServiceQuoteInvoiceStatus } from '@/lib/
 import { sendMailViaGraph, type GraphSendMailAttachment } from '@/lib/graph/sendMail'
 import { escapeHtml } from '@/lib/html/escapeHtml'
 import { publicAppBaseUrl } from '@/lib/app/publicAppBaseUrl'
-import { generatePvcJobCardPdf, type PvcJobCardDoor } from '@/lib/pdf/generatePvcJobCardPdf'
+import { generateServicePvcJobCardPdf, type ServicePvcJobCardDoor as PvcJobCardDoor } from '@/lib/pdf/generateServicePvcJobCardPdf'
 import { calcPvcNewQuote, autoRaisedHeadrailSize } from '@/lib/pvc/pvcNewQuoteCalculator'
 
 function fail(message: string, status = 400) {
@@ -315,7 +315,7 @@ export async function POST(
               day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Australia/Melbourne',
             })
 
-            const pdfBytes = await generatePvcJobCardPdf({
+            const pdfBytes = await generateServicePvcJobCardPdf({
               jobCardNumber,
               quoteNumber,
               status:          'APPROVED',

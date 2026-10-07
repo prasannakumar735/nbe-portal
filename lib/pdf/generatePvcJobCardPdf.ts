@@ -1,303 +1,300 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont } from 'pdf-lib'
+import type { ProposalDoor } from '@/lib/types/quote.types'
+import {
+  formatProposalHeadrailLabel,
+  formatProposalStripTypeLine,
+} from '@/lib/calculators/pvcQuoteLabels'
 import { embedRobotoForPdfLib } from '@/lib/pdf/robotoPdf'
+import type { QuoteData } from '@/lib/types/quote.types'
 
-// ── Colours ───────────────────────────────────────────────────────────────────
-const NAVY    = rgb(0.08, 0.18, 0.35)   // section header background
-const AMBER   = rgb(1.00, 0.95, 0.80)   // important note background
-const WHITE   = rgb(1,    1,    1)
-const BLACK   = rgb(0,    0,    0)
-const DKGRAY  = rgb(0.25, 0.25, 0.25)
-const LTGRAY  = rgb(0.93, 0.93, 0.93)
-const MIDGRAY = rgb(0.75, 0.75, 0.75)
-const BORDER  = rgb(0.82, 0.82, 0.82)
-
-export type PvcJobCardDoor = {
-  label:        string   // e.g. "Door 1"
-  materialType: string   // "Standard" | "Coolroom"
-  profile:      string   // "Ribbed" | "Flat" | "Coloured"
-  stripSizeMm:  number   // e.g. 200
-  thicknessMm:  number   // e.g. 3
-  stripLengthMm: number  // cut length
-  stripCount:   number
-  application:  string   // supplyType label
-  rivetsHangers: string  // hanger material
-  doorWidthMm:  number
-  doorHeightMm: number
-  headrail:     string   // hanger material or "N/A"
-  qty:          number
+export type PvcJobCardPdfInput = {
+  quoteData: QuoteData
+  headrailLengthMm: number | null
+  supplyScope: 'strips_only' | 'whole_door'
+  assignedToName: string
+  poReference?: string | null
+  approvalMessage?: string | null
 }
 
-export type PvcJobCardInput = {
-  jobCardNumber:   string
-  quoteNumber:     string
-  status:          string
-  assignedToName:  string
-  poReference:     string
-  jobName:         string
-  createdDate:     string
-  requiredBy:      string
-  customerName:    string
-  siteContact:     string
-  siteAddress:     string
-  customerReference: string
-  importantNote:   string
-  doors:           PvcJobCardDoor[]
+function deriveDoors(quoteData: QuoteData): ProposalDoor[] {
+  if (quoteData.doors && quoteData.doors.length > 0) {
+    return quoteData.doors
+  }
+  const quantity = Math.min(99, Math.max(1, Math.trunc(quoteData.input.door_quantity ?? 1) || 1))
+  return [
+    {
+      width_mm: quoteData.input.width_mm,
+      height_mm: quoteData.input.height_mm,
+      overlap_mm: quoteData.input.overlap_mm,
+      strip_width_mm: quoteData.input.strip_width_mm,
+      thickness_mm: quoteData.input.thickness_mm,
+      strip_type: quoteData.input.strip_type,
+      headrail_type: quoteData.input.headrail_type,
+      number_of_strips: quoteData.calculated.strip_count,
+      final_door_price: quoteData.calculated.final_quote_price,
+      quantity,
+    },
+  ]
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function line(page: PDFPage, x1: number, y1: number, x2: number, y2: number, thickness = 0.5, color = BORDER) {
-  page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness, color })
+function doorSupplyScope(door: ProposalDoor): 'strips_only' | 'whole_door' {
+  const ht = (door.headrail_type ?? '').toLowerCase()
+  return ht === 'none' || ht === 'strips_only' ? 'strips_only' : 'whole_door'
 }
 
-function rect(page: PDFPage, x: number, y: number, w: number, h: number, color = LTGRAY, border?: typeof BORDER) {
-  page.drawRectangle({ x, y, width: w, height: h, color })
-  if (border) page.drawRectangle({ x, y, width: w, height: h, color: border, borderWidth: 0.5 })
+function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+  const lines: string[] = []
+  for (const para of text.split('\n')) {
+    const words = para.replace(/[^\x20-\xFF]/g, ' ').replace(/\s+/g, ' ').trim().split(' ')
+    let line = ''
+    for (const word of words) {
+      const test = line ? `${line} ${word}` : word
+      if (font.widthOfTextAtSize(test, size) <= maxWidth) { line = test }
+      else { if (line) lines.push(line); line = word }
+    }
+    if (line) lines.push(line)
+  }
+  return lines
 }
 
-function t(
+function drawHLine(page: PDFPage, x: number, y: number, width: number, thickness = 0.5) {
+  page.drawLine({
+    start: { x, y },
+    end: { x: x + width, y },
+    thickness,
+    color: rgb(0.8, 0.8, 0.8),
+  })
+}
+
+function drawRect(
   page: PDFPage,
-  text: string,
   x: number,
   y: number,
-  font: PDFFont,
-  size: number,
-  color = BLACK,
-  maxWidth?: number,
+  w: number,
+  h: number,
+  fillColor = rgb(0.95, 0.95, 0.97),
 ) {
-  const s = String(text ?? '')
-  if (!s) return
-  const opts: Parameters<typeof page.drawText>[1] = { x, y, size, font, color }
-  if (maxWidth) opts.maxWidth = maxWidth
-  page.drawText(s, opts)
+  page.drawRectangle({ x, y, width: w, height: h, color: fillColor })
 }
 
-function sectionHeader(
-  page: PDFPage,
-  label: string,
-  x: number, y: number, w: number, h: number,
-  bold: PDFFont, size = 8,
-) {
-  rect(page, x, y - h, w, h, NAVY)
-  t(page, label, x + 6, y - h + (h - size) / 2 + 1, bold, size, WHITE)
-  return y - h
-}
-
-function labelValue(
-  page: PDFPage,
-  label: string, value: string,
-  x: number, y: number,
-  small: PDFFont, bold: PDFFont,
-  colW: number,
-  maxW?: number,
-) {
-  t(page, label.toUpperCase(), x, y + 10, small, 6, DKGRAY)
-  t(page, value || '—', x, y, bold, 8.5, BLACK, maxW ?? colW - 6)
-}
-
-// ── Main generator ────────────────────────────────────────────────────────────
-
-export async function generatePvcJobCardPdf(input: PvcJobCardInput): Promise<Uint8Array> {
+export async function generatePvcJobCardPdf(input: PvcJobCardPdfInput): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create()
+  const page = pdfDoc.addPage([595.28, 841.89])
+  const { width: pageWidth } = page.getSize()
+
   const roboto = await embedRobotoForPdfLib(pdfDoc)
-  const reg    = roboto?.regular ?? (await pdfDoc.embedFont(StandardFonts.Helvetica))
-  const bold   = roboto?.bold    ?? (await pdfDoc.embedFont(StandardFonts.HelveticaBold))
-  const small  = reg
+  const boldFont: PDFFont = roboto?.bold ?? (await pdfDoc.embedFont(StandardFonts.HelveticaBold))
+  const regularFont: PDFFont = roboto?.regular ?? (await pdfDoc.embedFont(StandardFonts.Helvetica))
 
-  const PW = 595.28
-  const PH = 841.89
-  const ML = 28
-  const MR = 28
-  const CW = PW - ML - MR   // content width
+  const marginL = 40
+  const marginR = 40
+  const contentWidth = pageWidth - marginL - marginR
+  let y = 800
 
-  const page = pdfDoc.addPage([PW, PH])
-
-  // ── Logo ─────────────────────────────────────────────────────────────────────
-  let logoImg: Awaited<ReturnType<typeof pdfDoc.embedPng>> | null = null
+  // ── Header: Logo + company info ──────────────────────────────────────────
+  const logoHeight = 44
   try {
-    const logoBytes = await readFile(path.join(process.cwd(), 'public', 'NBE_LOGO_BK_PL.png'))
-    logoImg = await pdfDoc.embedPng(new Uint8Array(logoBytes))
-  } catch { /* skip */ }
-
-  let y = PH - 22
-  const logoH = 44
-  if (logoImg) {
-    const logoW = logoImg.width * (logoH / logoImg.height)
-    page.drawImage(logoImg, { x: ML, y: y - logoH, width: logoW, height: logoH })
+    const logoPath = path.join(process.cwd(), 'public', 'NBE_LOGO_BK_PL.png')
+    const logoBytes = await readFile(logoPath)
+    const logoImage = await pdfDoc.embedPng(logoBytes)
+    const { width: nw, height: nh } = logoImage
+    const logoWidth = (nw / nh) * logoHeight
+    page.drawImage(logoImage, { x: marginL, y: y - logoHeight, width: logoWidth, height: logoHeight })
+  } catch {
+    page.drawText('NBE Australia', { x: marginL, y: y - 14, size: 13, font: boldFont })
   }
 
-  // Title
-  t(page, 'PVC STRIP CURTAIN', ML + CW / 2 - 10, y - 14, bold, 18, NAVY)
-  t(page, 'MANUFACTURING JOB CARD', ML + CW / 2 - 10, y - 28, reg, 8, DKGRAY)
+  const companyX = pageWidth - marginR - 140
+  page.drawText('NBE Australia', { x: companyX, y: y - 8, size: 10, font: boldFont, color: rgb(0.1, 0.1, 0.1) })
+  page.drawText('22A Humeside Drive', { x: companyX, y: y - 20, size: 9, font: regularFont, color: rgb(0.35, 0.35, 0.35) })
+  page.drawText('Campbellfield VIC 3061', { x: companyX, y: y - 31, size: 9, font: regularFont, color: rgb(0.35, 0.35, 0.35) })
+  page.drawText('Ph: 03 9357 5858', { x: companyX, y: y - 42, size: 9, font: regularFont, color: rgb(0.35, 0.35, 0.35) })
 
-  // Address line
-  y -= logoH + 6
-  t(page, '22A Humeside Drive, Campbellfield VIC 3061  •  Ph: 03 9357 5858', ML, y, small, 7, DKGRAY)
-  line(page, ML, y - 4, ML + CW, y - 4, 1, MIDGRAY)
-  y -= 10
+  y -= logoHeight + 12
 
-  // ── JOB DETAILS ──────────────────────────────────────────────────────────────
-  const secH = 13
-  y = sectionHeader(page, 'JOB DETAILS', ML, y, CW, secH, bold)
+  // ── Title bar ────────────────────────────────────────────────────────────
+  drawRect(page, marginL, y - 24, contentWidth, 26, rgb(0.1, 0.1, 0.38))
+  page.drawText('PVC Strip Curtain — Job Card', {
+    x: marginL + 10,
+    y: y - 18,
+    size: 13,
+    font: boldFont,
+    color: rgb(1, 1, 1),
+  })
+  y -= 36
 
-  // Row 1
-  rect(page, ML, y - 26, CW, 26, LTGRAY)
-  line(page, ML, y - 26, ML + CW, y - 26, 0.3, BORDER)
-  const col4 = CW / 4
-  labelValue(page, 'Job Card',    input.jobCardNumber,    ML + 4,          y - 9,  small, bold, col4)
-  labelValue(page, 'Quote',       input.quoteNumber,      ML + 4 + col4,   y - 9,  small, bold, col4)
-  labelValue(page, 'Status',      input.status,           ML + 4 + col4*2, y - 9,  small, bold, col4)
-  labelValue(page, 'Assigned To', input.assignedToName,   ML + 4 + col4*3, y - 9,  small, bold, col4)
-  y -= 26
+  // ── Customer section ─────────────────────────────────────────────────────
+  const details = input.quoteData.customerDetails || {}
 
-  // Row 2
-  rect(page, ML, y - 26, CW, 26, WHITE)
-  line(page, ML, y - 26, ML + CW, y - 26, 0.3, BORDER)
-  labelValue(page, 'PO / Customer Ref.', input.poReference,   ML + 4,          y - 9,  small, bold, col4)
-  labelValue(page, 'Job Name',           input.jobName,        ML + 4 + col4,   y - 9,  small, bold, col4 * 2 - 4)
-  labelValue(page, 'Created',            input.createdDate,    ML + 4 + col4*3, y - 9,  small, bold, col4)
-  y -= 26
+  drawRect(page, marginL, y - 72, contentWidth, 74, rgb(0.97, 0.97, 0.99))
+  page.drawLine({ start: { x: marginL, y: y }, end: { x: marginL + contentWidth, y }, thickness: 0.5, color: rgb(0.78, 0.78, 0.85) })
+  page.drawLine({ start: { x: marginL, y: y - 72 }, end: { x: marginL + contentWidth, y: y - 72 }, thickness: 0.5, color: rgb(0.78, 0.78, 0.85) })
 
-  // required by row
-  rect(page, ML, y - 20, CW, 20, LTGRAY)
-  line(page, ML, y - 20, ML + CW, y - 20, 0.3, BORDER)
-  labelValue(page, 'Required By', input.requiredBy || '—', ML + 4, y - 7, small, bold, col4 * 2)
-  y -= 20
-  y -= 6
+  const col1x = marginL + 8
+  const col2x = marginL + 90
+  const col3x = marginL + contentWidth / 2 + 8
+  const col4x = marginL + contentWidth / 2 + 80
 
-  // ── CUSTOMER & SITE ───────────────────────────────────────────────────────────
-  y = sectionHeader(page, 'CUSTOMER & SITE', ML, y, CW, secH, bold)
-
-  rect(page, ML, y - 22, CW, 22, WHITE)
-  const half = CW / 2
-  labelValue(page, 'Customer',     input.customerName,   ML + 4,        y - 7, small, bold, half)
-  labelValue(page, 'Site Contact', input.siteContact,    ML + 4 + half, y - 7, small, bold, half)
-  y -= 22
-
-  rect(page, ML, y - 22, CW, 22, LTGRAY)
-  line(page, ML, y - 22, ML + CW, y - 22, 0.3, BORDER)
-  labelValue(page, 'Site Address',       input.siteAddress,       ML + 4,        y - 7, small, bold, half)
-  labelValue(page, 'Customer Reference', input.customerReference, ML + 4 + half, y - 7, small, bold, half)
-  y -= 22
-  y -= 6
-
-  // ── JOB INSTRUCTIONS ─────────────────────────────────────────────────────────
-  if (input.importantNote) {
-    y = sectionHeader(page, 'JOB INSTRUCTIONS', ML, y, CW, secH, bold)
-    rect(page, ML, y - 22, CW, 22, AMBER)
-    line(page, ML, y - 22, ML + CW, y - 22, 0.3, BORDER)
-    t(page, 'IMPORTANT', ML + 6, y - 9, bold, 7, rgb(0.6, 0.35, 0))
-    t(page, input.importantNote, ML + 60, y - 9, reg, 8, BLACK, CW - 66)
-    y -= 22
-    y -= 6
-  }
-
-  // ── DOORS ────────────────────────────────────────────────────────────────────
-  for (const door of input.doors) {
-    const doorLabel = door.qty > 1 ? `${door.label} (× ${door.qty})` : door.label
-    y = sectionHeader(page, doorLabel, ML, y, CW, secH, bold)
-
-    const c3 = CW / 4
-    const rows: [string, string][][] = [
-      [
-        ['Material / Strip Type', door.materialType],
-        ['Strip Profile',         door.profile],
-        ['Strip Size',            `${door.stripSizeMm} mm`],
-        ['Thickness',             `${door.thicknessMm} mm`],
-      ],
-      [
-        ['Strip Length',   `${door.stripLengthMm} mm`],
-        ['Strip Count',    String(door.stripCount)],
-        ['Application',    door.application],
-        ['Rivets & Hangers', door.rivetsHangers],
-      ],
-      [
-        ['Door Width',         `${door.doorWidthMm} mm`],
-        ['Door Height',        `${door.doorHeightMm} mm`],
-        ['Headrail / Hardware', door.headrail],
-        ['', ''],
-      ],
-    ]
-
-    for (let ri = 0; ri < rows.length; ri++) {
-      const bg = ri % 2 === 0 ? WHITE : LTGRAY
-      rect(page, ML, y - 22, CW, 22, bg)
-      line(page, ML, y - 22, ML + CW, y - 22, 0.3, BORDER)
-      rows[ri].forEach(([lbl, val], ci) => {
-        if (lbl) labelValue(page, lbl, val, ML + 4 + ci * c3, y - 7, small, bold, c3)
-      })
-      y -= 22
-    }
-    y -= 6
-  }
-
-  // ── MANUFACTURING CHECKLIST ───────────────────────────────────────────────────
-  y = sectionHeader(page, 'MANUFACTURING PREPARATION CHECKLIST', ML, y, CW, secH, bold)
-
-  const checklist: [string, string][] = [
-    ['1. Materials allocated',       'Check the PVC strip size and thickness.'],
-    ['2. Rivets & hangers material', 'Confirm Galvanised or Stainless Steel.'],
-    ['3. Door measurement',          'Measure and confirm the required height / strip length.'],
-    ['4. PVC strips cut',            'Cut according to the required door length.'],
-    ['5. Quantity checked',          'Confirm the required strip count.'],
-    ['6. Packaging',                 'Select the proper packaging boxes and pack the strips securely.'],
-    ['7. Headrail / hardware prepared', 'Confirm all required hardware is ready.'],
-    ['8. Headrail packed',           'Pack the headrail securely for delivery.'],
+  const custRows: [string, string, string, string][] = [
+    ['Customer:', details.customer || '—', 'Date:', details.date || new Date().toLocaleDateString('en-AU')],
+    ['Attn:', details.attn || '—', 'Ref No:', details.refNo || '—'],
+    ['Address:', (details.address || '—').slice(0, 38), 'PO / Ref:', input.poReference?.trim() || '—'],
+    ['Assigned:', input.assignedToName || '—', '', ''],
   ]
 
-  const checkH = 22
-  const halfCW = CW / 2
-  for (let i = 0; i < checklist.length; i += 2) {
-    const bg = (i / 2) % 2 === 0 ? WHITE : LTGRAY
-    rect(page, ML, y - checkH, CW, checkH, bg)
-    line(page, ML, y - checkH, ML + CW, y - checkH, 0.3, BORDER)
-
-    const [lbl1, sub1] = checklist[i]
-    const [lbl2, sub2] = checklist[i + 1] ?? ['', '']
-    // Square checkbox
-    page.drawRectangle({ x: ML + 5, y: y - checkH + (checkH - 6) / 2, width: 6, height: 6, color: NAVY })
-    t(page, lbl1, ML + 14, y - checkH + checkH / 2 + 2, bold, 8, BLACK)
-    t(page, sub1, ML + 14, y - checkH + checkH / 2 - 6, small, 7, DKGRAY)
-    if (lbl2) {
-      page.drawRectangle({ x: ML + halfCW + 5, y: y - checkH + (checkH - 6) / 2, width: 6, height: 6, color: NAVY })
-      t(page, lbl2, ML + halfCW + 14, y - checkH + checkH / 2 + 2, bold, 8, BLACK)
-      t(page, sub2, ML + halfCW + 14, y - checkH + checkH / 2 - 6, small, 7, DKGRAY, halfCW - 20)
+  let rowY = y - 14
+  custRows.forEach(([l1, v1, l2, v2]) => {
+    page.drawText(l1, { x: col1x, y: rowY, size: 9, font: boldFont, color: rgb(0.35, 0.35, 0.45) })
+    page.drawText(v1, { x: col2x, y: rowY, size: 9, font: regularFont, color: rgb(0.1, 0.1, 0.1) })
+    if (l2) {
+      page.drawText(l2, { x: col3x, y: rowY, size: 9, font: boldFont, color: rgb(0.35, 0.35, 0.45) })
+      page.drawText(v2, { x: col4x, y: rowY, size: 9, font: regularFont, color: rgb(0.1, 0.1, 0.1) })
     }
-    y -= checkH
-  }
-  y -= 6
-
-  // ── MANUFACTURING COMPLETION ──────────────────────────────────────────────────
-  y = sectionHeader(page, 'MANUFACTURING COMPLETION', ML, y, CW, secH, bold)
-  const compH = 38
-  rect(page, ML, y - compH, CW, compH, WHITE)
-  line(page, ML, y - compH, ML + CW, y - compH, 0.3, BORDER)
-
-  const thirdW = CW / 3
-  t(page, 'PREPARED BY', ML + 4, y - 9, small, 6, DKGRAY)
-  line(page, ML + 4, y - 28, ML + thirdW - 4, y - 28, 0.5, MIDGRAY)
-
-  t(page, 'DATE', ML + 4 + thirdW, y - 9, small, 6, DKGRAY)
-  line(page, ML + 4 + thirdW, y - 28, ML + thirdW * 2 - 4, y - 28, 0.5, MIDGRAY)
-
-  t(page, 'STATUS', ML + 4 + thirdW * 2, y - 9, small, 6, DKGRAY)
-  const statX = ML + 4 + thirdW * 2
-  const statY = y - 22
-  // three checkboxes
-  ;[['Complete', 0], ['Partial', 52], ['Issue', 108]].forEach(([lbl, ox]) => {
-    page.drawRectangle({ x: statX + Number(ox), y: statY, width: 7, height: 7, color: NAVY })
-    t(page, String(lbl), statX + Number(ox) + 10, statY + 1, reg, 7.5, BLACK)
+    rowY -= 15
   })
-  y -= compH
-  y -= 10
 
-  // ── Footer ───────────────────────────────────────────────────────────────────
-  line(page, ML, y, ML + CW, y, 0.5, MIDGRAY)
+  y -= 82
+
+  // ── Notes ────────────────────────────────────────────────────────────────
+  if (input.approvalMessage?.trim()) {
+    const noteLines = wrapText(input.approvalMessage.trim(), regularFont, 9, contentWidth - 52)
+    page.drawText('Notes:', { x: marginL, y, size: 9, font: boldFont, color: rgb(0.35, 0.35, 0.45) })
+    noteLines.forEach((line, i) => {
+      page.drawText(line, { x: marginL + 52, y: y - i * 13, size: 9, font: regularFont, color: rgb(0.1, 0.1, 0.1) })
+    })
+    y -= Math.max(16, noteLines.length * 13 + 4)
+  }
+
+  y -= 6
+  drawHLine(page, marginL, y, contentWidth)
+  y -= 14
+
+  // ── Door specifications ──────────────────────────────────────────────────
+  page.drawText('Door Specifications', {
+    x: marginL,
+    y,
+    size: 11,
+    font: boldFont,
+    color: rgb(0.1, 0.1, 0.38),
+  })
+  y -= 16
+
+  const doors = deriveDoors(input.quoteData)
+
+  doors.forEach((door, index) => {
+    const qty = Math.min(99, Math.max(1, Math.trunc(door.quantity ?? 1) || 1))
+    // Use explicit supplyScope from workflow panel for single-door input;
+    // fall back to headrail_type derivation for multi-door quoteData.doors entries.
+    const scope = !input.quoteData.doors?.length ? input.supplyScope : doorSupplyScope(door)
+    const headrailLabel = formatProposalHeadrailLabel(door.headrail_type)
+    const profileLabel = door.strip_type_label?.trim() || formatProposalStripTypeLine(door.strip_type)
+
+    const blockHeight = scope === 'whole_door' ? 84 : 70
+
+    // Door header bar
+    drawRect(page, marginL, y - 18, contentWidth, 20, rgb(0.22, 0.22, 0.48))
+    page.drawText(`Door ${index + 1}`, {
+      x: marginL + 8,
+      y: y - 13,
+      size: 10,
+      font: boldFont,
+      color: rgb(1, 1, 1),
+    })
+    if (qty > 1) {
+      page.drawText(`Qty: ${qty}`, {
+        x: marginL + 60,
+        y: y - 13,
+        size: 10,
+        font: regularFont,
+        color: rgb(0.85, 0.85, 1),
+      })
+    }
+    // Supply badge on the right
+    const scopeText = scope === 'whole_door' ? 'Whole Door' : 'Strips Only'
+    const scopeColor = scope === 'whole_door' ? rgb(0.15, 0.55, 0.35) : rgb(0.55, 0.35, 0.1)
+    const badgeX = marginL + contentWidth - 80
+    drawRect(page, badgeX, y - 17, 78, 16, scopeColor)
+    page.drawText(scopeText, {
+      x: badgeX + 6,
+      y: y - 12,
+      size: 8,
+      font: boldFont,
+      color: rgb(1, 1, 1),
+    })
+
+    y -= 22
+
+    // Door body background
+    drawRect(page, marginL, y - (blockHeight - 4), contentWidth, blockHeight - 4, rgb(0.975, 0.975, 0.99))
+
+    // Two-column layout inside
+    const leftX = marginL + 8
+    const midX = marginL + contentWidth / 2
+    const valOffL = 90
+    const valOffR = 80
+
+    // Row 1: Opening W × H | Headrail type
+    page.drawText('Opening (W × H):', { x: leftX, y: y - 10, size: 9, font: boldFont, color: rgb(0.35, 0.35, 0.45) })
+    page.drawText(`${door.width_mm} mm Width × ${door.height_mm} mm Height`, { x: leftX + valOffL, y: y - 10, size: 9, font: regularFont, color: rgb(0.05, 0.05, 0.05) })
+
+    page.drawText('Headrail type:', { x: midX, y: y - 10, size: 9, font: boldFont, color: rgb(0.35, 0.35, 0.45) })
+    page.drawText(headrailLabel, { x: midX + valOffR, y: y - 10, size: 9, font: regularFont, color: rgb(0.05, 0.05, 0.05) })
+
+    // Row 2: Headrail length (if whole door) | Strip profile
+    if (scope === 'whole_door') {
+      page.drawText('Headrail length:', { x: leftX, y: y - 24, size: 9, font: boldFont, color: rgb(0.35, 0.35, 0.45) })
+      page.drawText(`${door.width_mm} mm`, { x: leftX + valOffL, y: y - 24, size: 9, font: regularFont, color: rgb(0.05, 0.05, 0.05) })
+
+      page.drawText('Strip profile:', { x: midX, y: y - 24, size: 9, font: boldFont, color: rgb(0.35, 0.35, 0.45) })
+      page.drawText(profileLabel.slice(0, 32), { x: midX + valOffR, y: y - 24, size: 9, font: regularFont, color: rgb(0.05, 0.05, 0.05) })
+
+      // Row 3: Strip size | Overlap
+      page.drawText('Strip size:', { x: leftX, y: y - 38, size: 9, font: boldFont, color: rgb(0.35, 0.35, 0.45) })
+      page.drawText(`${door.strip_width_mm} mm × ${door.thickness_mm} mm`, { x: leftX + valOffL, y: y - 38, size: 9, font: regularFont, color: rgb(0.05, 0.05, 0.05) })
+
+      page.drawText('Overlap:', { x: midX, y: y - 38, size: 9, font: boldFont, color: rgb(0.35, 0.35, 0.45) })
+      page.drawText(`${door.overlap_mm} mm`, { x: midX + valOffR, y: y - 38, size: 9, font: regularFont, color: rgb(0.05, 0.05, 0.05) })
+
+      // Row 4: Strip count
+      page.drawText('Strip count:', { x: leftX, y: y - 52, size: 9, font: boldFont, color: rgb(0.35, 0.35, 0.45) })
+      page.drawText(String(door.number_of_strips), { x: leftX + valOffL, y: y - 52, size: 9, font: regularFont, color: rgb(0.05, 0.05, 0.05) })
+
+      y -= blockHeight
+    } else {
+      // Strips only: 3 rows
+      page.drawText('Strip profile:', { x: leftX, y: y - 24, size: 9, font: boldFont, color: rgb(0.35, 0.35, 0.45) })
+      page.drawText(profileLabel.slice(0, 32), { x: leftX + valOffL, y: y - 24, size: 9, font: regularFont, color: rgb(0.05, 0.05, 0.05) })
+
+      page.drawText('Strip size:', { x: midX, y: y - 24, size: 9, font: boldFont, color: rgb(0.35, 0.35, 0.45) })
+      page.drawText(`${door.strip_width_mm} mm × ${door.thickness_mm} mm`, { x: midX + valOffR, y: y - 24, size: 9, font: regularFont, color: rgb(0.05, 0.05, 0.05) })
+
+      page.drawText('Strip count:', { x: leftX, y: y - 38, size: 9, font: boldFont, color: rgb(0.35, 0.35, 0.45) })
+      page.drawText(String(door.number_of_strips), { x: leftX + valOffL, y: y - 38, size: 9, font: regularFont, color: rgb(0.05, 0.05, 0.05) })
+
+      page.drawText('Overlap:', { x: midX, y: y - 38, size: 9, font: boldFont, color: rgb(0.35, 0.35, 0.45) })
+      page.drawText(`${door.overlap_mm} mm`, { x: midX + valOffR, y: y - 38, size: 9, font: regularFont, color: rgb(0.05, 0.05, 0.05) })
+
+      y -= blockHeight
+    }
+
+    y -= 8
+  })
+
+  // ── Footer ───────────────────────────────────────────────────────────────
+  y -= 6
+  drawHLine(page, marginL, y, contentWidth, 0.4)
   y -= 12
-  t(page, 'NBE Australia Pty Ltd  •  ABN 17 007 048 008', ML, y, small, 7.5, DKGRAY)
-  t(page, 'Internal Manufacturing Job Card', ML + CW - 120, y, small, 7.5, DKGRAY)
+  const printed = `Printed: ${new Date().toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' })}`
+  page.drawText(printed, { x: marginL, y, size: 8, font: regularFont, color: rgb(0.55, 0.55, 0.55) })
+  page.drawText('NBE Australia Pty Ltd · ABN 17 007 048 008', {
+    x: pageWidth - marginR - 195,
+    y,
+    size: 8,
+    font: regularFont,
+    color: rgb(0.55, 0.55, 0.55),
+  })
 
   return pdfDoc.save()
 }
