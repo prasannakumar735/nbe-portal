@@ -89,16 +89,13 @@ async function sendNotInvoicedEmail(params: {
   description: string
   assigneeName: string | null
   contactName: string
-  contactEmail: string
   actorName: string
   date: string
 }): Promise<void> {
   const quoteUrl = `${publicAppBaseUrl()}/quotes?q=${encodeURIComponent(params.quoteNumber)}`
-  const contactLine = params.contactEmail
-    ? `<p style="margin:0 0 8px"><strong>Contact Person:</strong> ${escapeHtml(params.contactName)} &lt;${escapeHtml(params.contactEmail)}&gt;</p>`
-    : params.contactName
-      ? `<p style="margin:0 0 8px"><strong>Contact Person:</strong> ${escapeHtml(params.contactName)}</p>`
-      : ''
+  const contactLine = params.contactName
+    ? `<p style="margin:0 0 8px"><strong>Contact Person:</strong> ${escapeHtml(params.contactName)}</p>`
+    : ''
   const html = `<!DOCTYPE html><html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NBE Portal</title></head>
 <body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
@@ -291,14 +288,16 @@ export async function POST(
             const srClient = createServiceRoleClient()
             const { data: q } = await srClient
               .from('quotes')
-              .select('quote_number, customer_name, description, title, assigned_user_id, contact_name, contact_email')
+              .select('quote_number, customer_name, form_snapshot, assigned_user_id')
               .eq('id', quoteId)
               .maybeSingle()
             if (q) {
-              const assignedUserId = (q as Record<string, unknown>).assigned_user_id as string | null
-              const assigneeName = assignedUserId ? await profileDisplayName(srClient, assignedUserId) : null
               const row = q as Record<string, unknown>
-              const description = String(row.description ?? row.title ?? '').trim() || 'No description'
+              const assignedUserId = row.assigned_user_id as string | null
+              const assigneeName = assignedUserId ? await profileDisplayName(srClient, assignedUserId) : null
+              const snap = row.form_snapshot as Record<string, unknown> | null
+              const contactName = String(snap?.contactPerson ?? '').trim()
+              const description = String(snap?.scopeOfWork ?? snap?.description ?? snap?.title ?? '').trim() || 'No description'
               const date = new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Melbourne' })
               await sendNotInvoicedEmail({
                 quoteNumber: String(row.quote_number ?? ''),
@@ -306,13 +305,14 @@ export async function POST(
                 customerName: String(row.customer_name ?? ''),
                 description,
                 assigneeName,
-                contactName: String(row.contact_name ?? ''),
-                contactEmail: String(row.contact_email ?? ''),
+                contactName,
                 actorName,
                 date,
               })
             }
-          } catch { /* best-effort — don't fail the status update if email errors */ }
+          } catch (emailErr) {
+            console.error('[not_invoiced email]', emailErr)
+          }
         }
         break
       }
