@@ -62,15 +62,19 @@ export async function notifyTimesheetAutoSubmittedEmployee(params: {
   await sendMailViaGraph({ to: params.toEmail, subject, bodyHtml: html })
 }
 
-export async function notifyTimesheetSubmittedManagersAuto(
+export type AutoSubmittedEmployee = {
+  employeeDisplayName: string
+  weekStartDate: string
+  weekEndDate: string
+}
+
+export async function notifyTimesheetAutoSubmittedManagersBatch(
   supabase: Parameters<typeof getManagerPlusServiceRecipients>[0],
-  params: {
-    employeeDisplayName: string
-    weekStartDate: string
-    weekEndDate: string
-  },
+  employees: AutoSubmittedEmployee[],
 ): Promise<PortalNotifyResult> {
-  const { employeeDisplayName, weekStartDate, weekEndDate } = params
+  if (employees.length === 0) {
+    return { status: 'skipped', reason: 'No auto-submitted employees.' }
+  }
 
   let recipients: Awaited<ReturnType<typeof getManagerPlusServiceRecipients>>
   try {
@@ -83,16 +87,33 @@ export async function notifyTimesheetSubmittedManagersAuto(
     return { status: 'skipped', reason: 'No manager/admin or service recipients.' }
   }
 
-  const subject = 'Timesheet auto-submitted for review'
+  const subject =
+    employees.length === 1
+      ? `Timesheet auto-submitted: ${employees[0]!.employeeDisplayName}`
+      : `${employees.length} timesheets auto-submitted for review`
+
+  const rows = employees
+    .map(
+      e =>
+        `<tr><td style="padding:6px 12px;border:1px solid #e2e8f0">${escapeHtml(e.employeeDisplayName)}</td>` +
+        `<td style="padding:6px 12px;border:1px solid #e2e8f0">${escapeHtml(weekRangeLabel(e.weekStartDate, e.weekEndDate))}</td></tr>`,
+    )
+    .join('')
+  const table =
+    `<table style="border-collapse:collapse;margin:12px 0"><thead><tr>` +
+    `<th style="padding:6px 12px;border:1px solid #e2e8f0;text-align:left">Employee</th>` +
+    `<th style="padding:6px 12px;border:1px solid #e2e8f0;text-align:left">Week</th></tr></thead><tbody>${rows}</tbody></table>`
+
   try {
     for (const r of recipients) {
       const name = String(r.full_name ?? '').trim() || 'there'
       const html = [
         `Hi ${escapeHtml(name)},<br/><br/>`,
-        `<b>${escapeHtml(employeeDisplayName)}</b> had a timesheet auto-submitted for the week:<br/>`,
-        `${escapeHtml(weekRangeLabel(weekStartDate, weekEndDate))}<br/><br/>`,
-        `Please review in the NBE Portal.<br/><br/>`,
-        `<a href="${escapeHtml(PORTAL_TIMECARDS_URL)}">Open timecards</a><br/><br/>`,
+        employees.length === 1
+          ? `The following timesheet was auto-submitted by the system because it was not submitted in time:<br/>`
+          : `The following ${employees.length} timesheets were auto-submitted by the system because they were not submitted in time:<br/>`,
+        table,
+        `<br/><a href="${escapeHtml(PORTAL_TIMECARDS_URL)}">Open timecards</a><br/><br/>`,
         `— NBE Portal`,
       ].join('')
       await sendMailViaGraph({ to: r.email, subject, bodyHtml: html })

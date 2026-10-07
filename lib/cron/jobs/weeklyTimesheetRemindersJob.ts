@@ -3,10 +3,11 @@ import { melbourneCalendarDate } from '@/lib/officeClock/melbourneWallClock'
 import { isTimesheetRemindersDisabled } from '@/lib/notifications/isTimesheetRemindersDisabled'
 import {
   notifyTimesheetAutoSubmittedEmployee,
+  notifyTimesheetAutoSubmittedManagersBatch,
   notifyTimesheetManagerDigest,
   notifyTimesheetReminder1,
   notifyTimesheetReminder2,
-  notifyTimesheetSubmittedManagersAuto,
+  type AutoSubmittedEmployee,
   type DigestPendingRow,
 } from '@/lib/notifications/timesheetReminderEmails'
 import { submitWeeklyTimesheet } from '@/lib/timecard/submitWeeklyTimesheet'
@@ -153,6 +154,8 @@ export async function runWeeklyTimesheetRemindersJob(): Promise<Record<string, u
     .not('reminder_2_sent_at', 'is', null)
     .is('auto_submitted_at', null)
 
+  const autoSubmittedEmployees: AutoSubmittedEmployee[] = []
+
   if (autoErr) {
     errors.push(`auto: query ${autoErr.message}`)
   } else {
@@ -192,16 +195,15 @@ export async function runWeeklyTimesheetRemindersJob(): Promise<Record<string, u
         }
       }
 
-      const mgr = await notifyTimesheetSubmittedManagersAuto(supabase, {
-        employeeDisplayName: employeeName,
-        weekStartDate: weekStart,
-        weekEndDate: weekEnd,
-      })
-      if (mgr.status === 'failed') {
-        errors.push(`auto mgr email ${row.id}: ${mgr.error}`)
-      }
-
+      autoSubmittedEmployees.push({ employeeDisplayName: employeeName, weekStartDate: weekStart, weekEndDate: weekEnd })
       autoSubmitted += 1
+    }
+
+    if (autoSubmittedEmployees.length > 0) {
+      const mgr = await notifyTimesheetAutoSubmittedManagersBatch(supabase, autoSubmittedEmployees)
+      if (mgr.status === 'failed') {
+        errors.push(`auto mgr batch email: ${mgr.error}`)
+      }
     }
   }
 
