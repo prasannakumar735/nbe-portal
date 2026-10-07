@@ -82,6 +82,63 @@ async function sendQuoteApprovalEmail(params: {
   })
 }
 
+async function sendNotInvoicedEmail(params: {
+  quoteNumber: string
+  quoteId: string
+  customerName: string
+  description: string
+  assigneeName: string | null
+  contactName: string
+  contactEmail: string
+  actorName: string
+  date: string
+}): Promise<void> {
+  const quoteUrl = `${publicAppBaseUrl()}/quotes?q=${encodeURIComponent(params.quoteNumber)}`
+  const contactLine = params.contactEmail
+    ? `<p style="margin:0 0 8px"><strong>Contact Person:</strong> ${escapeHtml(params.contactName)} &lt;${escapeHtml(params.contactEmail)}&gt;</p>`
+    : params.contactName
+      ? `<p style="margin:0 0 8px"><strong>Contact Person:</strong> ${escapeHtml(params.contactName)}</p>`
+      : ''
+  const html = `<!DOCTYPE html><html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NBE Portal</title></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px">
+  <tr><td align="center">
+    <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;max-width:600px;width:100%">
+      <tr><td style="background:#1e3a5f;padding:24px 32px">
+        <p style="margin:0;font-size:20px;font-weight:700;color:#ffffff">NBE Australia</p>
+      </td></tr>
+      <tr><td style="padding:32px">
+        <p style="margin:0 0 16px;font-size:16px;color:#1e293b">Hi Accounts Team,</p>
+        <p style="margin:0 0 24px;color:#475569">The following quote has been completed and is ready to invoice.</p>
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:6px;padding:20px;margin-bottom:24px">
+          <tr><td style="padding:4px 0"><p style="margin:0 0 8px"><strong>Quote Number:</strong> ${escapeHtml(params.quoteNumber)}</p></td></tr>
+          <tr><td style="padding:4px 0"><p style="margin:0 0 8px"><strong>Client:</strong> ${escapeHtml(params.customerName)}</p></td></tr>
+          ${contactLine ? `<tr><td style="padding:4px 0">${contactLine}</td></tr>` : ''}
+          <tr><td style="padding:4px 0"><p style="margin:0 0 8px"><strong>Description:</strong> ${escapeHtml(params.description)}</p></td></tr>
+          <tr><td style="padding:4px 0"><p style="margin:0 0 8px"><strong>Completed by:</strong> ${escapeHtml(params.assigneeName ?? 'N/A')}</p></td></tr>
+          <tr><td style="padding:4px 0"><p style="margin:0 0 8px"><strong>Marked not invoiced by:</strong> ${escapeHtml(params.actorName)}</p></td></tr>
+          <tr><td style="padding:4px 0"><p style="margin:0"><strong>Date:</strong> ${escapeHtml(params.date)}</p></td></tr>
+        </table>
+        <table cellpadding="0" cellspacing="0" style="margin-bottom:24px">
+          <tr><td style="background:#1e3a5f;border-radius:6px;padding:12px 24px">
+            <a href="${quoteUrl}" style="color:#ffffff;font-weight:600;text-decoration:none;font-size:14px">View Quote →</a>
+          </td></tr>
+        </table>
+        <p style="margin:0 0 24px;color:#475569">Please process the invoice at your earliest convenience.</p>
+        <p style="margin:0;color:#94a3b8;font-size:13px">Regards,<br>NBE Australia Portal</p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`
+  await sendMailViaGraph({
+    to: 'accounts@nbeaustralia.com.au',
+    subject: `Quote Ready to Invoice — ${params.quoteNumber} | ${params.customerName}`,
+    bodyHtml: html,
+  })
+}
+
 /**
  * Generic workflow-state fetch for any `quotes` row (General/Parts/Maintenance/PVC Flex/
  * Rapid Door/Service), independent of the `quote_items` table used only by the legacy
@@ -217,12 +274,39 @@ export async function POST(
         await revertServiceQuoteToDraft(supabase, quoteId, user.id, actorName, String(body.note ?? ''))
         break
 
-      case 'set_invoice':
-        await setServiceQuoteInvoiceStatus(
-          supabase, quoteId, user.id, actorName,
-          String(body.invoice_status ?? '') as ServiceQuoteInvoiceStatus,
-        )
+      case 'set_invoice': {
+        const invoiceStatus = String(body.invoice_status ?? '') as ServiceQuoteInvoiceStatus
+        await setServiceQuoteInvoiceStatus(supabase, quoteId, user.id, actorName, invoiceStatus)
+        if (invoiceStatus === 'not_invoiced') {
+          try {
+            const srClient = createServiceRoleClient()
+            const { data: q } = await srClient
+              .from('quotes')
+              .select('quote_number, customer_name, description, title, assigned_user_id, contact_name, contact_email')
+              .eq('id', quoteId)
+              .maybeSingle()
+            if (q) {
+              const assignedUserId = (q as Record<string, unknown>).assigned_user_id as string | null
+              const assigneeName = assignedUserId ? await profileDisplayName(srClient, assignedUserId) : null
+              const row = q as Record<string, unknown>
+              const description = String(row.description ?? row.title ?? '').trim() || 'No description'
+              const date = new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Melbourne' })
+              await sendNotInvoicedEmail({
+                quoteNumber: String(row.quote_number ?? ''),
+                quoteId,
+                customerName: String(row.customer_name ?? ''),
+                description,
+                assigneeName,
+                contactName: String(row.contact_name ?? ''),
+                contactEmail: String(row.contact_email ?? ''),
+                actorName,
+                date,
+              })
+            }
+          } catch { /* best-effort — don't fail the status update if email errors */ }
+        }
         break
+      }
 
       default:
         return fail(`Unknown action: ${action}`)
