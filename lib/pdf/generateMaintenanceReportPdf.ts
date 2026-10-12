@@ -1410,7 +1410,8 @@ export async function generateMaintenanceReportPdf(options: MaintenancePdfOption
       y = contentStartY
     }
 
-    const doorNumLabel = String(door.door_number ?? '').trim() || String(doorIndex + 1)
+    const rawDoorNum = String(door.door_number ?? '').trim()
+    const doorNumLabel = /^Door\s+\d+$/i.test(rawDoorNum) ? String(doorIndex + 1) : rawDoorNum || String(doorIndex + 1)
     const doorHeading = `Door ${doorNumLabel}`
     const doorTitleBaseline = y
     page.drawText(doorHeading, {

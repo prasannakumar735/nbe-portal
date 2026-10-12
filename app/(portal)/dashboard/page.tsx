@@ -19,6 +19,11 @@ import type { BillableStackedDatum } from '@/components/dashboard/charts/Billabl
 import { pickSearchParam, type AppSearchParams } from '@/lib/app/searchParams';
 import { PvcWorkflowDashboardBanner } from '@/components/pvc/PvcWorkflowDashboardBanner';
 import { isLeaveLegacyTimeEntry } from '@/lib/timecard/leaveWorkType';
+import type { UserSessionInfo } from '@/components/dashboard/UserSessionCard';
+import { fetchManagerAttendance } from '@/lib/officeClock/fetchManagerAttendance';
+import { computeRangeAttendanceSummary } from '@/lib/officeClock/attendanceDashboard';
+import { createServiceRoleClient } from '@/lib/supabase/serviceRole';
+import { melbourneCalendarDate } from '@/lib/officeClock/melbourneWallClock';
 import {
     DASHBOARD_TIME_ENTRY_SELECT,
     mapDashboardTimeEntryRows,
@@ -152,6 +157,51 @@ export default async function DashboardPage({ searchParams, }: {
         end: pickSearchParam(raw.end),
     };
     const supabase = await createServerClient();
+
+    // Attendance data for today (admin/manager only — uses service role)
+    const today = melbourneCalendarDate(new Date())
+    let sessionInfo: UserSessionInfo = {
+        name: '',
+        email: '',
+        role: '',
+        lastSignInAt: null,
+        attendance: { dashboard: null, todayRows: [] },
+    }
+    try {
+        const { data: profileForSession } = await supabase
+            .from('profiles')
+            .select('full_name, first_name, last_name, role')
+            .eq('id', user.id)
+            .maybeSingle()
+        const pr = profileForSession as { full_name?: string | null; first_name?: string | null; last_name?: string | null; role?: string | null } | null
+        const sessionName = pr?.full_name
+            || (pr?.first_name && pr?.last_name ? `${pr.first_name} ${pr.last_name}` : null)
+            || pr?.first_name || ''
+        const authUser = await supabase.auth.getUser()
+
+        const isPrivilegedRole = pr?.role === 'admin' || pr?.role === 'manager'
+        let attendanceDashboard = null
+        let todayRows: import('@/lib/officeClock/fetchManagerAttendance').ManagerAttendanceRow[] = []
+        if (isPrivilegedRole) {
+            const admin = createServiceRoleClient()
+            const result = await fetchManagerAttendance(admin, { dateFrom: today, dateTo: today })
+            todayRows = result.rows
+            const rangeSummary = computeRangeAttendanceSummary(result.rows)
+            attendanceDashboard = result.dashboard
+                ? { ...result.dashboard, ...rangeSummary }
+                : null
+        }
+        sessionInfo = {
+            name: sessionName,
+            email: authUser.data?.user?.email ?? '',
+            role: pr?.role ?? '',
+            lastSignInAt: authUser.data?.user?.last_sign_in_at ?? null,
+            attendance: { dashboard: attendanceDashboard, todayRows },
+        }
+    } catch {
+        // non-fatal
+    }
+
     const period = resolvePeriod(qp.period);
     const projectId = qp.project || 'all';
     const range = getDateRange(period, qp.start, qp.end);
@@ -162,6 +212,7 @@ export default async function DashboardPage({ searchParams, }: {
     let previousEntries: TimeEntryRow[] = [];
     let trendEntries: TimeEntryRow[] = [];
     let projectOptions: DashboardProjectOption[] = [];
+    let showingLastWeekFallback = false;
     let employeeLeaderboard: {
         employeeId: string;
         employeeName: string;
@@ -227,7 +278,25 @@ export default async function DashboardPage({ searchParams, }: {
             const { data: trendData, error: trendError } = await trendScoped;
             if (trendError)
                 throw trendError;
-            const rawCurrent = (currentEntries || []) as DashboardTimeEntryRaw[];
+            let rawCurrent = (currentEntries || []) as DashboardTimeEntryRaw[];
+
+            // If this week has no entries yet, silently fall back to last week's data
+            if (rawCurrent.length === 0 && period === 'this_week') {
+                const lastWeekRange = getDateRange('last_week');
+                const fallbackQuery = supabase
+                    .from('time_entries')
+                    .select(DASHBOARD_TIME_ENTRY_SELECT)
+                    .neq('status', 'active')
+                    .gte('start_time', lastWeekRange.start.toISOString())
+                    .lte('start_time', lastWeekRange.end.toISOString());
+                const fallbackScoped = isPrivileged ? fallbackQuery : fallbackQuery.eq('employee_id', user.id);
+                const { data: fallbackEntries } = await fallbackScoped;
+                if (fallbackEntries && fallbackEntries.length > 0) {
+                    rawCurrent = fallbackEntries as DashboardTimeEntryRaw[];
+                    showingLastWeekFallback = true;
+                }
+            }
+
             const rawPrevious = (prevEntries || []) as DashboardTimeEntryRaw[];
             const rawTrend = (trendData || []) as DashboardTimeEntryRaw[];
             const level1Ids = [...rawCurrent, ...rawPrevious, ...rawTrend]
@@ -378,8 +447,13 @@ export default async function DashboardPage({ searchParams, }: {
 
           <div className="space-y-6 pt-4">
             <PvcWorkflowDashboardBanner />
+            {showingLastWeekFallback && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-800">
+                No entries logged this week yet — showing last week&apos;s data.
+              </div>
+            )}
             {errorMessage ? (<DashboardErrorState message={errorMessage}/>) : isCustomIncomplete ? (<DashboardErrorState message="Select a custom date range to view analytics."/>) : (<Suspense fallback={<LoadingSkeleton rows={3}/>}>
-                {role === 'admin' || role === 'manager' ? (<AdminDashboard data={adminData} charts={charts} entriesCount={entries.length} employeeLeaderboard={employeeLeaderboard} recentEntries={recentEntries}/>) : (<EmployeeDashboard data={employeeData} charts={charts} entriesCount={entries.length}/>)}
+                {role === 'admin' || role === 'manager' ? (<AdminDashboard data={adminData} charts={charts} entriesCount={entries.length} employeeLeaderboard={employeeLeaderboard} recentEntries={recentEntries} sessionInfo={sessionInfo}/>) : (<EmployeeDashboard data={employeeData} charts={charts} entriesCount={entries.length}/>)}
               </Suspense>)}
           </div>
         </div>);

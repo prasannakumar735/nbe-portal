@@ -61,6 +61,7 @@ type DoorInspectionCardProps = {
   reportId?: string
   register: UseFormRegister<MaintenanceFormValues>
   update: (index: number, value: MaintenanceDoorForm) => void
+  onRemove?: () => void
   availableDoors: MaintenanceAvailableDoor[]
   /** New report UI has more compact door labels and hides history/details blocks unless present. */
   uiVariant?: 'new' | 'existing'
@@ -87,6 +88,7 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
   reportId,
   register,
   update,
+  onRemove,
   availableDoors,
   uiVariant = 'existing',
   reportSchemaVersion,
@@ -127,19 +129,16 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
   const supabase = useMemo(() => createSupabaseClient(), [])
   const [history, setHistory] = useState<DoorInspectionHistoryItem[]>([])
   const [isHistoryLoading, setIsHistoryLoading] = useState(false)
+  const [confirmingRemove, setConfirmingRemove] = useState(false)
 
   // Must run before any early return — avoids hook-order bugs and request storms in production/dev.
   useEffect(() => {
     const doorId = door?.door_id ? String(door.door_id).trim() : ''
 
     const networkBlocked =
-      isOffline ||
-      (typeof navigator !== 'undefined' && !navigator.onLine) ||
-      !isOnline
+      (typeof navigator !== 'undefined' && !navigator.onLine)
 
     if (networkBlocked || !doorId) {
-      setHistory([])
-      setIsHistoryLoading(false)
       return
     }
 
@@ -197,7 +196,7 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
     return () => {
       cancelled = true
     }
-  }, [door?.door_id, isOffline, isOnline, supabase])
+  }, [door?.door_id, supabase])
 
   if (!door) return null
 
@@ -218,7 +217,9 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
       ? OPTION_ADD_DOOR_MANUALLY
       : ''
 
-  const doorNumberLabel = String(door.door_number ?? '').trim() || String(index + 1)
+  const rawDoorNumber = String(door.door_number ?? '').trim()
+  const isAutoGenName = /^Door\s+\d+$/i.test(rawDoorNumber)
+  const doorNumberLabel = isAutoGenName ? String(index + 1) : rawDoorNumber || String(index + 1)
   const serialForHeader = compactLabels ? extractDoorSerial(doorNumberLabel) : null
   const doorMetaSummary = buildDoorMetaSummaryLine(door)
   const hasMeaningfulHistory = history.some(item => String(item.technician_notes ?? '').trim().length > 0)
@@ -235,6 +236,51 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
     <section
       className={`mx-auto w-full max-w-screen-xl rounded-2xl border bg-white shadow-sm ${hasFault ? 'border-red-300' : 'border-slate-200'}`}
     >
+      <div className="relative">
+        {onRemove && !confirmingRemove && (
+          <button
+            type="button"
+            onClick={() => setConfirmingRemove(true)}
+            title="Remove this door"
+            className="absolute right-12 top-4 z-10 flex h-7 w-7 items-center justify-center rounded-full text-slate-400 hover:bg-red-50 hover:text-red-600"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        )}
+        {onRemove && confirmingRemove && (() => {
+          const checklist = door?.checklist ?? {}
+          const filledCount = Object.values(checklist).filter(Boolean).length
+          const totalItems = Object.keys(checklist).length
+          const isComplete = totalItems > 0 && filledCount === totalItems
+          const hasData = filledCount > 0 || Boolean(door?.notes?.trim()) || (door?.photos?.length ?? 0) > 0
+          return (
+            <div className="mx-4 mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+              <p className="text-sm font-semibold text-red-800">
+                {isComplete
+                  ? `Door ${index + 1} has a completed inspection. All checklist data will be lost.`
+                  : hasData
+                  ? `Door ${index + 1} has inspection data filled in. Removing it will discard that data.`
+                  : `Remove Door ${index + 1} from this report?`}
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setConfirmingRemove(false); onRemove() }}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                >
+                  Yes, remove
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingRemove(false)}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )
+        })()}
       <button
         type="button"
         onClick={() => {
@@ -259,6 +305,7 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
         </div>
         {door.isCollapsed ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
       </button>
+      </div>
 
       {!door.isCollapsed && (
         <div className="space-y-5 border-t border-slate-100 px-4 py-4">

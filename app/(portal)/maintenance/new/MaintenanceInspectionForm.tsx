@@ -607,7 +607,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     defaultValues: getDefaultFormValues(),
   })
 
-  const { fields, replace, update } = useFieldArray({
+  const { fields, replace, update, append, remove } = useFieldArray({
     control,
     name: 'doors',
   })
@@ -955,58 +955,8 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       doorsForLocationIdRef.current = locationId
       void offlineCacheDoors(locationId, doorsForLocation)
 
-      const current = getValues()
-      const existingDoors = current.doors ?? []
-      const hasUserEdits = existingDoors.some(doorHasMeaningfulEdits)
-
-      const schemaV = Number(current.report_schema_version ?? 1)
-
-      // Only auto-populate door rows on first load/new location when user hasn't started editing.
-      const loadedDoors = doorsForLocation.map((door, index) => {
-        const base: MaintenanceDoorForm = {
-          door_id: door.id,
-          local_id: crypto.randomUUID(),
-          door_number: door.door_label || `Door ${index + 1}`,
-          door_type: door.door_type || '',
-          door_cycles: 0,
-          view_window_visibility: 0,
-          notes: '',
-          checklist: createEmptyChecklist(),
-          photos: [],
-          isCollapsed: index > 0,
-        }
-        if (schemaV >= 2) {
-          return {
-            ...base,
-            technician_door_details: '',
-            door_master: doorMasterSnapshotFromRegistry(door),
-          }
-        }
-        return base
-      })
-
-      if (loadedDoors.length === 0) {
-        if (!hasUserEdits) {
-          setValue('total_doors', 1, { shouldDirty: true, shouldValidate: true })
-          replace([createDoor(0)])
-        }
-        return doorsForLocation
-      }
-
-      if (!hasUserEdits) {
-        const sameRegistry =
-          existingDoors.length === loadedDoors.length &&
-          loadedDoors.every((row, i) => existingDoors[i]?.door_id === row.door_id)
-        if (sameRegistry) {
-          const td = Number(current.total_doors ?? 1)
-          if (td !== loadedDoors.length) {
-            setValue('total_doors', loadedDoors.length, { shouldDirty: true, shouldValidate: true })
-          }
-        } else {
-          setValue('total_doors', loadedDoors.length, { shouldDirty: true, shouldValidate: true })
-          replace(loadedDoors)
-        }
-      }
+      // Registry doors are loaded into availableDoors (dropdown) only.
+      // The form door list is NOT auto-populated — technician selects which doors to inspect.
       return doorsForLocation
     } catch {
       const cached = await offlineGetCachedDoors(locationId)
@@ -1617,14 +1567,14 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   const progress = useMemo(() => {
     const doors = watchedDoors ?? []
     const done = doors.filter(door => isDoorComplete(door)).length
-    const total = Number(watchedTotalDoors || 1)
+    const total = doors.length || 1
     return {
       done,
       total,
       percentage: Math.round((done / total) * 100),
       allDone: done === total,
     }
-  }, [watchedDoors, watchedTotalDoors])
+  }, [watchedDoors])
 
   const faultDetection = useMaintenanceFaultDetection(watchedDoors ?? [])
 
@@ -1772,12 +1722,10 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   }
 
   const submitReport = async (form: MaintenanceFormValues) => {
-    if (!progress.allDone) {
-      const msg = 'Complete checklist and required fields for all doors before submission.'
-      showStatus(msg, 'error')
-      toast.error(msg)
-      return
-    }
+    // Auto-stamp inspection end time at submit
+    const endTime = nowIsoTime()
+    setValue('inspection_end', endTime)
+    form = { ...form, inspection_end: endTime }
 
     setIsSubmitting(true)
     showStatus('', 'info')
@@ -2280,6 +2228,10 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
               reportId={watchedReportId}
               register={register}
               update={update}
+              onRemove={!(isLocked && !isAdminMode) && index > 0 ? () => {
+                remove(index)
+                setValue('total_doors', fields.length - 1, { shouldDirty: true })
+              } : undefined}
               availableDoors={availableDoors}
               uiVariant={uiVariant}
               reportSchemaVersion={Number(watchedReportSchemaVersion ?? 1)}
@@ -2291,6 +2243,21 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
               isOffline={isOffline}
             />
           ))}
+
+          {!(isLocked && !isAdminMode) && (
+            <button
+              type="button"
+              onClick={() => {
+                const nextIndex = fields.length
+                append(createDoor(nextIndex))
+                setValue('total_doors', nextIndex + 1, { shouldDirty: true })
+              }}
+              className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 text-sm font-semibold text-slate-600 hover:border-slate-400 hover:bg-slate-50"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add Another Door
+            </button>
+          )}
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -2580,6 +2547,27 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
 
           {showDraftSubmitSection ? (
             <div className="mt-3 flex flex-col gap-3">
+              {(() => {
+                const completedDoors = (watchedDoors ?? []).filter(isDoorComplete).length
+                const totalAdded = fields.length
+                const registryCount = availableDoors.length
+                const hasIncomplete = completedDoors < totalAdded
+                const belowRegistry = registryCount > 0 && completedDoors < registryCount
+                if (!hasIncomplete && !belowRegistry) return null
+                return (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    {hasIncomplete && (
+                      <p><span className="font-semibold">{completedDoors} of {totalAdded} door{totalAdded !== 1 ? 's' : ''}</span> fully completed. Incomplete doors will still be submitted.</p>
+                    )}
+                    {belowRegistry && !hasIncomplete && (
+                      <p><span className="font-semibold">{completedDoors} of {registryCount} registered doors</span> at this location have been inspected.</p>
+                    )}
+                    {belowRegistry && hasIncomplete && (
+                      <p className="mt-1">This location has <span className="font-semibold">{registryCount} registered doors</span> total.</p>
+                    )}
+                  </div>
+                )
+              })()}
               <div className="fixed bottom-0 left-0 right-0 z-30 flex flex-col gap-3 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur md:static md:mx-0 md:flex-row md:border-0 md:bg-transparent md:px-0 md:py-0">
                 <button
                   type="button"
@@ -2592,7 +2580,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                 <button
                   type="button"
                   onClick={() => void handleSubmitReportClick()}
-                  disabled={isSubmitting || !progress.allDone}
+                  disabled={isSubmitting}
                   className="h-14 w-full rounded-xl bg-slate-900 px-5 text-base font-bold text-white disabled:opacity-50 md:w-auto"
                 >
                   {isSubmitting ? 'Submitting...' : 'Submit Report'}

@@ -9,6 +9,7 @@ import { DashboardEmptyState } from '@/components/dashboard/DashboardEmptyState'
 import type { AdminDashboardData, DashboardChartData, DashboardEntrySummary } from '@/components/dashboard/types'
 import { MaintenanceDistribution } from '@/app/(portal)/components/MaintenanceDistribution'
 import { ReimbursementTable } from '@/app/(portal)/components/ReimbursementTable'
+import { UserSessionCard, type UserSessionInfo } from '@/components/dashboard/UserSessionCard'
 
 interface AdminDashboardProps {
   data: AdminDashboardData
@@ -16,11 +17,19 @@ interface AdminDashboardProps {
   entriesCount: number
   employeeLeaderboard: { employeeId: string; employeeName: string; hours: number }[]
   recentEntries: DashboardEntrySummary[]
+  sessionInfo: UserSessionInfo
 }
 
-export function AdminDashboard({ data, charts, entriesCount, employeeLeaderboard, recentEntries }: AdminDashboardProps) {
+export function AdminDashboard({ data, charts, entriesCount, employeeLeaderboard, recentEntries, sessionInfo }: AdminDashboardProps) {
   if (entriesCount === 0) {
-    return <DashboardEmptyState title="No company time entries" description="Log time to unlock company-wide analytics." />
+    return (
+      <section className="space-y-6">
+        <DashboardEmptyState title="No company time entries" description="Log time to unlock company-wide analytics." />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <UserSessionCard info={sessionInfo} />
+        </div>
+      </section>
+    )
   }
 
   return (
@@ -127,6 +136,10 @@ export function AdminDashboard({ data, charts, entriesCount, employeeLeaderboard
             )}
           </div>
         </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <UserSessionCard info={sessionInfo} />
       </div>
     </section>
   )

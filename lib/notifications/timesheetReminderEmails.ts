@@ -1,6 +1,6 @@
 import { sendMailViaGraph } from '@/lib/graph/sendMail'
 import { escapeHtml } from '@/lib/html/escapeHtml'
-import { getManagerPlusServiceRecipients } from '@/lib/notifications/managerRecipients'
+import { SERVICE_NOTIFY_EMAIL, getManagerPlusServiceRecipients } from '@/lib/notifications/managerRecipients'
 import type { PortalNotifyResult } from '@/lib/notifications/portalGraphNotifications'
 import { formatDdMmYyyy } from '@/lib/timecard/weeklyReminderSchedule'
 
@@ -76,16 +76,8 @@ export async function notifyTimesheetAutoSubmittedManagersBatch(
     return { status: 'skipped', reason: 'No auto-submitted employees.' }
   }
 
-  let recipients: Awaited<ReturnType<typeof getManagerPlusServiceRecipients>>
-  try {
-    recipients = await getManagerPlusServiceRecipients(supabase)
-  } catch (e) {
-    return { status: 'failed', error: e instanceof Error ? e.message : 'Recipient lookup failed.' }
-  }
-
-  if (recipients.length === 0) {
-    return { status: 'skipped', reason: 'No manager/admin or service recipients.' }
-  }
+  // Send only to the service inbox — managers opted out of individual notification emails.
+  const recipients = [{ email: SERVICE_NOTIFY_EMAIL, full_name: 'Team' }]
 
   const subject =
     employees.length === 1
@@ -139,16 +131,8 @@ export async function notifyTimesheetManagerDigest(
     return { status: 'skipped', reason: 'No pending timesheets.' }
   }
 
-  let recipients: Awaited<ReturnType<typeof getManagerPlusServiceRecipients>>
-  try {
-    recipients = await getManagerPlusServiceRecipients(supabase)
-  } catch (e) {
-    return { status: 'failed', error: e instanceof Error ? e.message : 'Recipient lookup failed.' }
-  }
-
-  if (recipients.length === 0) {
-    return { status: 'skipped', reason: 'No manager/admin or service recipients.' }
-  }
+  // Send only to the service inbox — managers opted out of individual notification emails.
+  const recipients = [{ email: SERVICE_NOTIFY_EMAIL, full_name: 'Team' }]
 
   const range = weekRangeLabel(params.weekStart, params.weekEnd)
   const rows = params.pending

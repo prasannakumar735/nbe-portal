@@ -182,8 +182,9 @@ export function useOfflineReport(reportId: string | null): UseOfflineReportResul
 
   useEffect(() => {
     if (!reportId) {
-      setStatus('error')
-      setSaveStatus('idle')
+      // null means auth hasn't resolved yet — stay in loading, not error
+      setStatus('loading')
+      setSaveStatus('loading')
       return
     }
 
