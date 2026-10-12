@@ -39,7 +39,7 @@ function getDoorModelOptions(doorType: string) {
 function calcExternal(openingW: string, openingH: string, doorType: string, doorModel: string): { ew: string; eh: string } {
   const cw = parseInt(openingW) || 0
   const ch = parseInt(openingH) || 0
-  const modelNum = parseInt(doorModel.split(' ')[1] ?? '0') || 0
+  const modelNum = parseInt(doorModel) || 0
   const ew = cw + (modelNum * 2) + 158
   const eh = ch + (EH_OFFSET[doorType] ?? 400)
   return { ew: ew > 158 ? String(ew) : '', eh: eh > 400 ? String(eh) : '' }
@@ -71,7 +71,7 @@ function getDoorImageUrl(doorType: string, colourLabel: string): string | null {
 const SAFETY_FEATURES_KEYS: { key: string; label: string }[] = [
   { key: 'indicatorLamp', label: 'Indicator Lamp' },
   { key: 'safety',        label: 'Safety Sensor'  },
-  // Safety Edge Colour rendered separately using safetyEdgeColour state
+  { key: 'safetyEdge',    label: 'Safety Edge'    },
   { key: 'safetyOther',   label: 'Other'          },
 ]
 const ACTIVATION_KEYS: { key: string; label: string }[] = [
@@ -318,13 +318,14 @@ export default function NewQuotesPage() {
   const [motorSide,     setMotorSide]    = useState('')
   const [cbSide,            setCbSide]           = useState('')
   const [doorControl,       setDoorControl]      = useState('')
-  const [safetyEdgeColour,  setSafetyEdgeColour] = useState('')
-  const [qty,           setQty]          = useState('1')
+  const [safetyEdgeColour,  setSafetyEdgeColour] = useState('YL 119')
+const [qty,           setQty]          = useState('1')
   const [unitPrice,     setUnitPrice]    = useState('')
   const [safetyValues,  setSafetyValues] = useState<Record<string, string>>({})
   const [motorEnabled,  setMotorEnabled] = useState(true)
   const [showSafety,    setShowSafety]   = useState(true)
   const [showActivation, setShowActivation] = useState(true)
+  const [swipeManual,    setSwipeManual]    = useState(false)
   const [showMotor,     setShowMotor]    = useState(true)
 
   // Custom door image upload
@@ -787,7 +788,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
 
   function resetDoorForm() {
     setDoorType(''); setDoorModel(''); setOpeningW(''); setOpeningH(''); setFrame(''); setCurtain('')
-    setColour(''); setMotorKw(''); setMotorSide(''); setCbSide(''); setDoorControl(''); setSafetyEdgeColour(''); setQty('1')
+    setColour(''); setMotorKw(''); setMotorSide(''); setCbSide(''); setDoorControl(''); setSafetyEdgeColour('YL 119'); setQty('1')
     setUnitPrice(''); setSafetyValues({}); setMotorEnabled(true); setEndUser('CUSTOMER')
     setCustomDoorImage(null); setCustomDoorImageName(null)
     setDelivery(''); setInstallation(''); setDemolition(''); setDemolitionEnabled(false); setDemolitionScope(''); setEquipHire(''); setAccTravel('')
@@ -958,7 +959,34 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     rapid_door: true, general: true, maintenance: true, parts: true, pvc_flex: true,
   })
   function toggleGroup(kind: string) {
-    setGroupsOpen(prev => ({ ...prev, [kind]: !prev[kind] }))
+    setGroupsOpen(prev => {
+      const willClose = prev[kind] !== false
+      if (willClose) setFilterMenuOpen(null)
+      return { ...prev, [kind]: !prev[kind] }
+    })
+  }
+  const [groupFilters, setGroupFilters] = useState<Record<string, string>>({})
+  const [filterMenuOpen, setFilterMenuOpen] = useState<string | null>(null)
+  function setGroupFilter(kind: string, value: string, e: React.MouseEvent) {
+    e.stopPropagation()
+    setGroupFilters(prev => ({ ...prev, [kind]: value }))
+    setFilterMenuOpen(null)
+  }
+  function toggleFilterMenu(kind: string, e: React.MouseEvent) {
+    e.stopPropagation()
+    setFilterMenuOpen(prev => prev === kind ? null : kind)
+  }
+  const STATUS_ORDER: Record<string, number> = { draft: 0, draft_review: 1, approved: 2, completed: 3 }
+  function sortAndFilterRows(rows: AllQuoteRow[], kind: string) {
+    const filter = groupFilters[kind] ?? 'all'
+    const filtered = filter === 'active'
+      ? rows.filter(q => !['completed'].includes(q.workflow_status ?? ''))
+      : filter === 'completed'
+      ? rows.filter(q => (q.workflow_status ?? '') === 'completed')
+      : rows
+    return [...filtered].sort((a, b) =>
+      (STATUS_ORDER[a.workflow_status ?? ''] ?? 0) - (STATUS_ORDER[b.workflow_status ?? ''] ?? 0)
+    )
   }
   function openQuoteFromList(q: AllQuoteRow) {
     if (q.quote_kind === 'rapid_door') {
@@ -1010,6 +1038,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     function handleClick(e: MouseEvent) {
       if (colourRef.current          && !colourRef.current.contains(e.target as Node))          setColourOpen(false)
       if (safetyEdgeColourRef.current && !safetyEdgeColourRef.current.contains(e.target as Node)) setSafetyEdgeColourOpen(false)
+      setFilterMenuOpen(null)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
@@ -2235,9 +2264,11 @@ const autoDescLines = [
               { kind: 'parts',       label: 'Parts',                    icon: 'inventory_2',   accent: 'emerald' },
               { kind: 'pvc_flex',    label: 'PVC Flex System',          icon: 'view_column',   accent: 'sky' },
             ] as { kind: string; label: string; icon: string; accent: string }[]).map(({ kind, label, icon, accent }) => {
-              const rows = filteredQuotes.filter(q => q.quote_kind === kind)
-              if (rows.length === 0 && search.trim()) return null
+              const allRows = filteredQuotes.filter(q => q.quote_kind === kind)
+              if (allRows.length === 0 && search.trim()) return null
               const open = groupsOpen[kind] !== false
+              const activeFilter = groupFilters[kind] ?? 'all'
+              const rows = sortAndFilterRows(allRows, kind)
               const accentMap: Record<string, string> = {
                 indigo:  'bg-indigo-50 border-indigo-200 text-indigo-700',
                 violet:  'bg-violet-50 border-violet-200 text-violet-700',
@@ -2260,15 +2291,44 @@ const autoDescLines = [
                     <div className="flex items-center gap-2.5">
                       <span className="material-symbols-outlined text-[18px]">{icon}</span>
                       <span className="text-sm font-semibold">{label}</span>
-                      <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-bold">{rows.length}</span>
+                      <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-bold">{allRows.length}</span>
                     </div>
-                    <span className="material-symbols-outlined text-[20px]">{open ? 'expand_less' : 'expand_more'}</span>
+                    <div className="flex items-center gap-2">
+                      <div className="relative" onClick={e => e.stopPropagation()}>
+                        <button type="button" onClick={e => { if (open) toggleFilterMenu(kind, e) }} disabled={!open}
+                          className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide transition ${open ? 'bg-white/15 hover:bg-white/25' : 'opacity-40 cursor-not-allowed'}`}>
+                          <span className="material-symbols-outlined text-[11px]">filter_list</span>
+                          {activeFilter === 'all' ? 'All' : activeFilter === 'active' ? 'Active' : 'Completed'}
+                          {activeFilter !== 'all' && <span className="ml-0.5 opacity-70">({rows.length})</span>}
+                          <span className="material-symbols-outlined text-[11px]">expand_more</span>
+                        </button>
+                        {filterMenuOpen === kind && (
+                          <div className="absolute right-0 top-full mt-1 z-30 min-w-[130px] rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden">
+                            {([
+                              { value: 'all',       label: 'All',       icon: 'list' },
+                              { value: 'active',    label: 'Active',    icon: 'pending' },
+                              { value: 'completed', label: 'Completed', icon: 'check_circle' },
+                            ]).map(opt => (
+                              <button key={opt.value} type="button" onClick={e => setGroupFilter(kind, opt.value, e)}
+                                className={`flex w-full items-center gap-2 px-3 py-2 text-xs font-medium transition hover:bg-slate-50 ${activeFilter === opt.value ? 'text-indigo-600 bg-indigo-50' : 'text-slate-700'}`}>
+                                <span className="material-symbols-outlined text-[14px]">{opt.icon}</span>
+                                {opt.label}
+                                {activeFilter === opt.value && <span className="material-symbols-outlined ml-auto text-[13px] text-indigo-500">check</span>}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <span className="material-symbols-outlined text-[20px]">{open ? 'expand_less' : 'expand_more'}</span>
+                    </div>
                   </button>
 
                   {/* Rows */}
                   {open && (
                     rows.length === 0 ? (
-                      <div className="px-5 py-6 text-center text-sm text-slate-400">No {label.toLowerCase()} quotes yet</div>
+                      <div className="px-5 py-6 text-center text-sm text-slate-400">
+                        {activeFilter !== 'all' ? `No ${activeFilter} ${label.toLowerCase()} quotes` : `No ${label.toLowerCase()} quotes yet`}
+                      </div>
                     ) : (
                       <>
                         {/* Desktop */}
@@ -2513,18 +2573,18 @@ const autoDescLines = [
       )}
 
       {/* ── Main two-column layout ─────────────────────────────────────────── */}
-      <div className={`${showRightPanel ? 'flex gap-6 items-stretch' : (isMaintenance || isGeneral || isParts || isPvcFlex) ? 'block w-full' : 'max-w-2xl'}`}>
+      <div className={`${showRightPanel ? 'flex gap-3 items-stretch' : (isMaintenance || isGeneral || isParts || isPvcFlex) ? 'block w-full' : 'max-w-2xl'}`}>
 
         {/* ── LEFT: form card ─────────────────────────────────────────────── */}
         <div className={`${showRightPanel ? 'flex-1 min-w-0' : 'w-full'} rounded-2xl border border-slate-200 bg-white shadow-sm flex flex-col`}>
-          <div className="border-b border-slate-100 px-6 py-5">
+          <div className="border-b border-slate-100 px-6 py-3">
             <h2 className="text-base font-semibold text-slate-800">
               {savedDoors.length > 0 ? `Add Door ${savedDoors.length + 1}` : 'Start a New Quote'}
             </h2>
             <p className="mt-0.5 text-sm text-slate-500">Select the type of quotation you want to create</p>
           </div>
 
-          <div className="px-6 py-6 space-y-5">
+          <div className="px-6 py-3 space-y-3">
 
             {/* Quote Type — only show when no doors saved yet */}
             {savedDoors.length === 0 && (
@@ -4425,7 +4485,6 @@ const autoDescLines = [
                     <div>
                       <label className={LABEL_CLS}>
                         Discount % on Material
-                        <Tip text="Applies to PVC strip + hanger + headrail costs only. Does NOT apply to installation, delivery, sliding systems, raised headrail, packaging or labour." />
                       </label>
                       <div className="relative">
                         <input type="number" min="0" max="100" step="1" value={pvcDiscountPct} onChange={e => setPvcDiscountPct(e.target.value)} placeholder="0" className={INPUT_CLS + ' pr-8'} />
@@ -4535,26 +4594,26 @@ const autoDescLines = [
 
           {/* ── Rapid door / other type fields — back inside px-6 padding ── */}
           {!isMaintenance && !isGeneral && !isParts && !isPvcFlex && (
-          <div className="px-6 pb-6 space-y-5">
+          <div className="px-6 pb-6 space-y-3">
 
             {/* Door Type + Door Model — two columns */}
             {isRapidDoor && (
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={LABEL_REQ_CLS}>Door Type<Tip text={tooltips['doorType']} /></label>
+                  <label className={LABEL_REQ_CLS}>Door Type</label>
                   <SelectWrapper>
                     <select value={doorType} onChange={e => setDoorType(e.target.value)} className={SELECT_CLS}>
                       <option value="" disabled>— Select door type —</option>
-                      {RAPID_DOOR_TYPES.map(dt => <option key={dt} value={dt}>{dt}</option>)}
+                      {opts('door_type').map(dt => <option key={dt.code} value={dt.code}>{dt.label || dt.code}</option>)}
                     </select>
                   </SelectWrapper>
                 </div>
                 <div>
-                  <label className={LABEL_REQ_CLS}>Door Model<Tip text={tooltips['doorModel']} /></label>
+                  <label className={LABEL_REQ_CLS}>Guide Width <span className="normal-case font-normal after:content-none">(*If Applicable)</span></label>
                   <SelectWrapper>
                     <select value={doorModel} onChange={e => setDoorModel(e.target.value)} className={SELECT_CLS} disabled={!doorType}>
                       <option value="" disabled>— Select model —</option>
-                      {getDoorModelOptions(doorType).map(m => <option key={m} value={m}>{m}</option>)}
+                      {opts('door_model').map(o => <option key={o.code} value={o.code}>{o.label || o.code}</option>)}
                     </select>
                   </SelectWrapper>
                 </div>
@@ -4568,11 +4627,11 @@ const autoDescLines = [
                 {/* Opening dimensions + derived externals */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className={LABEL_REQ_CLS}>Clear Width <span className="normal-case font-normal after:content-none">(mm)</span><Tip text={tooltips['clearWidth']} /></label>
+                    <label className={LABEL_REQ_CLS}>Clear Width <span className="normal-case font-normal after:content-none">(mm)</span></label>
                     <input type="number" min={0} placeholder="e.g. 2500" value={openingW} onChange={e => setOpeningW(e.target.value)} className={INPUT_CLS} />
                   </div>
                   <div>
-                    <label className={LABEL_REQ_CLS}>Clear Height <span className="normal-case font-normal after:content-none">(mm)</span><Tip text={tooltips['clearHeight']} /></label>
+                    <label className={LABEL_REQ_CLS}>Clear Height <span className="normal-case font-normal after:content-none">(mm)</span></label>
                     <input type="number" min={0} placeholder="e.g. 3000" value={openingH} onChange={e => setOpeningH(e.target.value)} className={INPUT_CLS} />
                   </div>
                 </div>
@@ -4600,125 +4659,93 @@ const autoDescLines = [
                 {/* Frame + Curtain — two columns */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className={LABEL_REQ_CLS}>Frame<Tip text={tooltips['frame']} /></label>
+                    <label className={LABEL_REQ_CLS}>Frame Material</label>
                     <SelectWrapper>
                       <select value={frame} onChange={e => setFrame(e.target.value)} className={SELECT_CLS}>
                         <option value="" disabled>— Select frame —</option>
-                        {optCodes('frame').map(o => <option key={o} value={o}>{o}</option>)}
+                        {opts('frame').map(o => <option key={o.code} value={o.code}>{o.label || o.code}</option>)}
                       </select>
                     </SelectWrapper>
                   </div>
                   <div>
-                    <label className={LABEL_REQ_CLS}>Curtain<Tip text={tooltips['curtain']} /></label>
+                    <label className={LABEL_REQ_CLS}>Curtain Material</label>
                     <SelectWrapper>
                       <select value={curtain} onChange={e => setCurtain(e.target.value)} className={SELECT_CLS}>
                         <option value="" disabled>— Select curtain —</option>
-                        {optCodes('curtain').map(o => <option key={o} value={o}>{o}</option>)}
+                        {opts('curtain').map(o => <option key={o.code} value={o.code}>{o.label || o.code}</option>)}
                       </select>
                     </SelectWrapper>
                   </div>
                 </div>
 
-                <div>
-                  <label className={LABEL_REQ_CLS}>Colour<Tip text={tooltips['colour']} /></label>
-                  <div className="relative" ref={colourRef}>
-                    <button type="button" onClick={() => setColourOpen(o => !o)}
-                      className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white py-3 pl-4 pr-10 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
-                      {colour ? (
-                        <>
-                          <span className="h-6 w-10 shrink-0 rounded-md border border-slate-200"
-                            style={{ backgroundColor: opts('colour').find(c => c.code === colour)?.hexColour ?? undefined }} />
-                          {colour}
-                        </>
-                      ) : <span className="text-slate-400">— Select colour —</span>}
-                      <span className="material-symbols-outlined ml-auto text-slate-400 text-lg">expand_more</span>
-                    </button>
-                    {colourOpen && (
-                      <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden">
-                        {opts('colour').map(c => (
-                          <button key={c.code} type="button"
-                            onClick={() => { setColour(c.code); setColourOpen(false) }}
-                            className={`flex w-full items-center gap-3 px-4 py-2.5 text-sm font-medium transition hover:bg-slate-50 ${colour === c.code ? 'bg-indigo-50 text-indigo-700' : 'text-slate-800'}`}>
-                            <span className="h-6 w-10 shrink-0 rounded-md border border-slate-200" style={{ backgroundColor: c.hexColour ?? undefined }} />
-                            {c.code}
-                            {colour === c.code && <span className="material-symbols-outlined ml-auto text-indigo-500 text-base">check</span>}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={LABEL_REQ_CLS}>Colour (Curtain)</label>
+                    <div className="relative" ref={colourRef}>
+                      <button type="button" onClick={() => setColourOpen(o => !o)}
+                        className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white py-3 pl-4 pr-10 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
+                        {colour ? (
+                          <>
+                            <span className="h-6 w-10 shrink-0 rounded-md border border-slate-200"
+                              style={{ backgroundColor: opts('colour').find(c => c.code === colour)?.hexColour ?? undefined }} />
+                            {colour}
+                          </>
+                        ) : <span className="text-slate-400">— Select colour —</span>}
+                        <span className="material-symbols-outlined ml-auto text-slate-400 text-lg">expand_more</span>
+                      </button>
+                      {colourOpen && (
+                        <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden">
+                          {opts('colour').map(c => (
+                            <button key={c.code} type="button"
+                              onClick={() => { setColour(c.code); setColourOpen(false) }}
+                              className={`flex w-full items-center gap-3 px-4 py-2.5 text-sm font-medium transition hover:bg-slate-50 ${colour === c.code ? 'bg-indigo-50 text-indigo-700' : 'text-slate-800'}`}>
+                              <span className="h-6 w-10 shrink-0 rounded-md border border-slate-200" style={{ backgroundColor: c.hexColour ?? undefined }} />
+                              {c.code}
+                              {colour === c.code && <span className="material-symbols-outlined ml-auto text-indigo-500 text-base">check</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <label className={LABEL_CLS}>Colour (Safety Edge)</label>
+                    <div className="relative" ref={safetyEdgeColourRef}>
+                      <button type="button" onClick={() => setSafetyEdgeColourOpen(o => !o)}
+                        className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white py-3 pl-4 pr-10 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
+                        {safetyEdgeColour ? (
+                          <>
+                            <span className="h-6 w-10 shrink-0 rounded-md border border-slate-200"
+                              style={{ backgroundColor: opts('safetyEdgeColour').find(c => c.code === safetyEdgeColour)?.hexColour ?? '#e5e7eb' }} />
+                            <span className="truncate">{safetyEdgeColour}</span>
+                          </>
+                        ) : <span className="text-slate-400">— None —</span>}
+                        <span className="material-symbols-outlined ml-auto text-slate-400 text-lg pointer-events-none">expand_more</span>
+                      </button>
+                      {safetyEdgeColourOpen && (
+                        <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden">
+                          <button key="" type="button"
+                            onClick={() => { setSafetyEdgeColour(''); setSafetyEdgeColourOpen(false) }}
+                            className={`flex w-full items-center gap-3 px-4 py-2.5 text-sm font-medium transition hover:bg-slate-50 ${!safetyEdgeColour ? 'bg-indigo-50 text-indigo-700' : 'text-slate-400'}`}>
+                            — None —
                           </button>
-                        ))}
-                      </div>
-                    )}
+                          {opts('safetyEdgeColour').map(c => (
+                            <button key={c.code} type="button"
+                              onClick={() => { setSafetyEdgeColour(c.code); setSafetyEdgeColourOpen(false) }}
+                              className={`flex w-full items-center gap-3 px-4 py-2.5 text-sm font-medium transition hover:bg-slate-50 ${safetyEdgeColour === c.code ? 'bg-indigo-50 text-indigo-700' : 'text-slate-800'}`}>
+                              <span className="h-6 w-10 shrink-0 rounded-md border border-slate-200" style={{ backgroundColor: c.hexColour ?? '#e5e7eb' }} />
+                              {c.code}
+                              {safetyEdgeColour === c.code && <span className="material-symbols-outlined ml-auto text-indigo-500 text-base">check</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* ── Safety Features ── */}
-                <div className="mt-3">
-                  <button type="button" onClick={() => setShowSafety(v => !v)}
-                    className="flex w-full items-center justify-between gap-2 px-4 py-2 rounded-t-xl transition"
-                    style={{ backgroundColor: '#92D050' }}>
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[16px] text-white">verified_user</span>
-                      <p className="text-[11px] font-bold uppercase tracking-widest text-white">Safety Features</p>
-                    </div>
-                    <span className="material-symbols-outlined text-[18px] text-white">{showSafety ? 'expand_less' : 'expand_more'}</span>
-                  </button>
-                  {showSafety && <div className="rounded-b-xl border border-t-0 border-slate-200 p-4 grid grid-cols-2 gap-3">
-                    {SAFETY_FEATURES_KEYS.map(field => (
-                      <div key={field.key}>
-                        <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">{field.label}<Tip text={tooltips[field.key]} /></label>
-                        {field.key === 'safetyOther' ? (
-                          <textarea value={safetyValues[field.key] ?? ''} onChange={e => { setSafetyField(field.key, e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px' }}
-                            placeholder="Describe other safety feature…" rows={1}
-                            className="w-full resize-none overflow-hidden rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-3 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
-                        ) : (
-                          <div className="relative">
-                            <select value={safetyValues[field.key] ?? ''} onChange={e => setSafetyField(field.key, e.target.value)}
-                              className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
-                              <option value="">— None —</option>
-                              {optCodes(field.key).map(o => <option key={o} value={o}>{o}</option>)}
-                            </select>
-                            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                    {/* Safety Edge Colour — colour swatch picker */}
-                    <div>
-                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Safety Edge Colour<Tip text={tooltips['safetyEdgeColour']} /></label>
-                      <div className="relative" ref={safetyEdgeColourRef}>
-                        <button type="button" onClick={() => setSafetyEdgeColourOpen(o => !o)}
-                          className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
-                          {safetyEdgeColour ? (
-                            <>
-                              <span className="h-5 w-8 shrink-0 rounded border border-slate-200"
-                                style={{ backgroundColor: opts('safetyEdgeColour').find(c => c.code === safetyEdgeColour)?.hexColour ?? '#e5e7eb' }} />
-                              <span className="truncate">{safetyEdgeColour}</span>
-                            </>
-                          ) : <span className="text-slate-400 text-sm">— None —</span>}
-                          <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-base pointer-events-none">expand_more</span>
-                        </button>
-                        {safetyEdgeColourOpen && (
-                          <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden">
-                            <button key="" type="button"
-                              onClick={() => { setSafetyEdgeColour(''); setSafetyEdgeColourOpen(false) }}
-                              className={`flex w-full items-center gap-3 px-3 py-2 text-sm font-medium transition hover:bg-slate-50 ${!safetyEdgeColour ? 'bg-indigo-50 text-indigo-700' : 'text-slate-400'}`}>
-                              — None —
-                            </button>
-                            {opts('safetyEdgeColour').map(c => (
-                              <button key={c.code} type="button"
-                                onClick={() => { setSafetyEdgeColour(c.code); setSafetyEdgeColourOpen(false) }}
-                                className={`flex w-full items-center gap-3 px-3 py-2 text-sm font-medium transition hover:bg-slate-50 ${safetyEdgeColour === c.code ? 'bg-indigo-50 text-indigo-700' : 'text-slate-800'}`}>
-                                <span className="h-5 w-8 shrink-0 rounded border border-slate-200" style={{ backgroundColor: c.hexColour ?? '#e5e7eb' }} />
-                                {c.code}
-                                {safetyEdgeColour === c.code && <span className="material-symbols-outlined ml-auto text-indigo-500 text-base">check</span>}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>}
-                </div>
 
-              </>
+</>
             )}
 
             {/* Continue button — non-rapid-door */}
@@ -4733,11 +4760,97 @@ const autoDescLines = [
             )}
           </div>
           )}{/* end !isMaintenance && !isGeneral && !isParts wrapper */}
+
+          {/* ── Customer Details ── */}
+          {showRightPanel && (
+            <div className="mt-4 mx-1 mb-4 rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-500">Customer Details</h2>
+                  <span className="text-red-400 text-sm font-bold">*</span>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input type="checkbox" checked={custCanBeBlank} onChange={e => setCustCanBeBlank(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                  <span className="text-xs text-slate-500">Customer details can be blank</span>
+                </label>
+              </div>
+              {custCanBeBlank && (
+                <div className="mx-6 mt-4 flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+                  <span className="material-symbols-outlined text-[14px] text-amber-500">warning</span>
+                  <p className="text-xs text-amber-700">Quote will be generated without customer details. This is for internal/draft use only.</p>
+                </div>
+              )}
+              <div className="px-6 py-5">
+                <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                  <div className="space-y-4">
+                    {([
+                      ['Customer',  custName,  setCustName,  'Company or customer name', true],
+                      ['Attention', custAttn,  setCustAttn,  'Contact person',           false],
+                      ['Phone',     custPhone, setCustPhone, '(03) 9000 0000',           false],
+                    ] as [string, string, (v: string) => void, string, boolean][]).map(([label, value, setter, placeholder, required]) => (
+                      <div key={label}>
+                        <label className={`mb-1.5 block text-xs font-semibold uppercase tracking-widest ${!custCanBeBlank && required && !value ? 'text-red-400' : 'text-slate-400'}`}>
+                          {label}{required && !custCanBeBlank && <span className="ml-0.5 text-red-400">*</span>}
+                        </label>
+                        <input type="text" value={value} placeholder={placeholder} onChange={e => setter(e.target.value)}
+                          className={`w-full rounded-xl border py-2.5 px-4 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:ring-2 focus:ring-indigo-500/20 ${!custCanBeBlank && required && !value ? 'border-red-300 focus:border-red-400' : 'border-slate-200 bg-white focus:border-indigo-400'}`} />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-4">
+                    {([
+                      ['Address',  custAddress,  setCustAddress,  'Street address',        true],
+                      ['Postcode', custPostcode, setCustPostcode, '3000',                   false],
+                      ['Email',    custEmail,    setCustEmail,    'contact@company.com.au', false],
+                    ] as [string, string, (v: string) => void, string, boolean][]).map(([label, value, setter, placeholder, required]) => (
+                      <div key={label}>
+                        <label className={`mb-1.5 block text-xs font-semibold uppercase tracking-widest ${!custCanBeBlank && required && !value ? 'text-red-400' : 'text-slate-400'}`}>
+                          {label}{required && !custCanBeBlank && <span className="ml-0.5 text-red-400">*</span>}
+                        </label>
+                        <input type="text" value={value} placeholder={placeholder} onChange={e => setter(e.target.value)}
+                          className={`w-full rounded-xl border py-2.5 px-4 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:ring-2 focus:ring-indigo-500/20 ${!custCanBeBlank && required && !value ? 'border-red-300 focus:border-red-400' : 'border-slate-200 bg-white focus:border-indigo-400'}`} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Abbreviation Legend ── */}
+          {showRightPanel && (() => {
+            const legendItems = [
+              { label: 'Door Type',       code: doorType,   category: 'door_type'        },
+              { label: 'Frame',           code: frame,      category: 'frame'            },
+              { label: 'Curtain',         code: curtain,    category: 'curtain'          },
+              { label: 'Colour',          code: colour,     category: 'colour'           },
+              { label: 'Safety Edge Col', code: safetyEdgeColour, category: 'safetyEdgeColour' },
+            ].filter(item => !!item.code).map(item => ({
+              ...item,
+              description: opts(item.category).find(o => o.code === item.code)?.description || '',
+            })).filter(item => !!item.description)
+
+            if (legendItems.length === 0) return null
+            return (
+              <div className="mt-3 mx-1 mb-2 rounded-2xl border border-slate-100 bg-slate-50 px-5 py-4">
+                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">Abbreviations</p>
+                <div className="grid grid-cols-3 gap-x-3 gap-y-1">
+                  {legendItems.map(item => (
+                    <div key={item.category} className="flex items-baseline gap-1.5 min-w-0">
+                      <span className="shrink-0 font-mono text-[10px] font-bold text-slate-500">{item.code}</span>
+                      <span className="text-[10px] text-slate-500 truncate">— {item.description}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
         </div>
 
         {/* ── RIGHT: door preview + pricing ─────────────────────────────────── */}
         {showRightPanel && (
-          <div className="w-[420px] shrink-0">
+          <div className="w-[360px] shrink-0">
             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col">
 
               {/* Door preview header */}
@@ -4839,8 +4952,112 @@ const autoDescLines = [
                 )}
               </div>{/* end Quotation Description */}
 
-              {/* ── Activation sub-card ── */}
+              {/* ── Motor & Control Box sub-card ── */}
+              <div className="border-t border-slate-100 px-4 pb-4 pt-4">
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                  <button type="button" onClick={() => setShowMotor(v => !v)}
+                    className={`flex w-full items-center justify-between gap-2 px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest transition ${motorEnabled ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'}`}>
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[16px]">settings</span>
+                      <span>Motor &amp; Control Box</span>
+                    </div>
+                    <span className="material-symbols-outlined text-[18px]">{showMotor ? 'expand_less' : 'expand_more'}</span>
+                  </button>
+                  {showMotor && (
+                    <div className="p-4 space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Motor Size (kW)</label>
+                          <div className="relative">
+                            <select value={motorKw} onChange={e => setMotorKw(e.target.value)}
+                              className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
+                              <option value="">—</option>
+                              {opts('motorKw').map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
+                            </select>
+                            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Motor Side</label>
+                          <div className="relative">
+                            <select value={motorSide} onChange={e => setMotorSide(e.target.value)}
+                              className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
+                              <option value="">—</option>
+                              {opts('motorSide').map(o => <option key={o.code} value={o.code}>{o.label || o.code}</option>)}
+                            </select>
+                            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Control Box Side</label>
+                          <div className="relative">
+                            <select value={cbSide} onChange={e => setCbSide(e.target.value)}
+                              className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
+                              <option value="">—</option>
+                              {opts('controlBoxSide').map(o => <option key={o.code} value={o.code}>{o.label || o.code}</option>)}
+                            </select>
+                            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Door Control</label>
+                          <div className="relative">
+                            <select value={doorControl} onChange={e => setDoorControl(e.target.value)}
+                              className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
+                              <option value="">—</option>
+                              {opts('doorControl').map(o => <option key={o.code} value={o.code}>{o.label || o.code}</option>)}
+                            </select>
+                            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Safety / Detection sub-card ── */}
               <div className="border-t border-slate-100 px-4 py-4">
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                  <button type="button" onClick={() => setShowSafety(v => !v)}
+                    className="flex w-full items-center justify-between gap-2 px-4 py-2.5 transition"
+                    style={{ backgroundColor: '#92D050' }}>
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[16px] text-white">verified_user</span>
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-white">Safety / Detection</p>
+                    </div>
+                    <span className="material-symbols-outlined text-[18px] text-white">{showSafety ? 'expand_less' : 'expand_more'}</span>
+                  </button>
+                  {showSafety && (
+                    <div className="p-4 grid grid-cols-2 gap-3">
+                      {SAFETY_FEATURES_KEYS.map(field => (
+                        <div key={field.key}>
+                          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">{field.label}</label>
+                          {field.key === 'safetyOther' ? (
+                            <textarea value={safetyValues[field.key] ?? ''} onChange={e => { setSafetyField(field.key, e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px' }}
+                              placeholder="Other…" rows={1}
+                              className="w-full resize-none overflow-hidden rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-3 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+                          ) : (
+                            <div className="relative">
+                              <select value={safetyValues[field.key] ?? ''} onChange={e => setSafetyField(field.key, e.target.value)}
+                                className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
+                                <option value="">— None —</option>
+                                {opts(field.key).map(o => <option key={o.code} value={o.code}>{o.label || o.code}</option>)}
+                              </select>
+                              <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Activation sub-card ── */}
+              <div className="border-t border-slate-100 px-4 pb-4">
                 <div className="rounded-xl border border-slate-200 overflow-hidden">
                   <button type="button" onClick={() => setShowActivation(v => !v)}
                     className="flex w-full items-center justify-between gap-2 px-4 py-2.5 transition"
@@ -4855,83 +5072,41 @@ const autoDescLines = [
                     <div className="p-4 grid grid-cols-2 gap-3">
                       {ACTIVATION_KEYS.map(field => (
                         <div key={field.key}>
-                          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">{field.label}<Tip text={tooltips[field.key]} /></label>
-                          <div className="relative">
-                            <select value={safetyValues[field.key] ?? ''} onChange={e => setSafetyField(field.key, e.target.value)}
-                              className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
-                              <option value="">— None —</option>
-                              {optCodes(field.key).map(o => <option key={o} value={o}>{o}</option>)}
-                            </select>
-                            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
-                          </div>
+                          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">{field.label}</label>
+                          {field.key === 'swipe' ? (
+                            <div className="space-y-1.5">
+                              {swipeManual ? (
+                                <input value={safetyValues['swipe'] ?? ''} onChange={e => setSafetyField('swipe', e.target.value)}
+                                  placeholder="Type value…" autoFocus
+                                  className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-3 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+                              ) : (
+                                <div className="relative">
+                                  <select value={safetyValues['swipe'] ?? ''} onChange={e => setSafetyField('swipe', e.target.value)}
+                                    className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
+                                    <option value="">— None —</option>
+                                    {opts('swipe').map(o => <option key={o.code} value={o.code}>{o.label || o.code}</option>)}
+                                  </select>
+                                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
+                                </div>
+                              )}
+                              <button type="button" onClick={() => { setSwipeManual(v => !v); setSafetyField('swipe', '') }}
+                                className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 font-medium">
+                                <span className="material-symbols-outlined text-[14px]">{swipeManual ? 'list' : 'edit'}</span>
+                                {swipeManual ? 'Pick from list' : 'Enter manually'}
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="relative">
+                              <select value={safetyValues[field.key] ?? ''} onChange={e => setSafetyField(field.key, e.target.value)}
+                                className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
+                                <option value="">— None —</option>
+                                {opts(field.key).map(o => <option key={o.code} value={o.code}>{o.label || o.code}</option>)}
+                              </select>
+                              <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
+                            </div>
+                          )}
                         </div>
                       ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* ── Motor & Control Box sub-card ── */}
-              <div className="border-t border-slate-100 px-4 pb-4">
-                <div className="rounded-xl border border-slate-200 overflow-hidden">
-                  <button type="button" onClick={() => setShowMotor(v => !v)}
-                    className={`flex w-full items-center justify-between gap-2 px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest transition ${motorEnabled ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'}`}>
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[16px]">settings</span>
-                      <span>Motor &amp; Control Box</span>
-                    </div>
-                    <span className="material-symbols-outlined text-[18px]">{showMotor ? 'expand_less' : 'expand_more'}</span>
-                  </button>
-                  {showMotor && (
-                    <div className="p-4 space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Motor (kW)<Tip text={tooltips['motorKw']} /></label>
-                          <div className="relative">
-                            <select value={motorKw} onChange={e => setMotorKw(e.target.value)}
-                              className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
-                              <option value="">—</option>
-                              {opts('motorKw').map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
-                            </select>
-                            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
-                          </div>
-                        </div>
-                        <div>
-                          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Motor Side<Tip text={tooltips['motorSide']} /></label>
-                          <div className="relative">
-                            <select value={motorSide} onChange={e => setMotorSide(e.target.value)}
-                              className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
-                              <option value="">—</option>
-                              {optCodes('motorSide').map(o => <option key={o} value={o}>{o}</option>)}
-                            </select>
-                            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Control Box Side<Tip text={tooltips['controlBoxSide']} /></label>
-                          <div className="relative">
-                            <select value={cbSide} onChange={e => setCbSide(e.target.value)}
-                              className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
-                              <option value="">—</option>
-                              {optCodes('controlBoxSide').map(o => <option key={o} value={o}>{o}</option>)}
-                            </select>
-                            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
-                          </div>
-                        </div>
-                        <div>
-                          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-slate-400">Door Control<Tip text={tooltips['doorControl']} /></label>
-                          <div className="relative">
-                            <select value={doorControl} onChange={e => setDoorControl(e.target.value)}
-                              className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
-                              <option value="">—</option>
-                              {optCodes('doorControl').map(o => <option key={o} value={o}>{o}</option>)}
-                            </select>
-                            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-base">expand_more</span>
-                          </div>
-                        </div>
-                      </div>
                     </div>
                   )}
                 </div>
@@ -4941,63 +5116,6 @@ const autoDescLines = [
           </div>
         )}
       </div>
-
-      {/* ── Customer Details — separate card ───────────────────────────────── */}
-      {showRightPanel && (
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-500">Customer Details</h2>
-              <span className="text-red-400 text-sm font-bold">*</span>
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" checked={custCanBeBlank} onChange={e => setCustCanBeBlank(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-              <span className="text-xs text-slate-500">Customer details can be blank</span>
-            </label>
-          </div>
-          {custCanBeBlank && (
-            <div className="mx-6 mt-4 flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
-              <span className="material-symbols-outlined text-[14px] text-amber-500">warning</span>
-              <p className="text-xs text-amber-700">Quote will be generated without customer details. This is for internal/draft use only.</p>
-            </div>
-          )}
-          <div className="px-6 py-5">
-            <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-              <div className="space-y-4">
-                {([
-                  ['Customer',  custName,  setCustName,  'Company or customer name', true],
-                  ['Attention', custAttn,  setCustAttn,  'Contact person',           false],
-                  ['Phone',     custPhone, setCustPhone, '(03) 9000 0000',           false],
-                ] as [string, string, (v: string) => void, string, boolean][]).map(([label, value, setter, placeholder, required]) => (
-                  <div key={label}>
-                    <label className={`mb-1.5 block text-xs font-semibold uppercase tracking-widest ${!custCanBeBlank && required && !value ? 'text-red-400' : 'text-slate-400'}`}>
-                      {label}{required && !custCanBeBlank && <span className="ml-0.5 text-red-400">*</span>}
-                    </label>
-                    <input type="text" value={value} placeholder={placeholder} onChange={e => setter(e.target.value)}
-                      className={`w-full rounded-xl border py-2.5 px-4 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:ring-2 focus:ring-indigo-500/20 ${!custCanBeBlank && required && !value ? 'border-red-300 focus:border-red-400' : 'border-slate-200 bg-white focus:border-indigo-400'}`} />
-                  </div>
-                ))}
-              </div>
-              <div className="space-y-4">
-                {([
-                  ['Address',  custAddress,  setCustAddress,  'Street address',             true],
-                  ['Postcode', custPostcode, setCustPostcode, '3000',                        false],
-                  ['Email',    custEmail,    setCustEmail,    'contact@company.com.au',      false],
-                ] as [string, string, (v: string) => void, string, boolean][]).map(([label, value, setter, placeholder, required]) => (
-                  <div key={label}>
-                    <label className={`mb-1.5 block text-xs font-semibold uppercase tracking-widest ${!custCanBeBlank && required && !value ? 'text-red-400' : 'text-slate-400'}`}>
-                      {label}{required && !custCanBeBlank && <span className="ml-0.5 text-red-400">*</span>}
-                    </label>
-                    <input type="text" value={value} placeholder={placeholder} onChange={e => setter(e.target.value)}
-                      className={`w-full rounded-xl border py-2.5 px-4 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:ring-2 focus:ring-indigo-500/20 ${!custCanBeBlank && required && !value ? 'border-red-300 focus:border-red-400' : 'border-slate-200 bg-white focus:border-indigo-400'}`} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Pricing ───────────────────────────────────────────────────────── */}
       {showRightPanel && (
@@ -5062,7 +5180,7 @@ const autoDescLines = [
                 {demolitionEnabled && (
                   <div className="p-4 space-y-3 border-t border-slate-100">
                     <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-slate-400">Demolition Cost<Tip text={tooltips['demolition']} /></label>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-slate-400">Demolition Cost</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
                         <input type="text" inputMode="decimal" placeholder="0.00" value={demolition} onChange={e => setDemolition(e.target.value)}
@@ -5110,7 +5228,7 @@ const autoDescLines = [
                 { label: 'Accommodation & Travel', tipKey: 'accTravel',    value: accTravel,    set: setAccTravel },
               ].map(({ label, tipKey, value, set }) => (
                 <div key={label}>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">{label}<Tip text={tooltips[tipKey]} /></label>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">{label}</label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
                     <input type="text" inputMode="decimal" placeholder="0.00" value={value} onChange={e => set(e.target.value)}
