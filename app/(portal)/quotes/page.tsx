@@ -2286,8 +2286,8 @@ const autoDescLines = [
               return (
                 <div key={kind} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                   {/* Group header */}
-                  <button type="button" onClick={() => toggleGroup(kind)}
-                    className={`w-full flex items-center justify-between px-5 py-3.5 ${headerMap[accent]} text-white transition hover:opacity-90`}>
+                  <div role="button" tabIndex={0} onClick={() => toggleGroup(kind)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') toggleGroup(kind) }}
+                    className={`w-full flex items-center justify-between px-5 py-3.5 ${headerMap[accent]} text-white transition hover:opacity-90 cursor-pointer select-none`}>
                     <div className="flex items-center gap-2.5">
                       <span className="material-symbols-outlined text-[18px]">{icon}</span>
                       <span className="text-sm font-semibold">{label}</span>
@@ -2321,7 +2321,7 @@ const autoDescLines = [
                       </div>
                       <span className="material-symbols-outlined text-[20px]">{open ? 'expand_less' : 'expand_more'}</span>
                     </div>
-                  </button>
+                  </div>
 
                   {/* Rows */}
                   {open && (
