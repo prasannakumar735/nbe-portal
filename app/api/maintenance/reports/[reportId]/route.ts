@@ -45,8 +45,8 @@ export async function PATCH(
     }
 
     const body = await _request.json().catch(() => ({})) as { status?: string }
-    if (body.status !== 'approved') {
-      return NextResponse.json({ error: 'Only status "approved" is allowed' }, { status: 400 })
+    if (body.status !== 'approved' && body.status !== 'draft') {
+      return NextResponse.json({ error: 'Only status "approved" or "draft" is allowed' }, { status: 400 })
     }
 
     const supabase = createServiceClient()
@@ -62,6 +62,29 @@ export async function PATCH(
     }
 
     const priorStatus = String((existing as { status?: string | null }).status ?? '').trim()
+
+    // Revert approved → draft
+    if (body.status === 'draft') {
+      if (priorStatus !== 'approved') {
+        return NextResponse.json({ error: 'Only approved reports can be reverted to draft.' }, { status: 400 })
+      }
+      const { error: revertErr } = await supabase
+        .from('maintenance_reports')
+        .update({
+          status: 'draft',
+          approved: false,
+          approved_at: null,
+          share_token: null,
+          pdf_url: null,
+        })
+        .eq('id', reportId)
+      if (revertErr) {
+        console.error('[revert to draft]', revertErr)
+        return NextResponse.json({ error: 'Failed to revert report.' }, { status: 500 })
+      }
+      return NextResponse.json({ ok: true, status: 'draft' })
+    }
+
     if (priorStatus === 'approved') {
       return NextResponse.json({ error: 'Report already approved.' }, { status: 409 })
     }

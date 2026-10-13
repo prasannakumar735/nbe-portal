@@ -436,6 +436,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   const [isSavingDraft, setIsSavingDraft] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isApproving, setIsApproving] = useState(false)
+  const [isReverting, setIsReverting] = useState(false)
   const [clientViewUrl, setClientViewUrl] = useState<string | null>(null)
   const [isGeneratingAiSummary, setIsGeneratingAiSummary] = useState(false)
   const [statusMessage, setStatusMessage] = useState<string>('')
@@ -2688,6 +2689,36 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                 >
                   {isApproving ? 'Approving...' : 'Approve Report'}
                 </button>
+                {effectiveReportStatus === 'approved' ? (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!reportIdFromRoute) return
+                      if (!window.confirm('Revert this report to draft? The client share link and stored PDF will be removed. You can re-approve after editing.')) return
+                      setIsReverting(true)
+                      try {
+                        const res = await fetch(`/api/maintenance/reports/${reportIdFromRoute}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ status: 'draft' }),
+                        })
+                        const data = await res.json().catch(() => ({}))
+                        if (!res.ok) throw new Error(data.error ?? 'Revert failed')
+                        setTrackedReportStatus('draft')
+                        setClientViewUrl(null)
+                        showStatus('Report reverted to draft. You can now edit and re-submit.', 'success')
+                      } catch (e) {
+                        showStatus(e instanceof Error ? e.message : 'Revert failed', 'error')
+                      } finally {
+                        setIsReverting(false)
+                      }
+                    }}
+                    disabled={isReverting}
+                    className="h-12 rounded-xl border border-amber-300 bg-amber-50 px-5 text-base font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                  >
+                    {isReverting ? 'Reverting...' : 'Revert to Draft'}
+                  </button>
+                ) : null}
                 {clientViewUrl ? (
                   <button
                     type="button"
