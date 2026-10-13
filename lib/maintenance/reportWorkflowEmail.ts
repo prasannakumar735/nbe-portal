@@ -11,6 +11,7 @@ function managerSubmissionHtml(params: {
   clientName: string
   location: string
   technicianNotes: string
+  doorNoteLines: string[]
   reportUrl: string
 }): string {
   const {
@@ -19,8 +20,13 @@ function managerSubmissionHtml(params: {
     clientName,
     location,
     technicianNotes,
+    doorNoteLines,
     reportUrl,
   } = params
+
+  const notesHtml = doorNoteLines.length > 0
+    ? doorNoteLines.map(l => escapeHtml(l).replace(/\n/g, '<br/>')).join('<br/><br/>')
+    : escapeHtml(technicianNotes).replace(/\n/g, '<br/>')
 
   return [
     `Hi Manager ${escapeHtml(managerName)},<br/><br/>`,
@@ -28,7 +34,7 @@ function managerSubmissionHtml(params: {
     `Client: <b>${escapeHtml(clientName)}</b><br/>`,
     `Location: <b>${escapeHtml(location)}</b><br/><br/>`,
     `<b>Technician Notes:</b><br/>`,
-    `${escapeHtml(technicianNotes)}<br/><br/>`,
+    `${notesHtml}<br/><br/>`,
     `Please review and approve the report.<br/><br/>`,
     `<a href="${escapeHtml(reportUrl)}">View Report</a><br/><br/>`,
     `Thanks,<br/>`,
@@ -105,6 +111,20 @@ export async function notifyManagersOfReportSubmission(
   const technicianNotesRaw = String(row.notes ?? '').trim()
   const technicianNotes = technicianNotesRaw || '(None)'
 
+  // Fetch per-door notes to show them formatted in the email
+  const { data: doorRows } = await supabase
+    .from('maintenance_doors')
+    .select('door_number, door_id, notes')
+    .eq('report_id', reportId)
+    .not('notes', 'is', null)
+    .neq('notes', '')
+    .order('created_at', { ascending: true })
+
+  const doorNoteLines: string[] = (doorRows ?? []).map((d: Record<string, unknown>) => {
+    const label = String(d.door_number ?? d.door_id ?? '').trim()
+    return `${label ? label + ': ' : ''}${String(d.notes ?? '').trim()}`
+  }).filter(Boolean)
+
   const { clientName, locationName } = await resolveClientLocationForReport(
     supabase,
     row.client_location_id as string | null | undefined,
@@ -137,6 +157,7 @@ export async function notifyManagersOfReportSubmission(
         clientName,
         location: locationName,
         technicianNotes,
+        doorNoteLines,
         reportUrl,
       })
 
