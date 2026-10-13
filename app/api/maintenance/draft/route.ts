@@ -56,6 +56,10 @@ async function persistDoorData(
     photos: Array<{ url: string; path: string }>
   }>,
 ) {
+  // Deduplicate by local_id — keeps the last occurrence (most recent form state wins)
+  const uniqueDoors = [...new Map(doors.map(d => [d.local_id, d])).values()]
+  doors = uniqueDoors
+
   const { data: existingDoors } = await supabase
     .from('maintenance_doors')
     .select('id')
