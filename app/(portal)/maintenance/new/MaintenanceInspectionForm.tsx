@@ -437,6 +437,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isApproving, setIsApproving] = useState(false)
   const [isReverting, setIsReverting] = useState(false)
+  const [revertedToDraft, setRevertedToDraft] = useState(false)
   const [clientViewUrl, setClientViewUrl] = useState<string | null>(null)
   const [isGeneratingAiSummary, setIsGeneratingAiSummary] = useState(false)
   const [statusMessage, setStatusMessage] = useState<string>('')
@@ -464,6 +465,8 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   showStatusRef.current = showStatus
 
   const effectiveReportStatus = useMemo(() => {
+    // Revert to draft overrides everything — server prop stays 'approved' until page refresh.
+    if (revertedToDraft) return 'draft'
     const fromProp =
       serverReportStatusProp != null && String(serverReportStatusProp).trim() !== ''
         ? String(serverReportStatusProp).toLowerCase()
@@ -479,7 +482,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
     }
     if (fromProp) return fromProp
     return fromTracked ?? 'draft'
-  }, [serverReportStatusProp, trackedReportStatus])
+  }, [revertedToDraft, serverReportStatusProp, trackedReportStatus])
 
   const downloadProgressText = useMemo(() => {
     if (!downloadProgress) return ''
@@ -2705,6 +2708,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                         const data = await res.json().catch(() => ({}))
                         if (!res.ok) throw new Error(data.error ?? 'Revert failed')
                         setTrackedReportStatus('draft')
+                        setRevertedToDraft(true)
                         setClientViewUrl(null)
                         showStatus('Report reverted to draft. You can now edit and re-submit.', 'success')
                       } catch (e) {
