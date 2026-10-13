@@ -85,7 +85,10 @@ export default async function ClientGalleryPhotosPage({ params, searchParams }: 
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <ClientPortalOutlineNavButton href={`/client/gallery/${encodeURIComponent(doorKey)}`} label="Dates" />
+          {visits.length > 1
+            ? <ClientPortalOutlineNavButton href={`/client/gallery/${encodeURIComponent(doorKey)}`} label="Dates" />
+            : <ClientPortalOutlineNavButton href="/client/gallery" label="All doors" />
+          }
           {photoIds.length > 0 ? <ClientPortalZipDownloadButton href={zipHref} /> : null}
         </div>
       </div>
