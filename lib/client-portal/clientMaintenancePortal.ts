@@ -310,15 +310,15 @@ export async function fetchClientGalleryDoorFolders(
     supabase.from('client_locations').select('id, location_name, Company_address, suburb').in('id', locIds),
     supabase
       .from('maintenance_photos')
-      .select('door_id, maintenance_doors!inner(report_id, maintenance_reports!inner(id, status, approved, client_location_id))')
-      .not('door_id', 'is', null),
+      .select('maintenance_doors!inner(door_id, maintenance_reports!inner(status, approved, client_location_id))')
+      .not('maintenance_doors.door_id', 'is', null),
   ])
 
   const doorIdsWithPhotos = new Set<string>()
   for (const raw of photoableDoors ?? []) {
     const row = raw as {
-      door_id?: string | null
       maintenance_doors?: {
+        door_id?: string | null
         maintenance_reports?: {
           status?: string | null
           approved?: boolean | null
@@ -326,11 +326,12 @@ export async function fetchClientGalleryDoorFolders(
         } | null
       } | null
     }
-    const mr = row.maintenance_doors?.maintenance_reports
-    if (!mr) continue
+    const md = row.maintenance_doors
+    const mr = md?.maintenance_reports
+    if (!mr || !md) continue
     if (String(mr.status ?? '') !== 'approved' || !mr.approved) continue
     if (!locIds.includes(String(mr.client_location_id ?? '').trim())) continue
-    const did = String(row.door_id ?? '').trim()
+    const did = String(md.door_id ?? '').trim()
     if (did) doorIdsWithPhotos.add(did)
   }
 
