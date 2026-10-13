@@ -18,9 +18,20 @@ export default async function ClientMaintenanceReportsPage() {
     redirect('/login?next=/client/reports')
   }
 
-  const singles = await fetchClientPortalSingleReports(session.clientId, session.portalLocationId)
-  const merged = await fetchClientPortalMergedReports(session.clientId, session.portalLocationId)
-  const grouped = groupPortalReportsByDate([...singles, ...merged])
+  const [singles, merged] = await Promise.all([
+    fetchClientPortalSingleReports(session.clientId, session.portalLocationId),
+    fetchClientPortalMergedReports(session.clientId, session.portalLocationId),
+  ])
+  const all = [...singles, ...merged]
+
+  // Auto-skip list when there is only one report — go straight to it
+  if (all.length === 1) {
+    const entry = all[0]!
+    const tok = entry.kind === 'single' ? entry.shareToken : entry.accessToken
+    redirect(`/report/view/${encodeURIComponent(tok)}`)
+  }
+
+  const grouped = groupPortalReportsByDate(all)
   const sections = [...grouped.entries()].map(([dateYmd, entries]) => ({ dateYmd, entries }))
 
   return (

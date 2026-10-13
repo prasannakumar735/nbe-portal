@@ -305,21 +305,32 @@ export async function fetchClientGalleryDoorFolders(
   const locIds = await resolvePortalLocationIds(clientId, portalLocationId)
   if (!locIds.length) return []
 
+  // Get door IDs that have at least one photo in an approved report for this client's locations
   const [{ data: locRows }, { data: photoableDoors }] = await Promise.all([
     supabase.from('client_locations').select('id, location_name, Company_address, suburb').in('id', locIds),
     supabase
       .from('maintenance_photos')
-      .select('door_id, maintenance_doors!inner(maintenance_reports!inner(status, approved, client_location_id))')
-      .not('door_id', 'is', null)
-      .eq('maintenance_doors.maintenance_reports.status', 'approved')
-      .eq('maintenance_doors.maintenance_reports.approved', true)
-      .in('maintenance_doors.maintenance_reports.client_location_id', locIds),
+      .select('door_id, maintenance_doors!inner(report_id, maintenance_reports!inner(id, status, approved, client_location_id))')
+      .not('door_id', 'is', null),
   ])
 
   const doorIdsWithPhotos = new Set<string>()
-  for (const row of photoableDoors ?? []) {
-    const r = row as { door_id?: string | null }
-    const did = String(r.door_id ?? '').trim()
+  for (const raw of photoableDoors ?? []) {
+    const row = raw as {
+      door_id?: string | null
+      maintenance_doors?: {
+        maintenance_reports?: {
+          status?: string | null
+          approved?: boolean | null
+          client_location_id?: string | null
+        } | null
+      } | null
+    }
+    const mr = row.maintenance_doors?.maintenance_reports
+    if (!mr) continue
+    if (String(mr.status ?? '') !== 'approved' || !mr.approved) continue
+    if (!locIds.includes(String(mr.client_location_id ?? '').trim())) continue
+    const did = String(row.door_id ?? '').trim()
     if (did) doorIdsWithPhotos.add(did)
   }
 
