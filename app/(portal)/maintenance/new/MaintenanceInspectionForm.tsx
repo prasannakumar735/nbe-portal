@@ -1784,9 +1784,9 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
       }
 
       setValue('report_id', envelope.report_id ?? (result as { report_id?: string }).report_id)
+      setTrackedReportStatus('submitted')
 
       if (isAdminMode && reportIdFromRoute) {
-        setTrackedReportStatus('submitted')
         setIsLocked(false)
         try {
           localStorage.setItem('maintenance:lastReportId', result.report_id as string)
