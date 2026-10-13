@@ -310,7 +310,8 @@ export async function POST(request: NextRequest) {
 
     let existingStatus: string | undefined
     let existingReportSchemaVersion: number | null = null
-    let existingRow: { status?: string | null; report_schema_version?: unknown; share_token?: string | null; approved?: boolean | null } | null = null
+    type ExistingRow = { status?: string | null; report_schema_version?: unknown; share_token?: string | null; approved?: boolean | null }
+    let existingRow: ExistingRow | null = null
 
     if (payload.report_id) {
       const { data: existing, error: existingError } = await supabase
@@ -323,7 +324,7 @@ export async function POST(request: NextRequest) {
         throw existingError
       }
 
-      existingRow = existing as typeof existingRow
+      existingRow = existing as ExistingRow | null
 
       // canEdit: manager/admin can edit submitted/reviewing/approved; employee only when status === 'draft'
       if (existing?.status === 'submitted' || existing?.status === 'reviewing' || existing?.status === 'approved') {
