@@ -657,6 +657,8 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
   const watchedReportSchemaVersion = useWatch({ control, name: 'report_schema_version', defaultValue: 2 })
   const watchedRepairSummaryText = useWatch({ control, name: 'repair_summary_text', defaultValue: '' }) as string
   useWatch({ control, name: 'repair_summary_overrides', defaultValue: [] })
+  const watchedHealthScoreOverride = useWatch({ control, name: 'health_score_override', defaultValue: null }) as number | null
+  const watchedHealthScoreColor = useWatch({ control, name: 'health_score_color', defaultValue: null }) as 'green' | 'amber' | 'red' | null
 
   /** Stable primitive for location→doors effect (avoids object/function identity in deps). */
   const selectedLocationId = useMemo(
@@ -2452,8 +2454,8 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
             }
             const autoScore = totalChecks > 0 ? Math.round((good / totalChecks) * 100) : 0
             const autoColor = autoScore >= 70 ? 'text-emerald-700' : autoScore >= 40 ? 'text-amber-600' : 'text-red-600'
-            const overrideScore = getValues('health_score_override')
-            const overrideColor = getValues('health_score_color')
+            const overrideScore = watchedHealthScoreOverride
+            const overrideColor = watchedHealthScoreColor
             const effectiveScore = overrideScore != null ? overrideScore : autoScore
             const effectiveColorClass = (() => {
               if (overrideColor === 'green') return 'text-emerald-700'
