@@ -16,7 +16,7 @@ export default async function ClientPortalHomePage() {
   }
 
   if (!session.ok) {
-    redirect('/login?next=/client')
+    redirect('/login')
   }
 
   const singles = await fetchClientPortalSingleReports(session.clientId, session.portalLocationId)
