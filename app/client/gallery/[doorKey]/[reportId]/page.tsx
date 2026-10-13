@@ -98,9 +98,9 @@ export default async function ClientGalleryPhotosPage({ params, searchParams }: 
           No photos were uploaded for this door on this report.
         </p>
       ) : (
-        <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="columns-2 gap-4 lg:columns-3">
           {photoIds.map((photoId, i) => (
-            <li key={photoId} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+            <li key={photoId} className="mb-4 break-inside-avoid rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
               <a
                 href={proxiedSrc(photoId)}
                 target="_blank"
@@ -111,7 +111,7 @@ export default async function ClientGalleryPhotosPage({ params, searchParams }: 
                 <img
                   src={proxiedSrc(photoId)}
                   alt={`Inspection photo ${i + 1}`}
-                  className="mx-auto max-h-[min(70vh,520px)] w-auto object-contain"
+                  className="w-full h-auto object-cover"
                 />
               </a>
               <GalleryPhotoCardActions viewHref={proxiedSrc(photoId)} downloadHref={proxiedDownload(photoId)} />
