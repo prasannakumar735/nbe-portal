@@ -76,6 +76,7 @@ export async function PATCH(
           approved_at: null,
           share_token: null,
           pdf_url: null,
+          manager_workflow_email_sent_at: null,
         })
         .eq('id', reportId)
       if (revertErr) {
