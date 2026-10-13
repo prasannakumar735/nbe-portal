@@ -22,13 +22,12 @@ export default async function ClientGalleryPage() {
         <div>
           <h1 className="text-xl font-bold tracking-tight text-slate-900">Photo gallery</h1>
           {session.portalLocationLabel ? (
-            <p className="mt-2 text-xs font-medium text-slate-600">
-              Site filter: <span className="text-slate-900">{session.portalLocationLabel}</span>
+            <p className="mt-1 text-xs font-medium text-slate-500">
+              Site: <span className="text-slate-700">{session.portalLocationLabel}</span>
             </p>
           ) : null}
-          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-600">
-            Inspection records are organised by door and visit date. Select a folder to view inspection photos, and hover for
-            additional site and door information.
+          <p className="mt-1 max-w-2xl text-sm text-slate-500">
+            Inspection photos organised by door. Select a door to view visit photos.
           </p>
         </div>
         <ClientPortalBackLink href="/client" label="Dashboard" />
@@ -40,19 +39,26 @@ export default async function ClientGalleryPage() {
           or captured on approved maintenance reports.
         </p>
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {folders.map(f => (
             <li key={`${f.keyType}-${f.key}`}>
               <Link
                 href={`/client/gallery/${encodeURIComponent(f.key)}`}
                 title={f.hoverLines.join('\n')}
-                className="flex flex-col items-center rounded-xl border border-amber-200/80 bg-gradient-to-b from-amber-50 to-white px-4 py-8 text-center shadow-sm transition hover:border-amber-300 hover:shadow-md"
+                className="group flex items-center gap-4 rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm transition hover:border-slate-300 hover:shadow-md"
               >
-                <span className="text-4xl" aria-hidden>
-                  📁
-                </span>
-                <span className="mt-3 text-sm font-semibold text-slate-900">{f.folderTitle}</span>
-                <span className="mt-1 text-xs text-slate-500">Open visits</span>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-500 group-hover:bg-amber-100">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                    <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+                  </svg>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-900">{f.folderTitle}</p>
+                  <p className="mt-0.5 text-xs text-slate-400">View inspection photos</p>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0 text-slate-300 group-hover:text-slate-400">
+                  <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+                </svg>
               </Link>
             </li>
           ))}
