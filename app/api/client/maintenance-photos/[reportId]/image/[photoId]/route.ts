@@ -48,36 +48,30 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const allowed = await clientCanViewApprovedReportPhotos(scope.clientId, rid, scope.portalLocationId)
-    if (!allowed) {
+    const svc = createServiceRoleClient()
+
+    // Single join: fetch photo + door + report access check in parallel
+    const [photoResult, accessOk] = await Promise.all([
+      svc
+        .from('maintenance_photos')
+        .select('id, door_id, image_url, maintenance_doors!inner(report_id, maintenance_reports!inner(client_location_id, status, approved, share_token, pdf_url))')
+        .eq('id', pid)
+        .eq('maintenance_doors.report_id', rid)
+        .maybeSingle(),
+      clientCanViewApprovedReportPhotos(scope.clientId, rid, scope.portalLocationId),
+    ])
+
+    if (!accessOk) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const svc = createServiceRoleClient()
-    const { data: photoRow, error: photoErr } = await svc
-      .from('maintenance_photos')
-      .select('id, door_id, image_url')
-      .eq('id', pid)
-      .maybeSingle()
-
-    if (photoErr || !photoRow) {
+    const photoRow = photoResult.data
+    if (photoResult.error || !photoRow) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
-    const doorId = String((photoRow as { door_id?: string | null }).door_id ?? '').trim()
     const imageUrl = String((photoRow as { image_url?: string | null }).image_url ?? '').trim()
-    if (!doorId || !imageUrl) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    }
-
-    const { data: mdRow } = await svc
-      .from('maintenance_doors')
-      .select('report_id')
-      .eq('id', doorId)
-      .maybeSingle()
-
-    const mdReport = String((mdRow as { report_id?: string | null } | null)?.report_id ?? '').trim()
-    if (mdReport !== rid) {
+    if (!imageUrl) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
@@ -110,7 +104,7 @@ export async function GET(
       status: 200,
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'private, no-store',
+        'Cache-Control': 'private, max-age=3600',
         'X-Robots-Tag': 'noindex, nofollow',
         ...(download
           ? { 'Content-Disposition': `attachment; filename="${filename}"` }
