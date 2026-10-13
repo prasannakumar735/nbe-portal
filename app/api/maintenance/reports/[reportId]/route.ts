@@ -63,10 +63,10 @@ export async function PATCH(
 
     const priorStatus = String((existing as { status?: string | null }).status ?? '').trim()
 
-    // Revert approved → draft
+    // Revert submitted/approved → draft
     if (body.status === 'draft') {
-      if (priorStatus !== 'approved') {
-        return NextResponse.json({ error: 'Only approved reports can be reverted to draft.' }, { status: 400 })
+      if (priorStatus !== 'approved' && priorStatus !== 'submitted' && priorStatus !== 'reviewing') {
+        return NextResponse.json({ error: 'Only submitted or approved reports can be reverted to draft.' }, { status: 400 })
       }
       const { error: revertErr } = await supabase
         .from('maintenance_reports')

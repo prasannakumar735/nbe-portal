@@ -2692,12 +2692,12 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                 >
                   {isApproving ? 'Approving...' : 'Approve Report'}
                 </button>
-                {effectiveReportStatus === 'approved' ? (
+                {['approved', 'submitted', 'reviewing'].includes(effectiveReportStatus) ? (
                   <button
                     type="button"
                     onClick={async () => {
                       if (!reportIdFromRoute) return
-                      if (!window.confirm('Revert this report to draft? The client share link and stored PDF will be removed. You can re-approve after editing.')) return
+                      if (!window.confirm('Revert this report to draft? Any stored PDF and share link will be removed. The technician can then edit and re-submit.')) return
                       setIsReverting(true)
                       try {
                         const res = await fetch(`/api/maintenance/reports/${reportIdFromRoute}`, {
