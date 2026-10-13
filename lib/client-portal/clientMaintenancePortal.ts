@@ -305,10 +305,23 @@ export async function fetchClientGalleryDoorFolders(
   const locIds = await resolvePortalLocationIds(clientId, portalLocationId)
   if (!locIds.length) return []
 
-  const { data: locRows } = await supabase
-    .from('client_locations')
-    .select('id, location_name, Company_address, suburb')
-    .in('id', locIds)
+  const [{ data: locRows }, { data: photoableDoors }] = await Promise.all([
+    supabase.from('client_locations').select('id, location_name, Company_address, suburb').in('id', locIds),
+    supabase
+      .from('maintenance_photos')
+      .select('door_id, maintenance_doors!inner(maintenance_reports!inner(status, approved, client_location_id))')
+      .not('door_id', 'is', null)
+      .eq('maintenance_doors.maintenance_reports.status', 'approved')
+      .eq('maintenance_doors.maintenance_reports.approved', true)
+      .in('maintenance_doors.maintenance_reports.client_location_id', locIds),
+  ])
+
+  const doorIdsWithPhotos = new Set<string>()
+  for (const row of photoableDoors ?? []) {
+    const r = row as { door_id?: string | null }
+    const did = String(r.door_id ?? '').trim()
+    if (did) doorIdsWithPhotos.add(did)
+  }
 
   const locMap = new Map<string, { location_name?: string | null; Company_address?: string | null; suburb?: string | null }>()
   for (const row of locRows ?? []) {
@@ -351,6 +364,7 @@ export async function fetchClientGalleryDoorFolders(
       } | null
     }
     const id = String(dr.id ?? '').trim()
+    if (!doorIdsWithPhotos.has(id)) continue
     const label = String(dr.door_label ?? '').trim() || 'Door'
     const desc = String(dr.door_description ?? '').trim()
     const dt = String(dr.door_type ?? '').trim()
