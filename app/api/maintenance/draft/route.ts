@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createServerClient } from '@/lib/supabase/server'
 import { canApproveMaintenanceReport } from '@/lib/auth/roles'
+import { regenerateMaintenanceReportPdfWithClientQr } from '@/lib/maintenance/regenerateReportPdfWithQr'
 import {
   formatMaintenanceZodIssues,
   maintenanceFormSubmitSchema,
@@ -309,17 +310,20 @@ export async function POST(request: NextRequest) {
 
     let existingStatus: string | undefined
     let existingReportSchemaVersion: number | null = null
+    let existingRow: { status?: string | null; report_schema_version?: unknown; share_token?: string | null; approved?: boolean | null } | null = null
 
     if (payload.report_id) {
       const { data: existing, error: existingError } = await supabase
         .from('maintenance_reports')
-        .select('id, status, report_schema_version')
+        .select('id, status, report_schema_version, share_token, approved')
         .eq('id', payload.report_id)
         .single()
 
       if (existingError && existingError.code !== 'PGRST116') {
         throw existingError
       }
+
+      existingRow = existing as typeof existingRow
 
       // canEdit: manager/admin can edit submitted/reviewing/approved; employee only when status === 'draft'
       if (existing?.status === 'submitted' || existing?.status === 'reviewing' || existing?.status === 'approved') {
@@ -452,6 +456,21 @@ export async function POST(request: NextRequest) {
       reportMeta && typeof (reportMeta as { updated_at?: unknown }).updated_at === 'string'
         ? String((reportMeta as { updated_at: string }).updated_at)
         : null
+
+    // Regenerate stored PDF when override fields change on an already-approved report
+    const overrideFieldsChanged =
+      Object.prototype.hasOwnProperty.call(payload.form, 'health_score_override') ||
+      Object.prototype.hasOwnProperty.call(payload.form, 'health_score_color')
+    const wasApproved =
+      existingStatus === 'approved' &&
+      Boolean(existingRow?.approved) &&
+      String(existingRow?.share_token ?? '').trim()
+    if (overrideFieldsChanged && wasApproved && reportId) {
+      const shareToken = String(existingRow?.share_token ?? '').trim()
+      regenerateMaintenanceReportPdfWithClientQr({ supabase, reportId, shareToken }).catch(e =>
+        console.error('[draft] PDF regen after override change', e),
+      )
+    }
 
     return NextResponse.json({ report_id: reportId, status: persistedStatus, updated_at: updatedAt })
   } catch (error) {
