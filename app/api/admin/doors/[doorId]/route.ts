@@ -29,6 +29,7 @@ export async function PATCH(request: Request, { params }: Params) {
       door_type_alt: parsed.door_type_alt,
       cw: parsed.cw,
       ch: parsed.ch,
+      motor_side: parsed.motor_side ?? null,
       install_date: parsed.install_date,
     }
 
@@ -48,7 +49,7 @@ export async function PATCH(request: Request, { params }: Params) {
       .from('doors')
       .update(updates)
       .eq('id', doorId)
-      .select('id, client_location_id, door_label, door_serial, door_type, door_description, door_type_alt, cw, ch, install_date, created_at')
+      .select('id, client_location_id, door_label, door_serial, door_type, door_description, door_type_alt, cw, ch, motor_side, install_date, created_at')
       .single()
 
     if (error) {

@@ -10,7 +10,6 @@ import type {
 import { wrapPdfTextLines } from '@/lib/pdf/pdfTextWrap'
 import { savePdfBytes } from '@/lib/pdf/savePdf'
 import { embedRobotoForPdfLib } from '@/lib/pdf/robotoPdf'
-import { DOOR_DIAGRAM_LEGEND_ITEMS } from '@/lib/maintenance/doorDiagramLegend'
 import {
   BORDER_LIGHT,
   CELL_CAUTION,
@@ -528,73 +527,10 @@ function drawCustomerInfo(
   return y - 10
 }
 
-/** Legend metrics — must stay in sync between measure and draw. */
-type DoorLegendLayout = {
-  legendSize: number
-  lineHeight: number
-  rowGap: number
-  titleSize: number
-  titleBottomGap: number
-  dividerGap: number
-  colGap: number
-  cols: number
-  tailPad: number
-}
-
-const DOOR_LEGEND_TAIL_PAD = 4
-
-function measureDoorDiagramLegendHeight(font: PDFFontType, layout: DoorLegendLayout): number {
-  const { legendSize, lineHeight, rowGap, titleSize, titleBottomGap, dividerGap, colGap, cols } = layout
-  const maxW = PAGE_WIDTH - MARGIN * 2
-  const colW = (maxW - colGap * (cols - 1)) / cols
-  const items = [...DOOR_DIAGRAM_LEGEND_ITEMS]
-  const rowCount = Math.ceil(items.length / cols)
-
-  let h = titleSize + titleBottomGap + dividerGap
-  for (let r = 0; r < rowCount; r++) {
-    let maxLines = 1
-    for (let c = 0; c < cols; c++) {
-      const idx = r * cols + c
-      if (idx >= items.length) continue
-      const sub = wrapPdfTextLines(items[idx]!, font, legendSize, colW)
-      maxLines = Math.max(maxLines, sub.length)
-    }
-    h += maxLines * lineHeight + rowGap
-  }
-  return h + layout.tailPad
-}
-
-/** Pick compact legend typography so the block fits `maxHeight` (25% slot of fixed door section). */
-function resolveDoorLegendLayout(font: PDFFontType, maxHeight: number): DoorLegendLayout {
-  const base: Omit<DoorLegendLayout, 'legendSize' | 'lineHeight' | 'rowGap'> = {
-    titleSize: 7.5,
-    titleBottomGap: 3,
-    dividerGap: 5,
-    colGap: 14,
-    cols: 2,
-    tailPad: DOOR_LEGEND_TAIL_PAD,
-  }
-
-  for (let legendSize = 7.5; legendSize >= 5; legendSize -= 0.25) {
-    const lineHeight = Math.max(1, Math.ceil(legendSize * 1.22))
-    const rowGap = Math.max(1, Math.round(legendSize * 0.28))
-    const layout: DoorLegendLayout = { ...base, legendSize, lineHeight, rowGap }
-    if (measureDoorDiagramLegendHeight(font, layout) <= maxHeight) return layout
-  }
-
-  const legendSize = 5
-  const lineHeight = Math.max(1, Math.ceil(legendSize * 1.28))
-  const rowGap = 2
-  return { ...base, legendSize, lineHeight, rowGap }
-}
-
-/** ~520 CSS px — matches UI fixed door block; 75/25 split keeps diagram primary, legend compact. */
+/** ~520 CSS px — matches UI fixed door block. */
 const DOOR_DIAGRAM_BLOCK_MAX_PT = (520 * 72) / 96
-const DOOR_IMAGE_SHARE = 0.75
-const DOOR_LEGEND_SHARE = 0.25
 const DOOR_BLOCK_LAYOUT_PAD = 8
 const DOOR_SECTION_TITLE_GAP = 18
-const DOOR_IMG_TO_LEGEND_GAP = 6
 
 /** Draw door diagram: static image if provided, else placeholder boxes. Returns new y. */
 function drawDoorDiagram(
@@ -610,13 +546,8 @@ function drawDoorDiagram(
   y -= DOOR_SECTION_TITLE_GAP
 
   const yAfterTitle = y
-  const maxBlock =
-    yAfterTitle - PAGE_BREAK_Y - DOOR_BLOCK_LAYOUT_PAD
-  const blockH = Math.min(DOOR_DIAGRAM_BLOCK_MAX_PT, Math.max(120, maxBlock))
-  const inner = blockH - DOOR_IMG_TO_LEGEND_GAP
-  const imageMaxH = inner * DOOR_IMAGE_SHARE
-  const legendMaxH = inner * DOOR_LEGEND_SHARE
-  const legendLayout = resolveDoorLegendLayout(font, legendMaxH)
+  const maxBlock = yAfterTitle - PAGE_BREAK_Y - DOOR_BLOCK_LAYOUT_PAD
+  const imageMaxH = Math.min(DOOR_DIAGRAM_BLOCK_MAX_PT, Math.max(120, maxBlock))
 
   if (doorDiagramImage) {
     const maxW = PAGE_WIDTH - MARGIN * 2
@@ -632,8 +563,7 @@ function drawDoorDiagram(
       width: diagramW,
       height: diagramH,
     })
-    y -= diagramH + DOOR_IMG_TO_LEGEND_GAP
-    y = drawDoorDiagramLegend(page, y, font, bold, legendLayout)
+    y -= diagramH
     return y
   }
 
@@ -658,83 +588,9 @@ function drawDoorDiagram(
     drawY -= boxH + 8
   }
   y = drawY - 12
-  y = drawDoorDiagramLegend(page, y, font, bold, legendLayout)
   return y
 }
 
-/** Legend under diagram: titled section, divider, 2-column grid; each item wraps only within its column. */
-function drawDoorDiagramLegend(
-  page: PDFPage,
-  startY: number,
-  font: PDFFontType,
-  bold: PDFFontType,
-  layout: DoorLegendLayout
-): number {
-  let y = startY
-  const { legendSize, lineHeight, rowGap, titleSize, titleBottomGap, dividerGap, colGap, cols, tailPad } = layout
-  const maxW = PAGE_WIDTH - MARGIN * 2
-  const colW = (maxW - colGap * (cols - 1)) / cols
-  const legendColor = rgb(0.42, 0.44, 0.48)
-  const titleColor = SECTION_COLOR
-
-  page.drawText('Door Legend', {
-    x: MARGIN,
-    y,
-    size: titleSize,
-    font: bold,
-    color: titleColor,
-  })
-  y -= titleSize + titleBottomGap
-
-  page.drawLine({
-    start: { x: MARGIN, y },
-    end: { x: PAGE_WIDTH - MARGIN, y },
-    thickness: 0.6,
-    color: BORDER_LIGHT,
-  })
-  y -= dividerGap
-
-  const items = [...DOOR_DIAGRAM_LEGEND_ITEMS]
-  const rows = Math.ceil(items.length / cols)
-
-  for (let r = 0; r < rows; r++) {
-    const rowTopY = y
-    let maxLines = 1
-    const wrappedCols: string[][] = []
-
-    for (let c = 0; c < cols; c++) {
-      const idx = r * cols + c
-      if (idx >= items.length) {
-        wrappedCols.push([])
-        continue
-      }
-      const sub = wrapPdfTextLines(items[idx]!, font, legendSize, colW)
-      wrappedCols.push(sub)
-      maxLines = Math.max(maxLines, sub.length)
-    }
-
-    for (let c = 0; c < cols; c++) {
-      const sub = wrappedCols[c]!
-      if (sub.length === 0) continue
-      const x = MARGIN + c * (colW + colGap)
-      let lineY = rowTopY
-      for (const line of sub) {
-        page.drawText(line, {
-          x,
-          y: lineY,
-          size: legendSize,
-          font,
-          color: legendColor,
-        })
-        lineY -= lineHeight
-      }
-    }
-
-    y = rowTopY - maxLines * lineHeight - rowGap
-  }
-
-  return y - tailPad
-}
 
 /** e.g. "A. CURTAIN" → "A. Curtain", "C. OPEN / CLOSE FUNCTION" → "C. Open / Close Function" */
 function formatSectionHeading(section: string): string {
@@ -1496,13 +1352,17 @@ export async function generateMaintenanceReportPdf(options: MaintenancePdfOption
     drawHeader(page, reportNumber, reportDate, logoImage, font, bold)
     y = contentStartY
 
-    y = drawDoorNotes(page, door.notes, y, font, bold)
+    if (door.notes && door.notes.trim()) {
+      y = drawDoorNotes(page, door.notes, y, font, bold)
+    }
 
     if (imageRefs.length > 0) {
       y -= 14
       page.drawText('Uploaded Photos', { x: MARGIN, y, size: 12, font: bold, color: SECTION_COLOR })
       y -= 16
-      const grid = drawImageGrid(page, y, imageRefs, 2, {
+      // Use 3 columns when count is divisible by 3 (avoids lonely photo on last row)
+      const photoCols = imageRefs.length % 3 === 0 ? 3 : 2
+      const grid = drawImageGrid(page, y, imageRefs, photoCols, {
         pdf,
         reportNumber,
         reportDate,

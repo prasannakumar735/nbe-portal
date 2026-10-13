@@ -1597,7 +1597,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
 
       const { data, error } = await supabase
         .from('doors')
-        .select('id, door_label, door_type, client_location_id, door_description, door_type_alt, cw, ch')
+        .select('id, door_label, door_type, client_location_id, door_description, door_type_alt, cw, ch, motor_side')
         .eq('id', doorId)
         .maybeSingle()
 
@@ -1615,6 +1615,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
         door_type_alt?: string | null
         cw?: string | null
         ch?: string | null
+        motor_side?: 'RHD' | 'LHD' | null
       }
 
       if (doorRecord.client_location_id) {

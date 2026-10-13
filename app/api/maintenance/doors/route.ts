@@ -21,6 +21,7 @@ function mapDoorRow(row: Record<string, unknown>) {
     door_type_alt: strOrNull(row, 'door_type_alt'),
     cw: strOrNull(row, 'cw'),
     ch: strOrNull(row, 'ch'),
+    motor_side: (row.motor_side === 'RHD' || row.motor_side === 'LHD') ? row.motor_side : null,
   }
 }
 

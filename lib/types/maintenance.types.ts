@@ -29,10 +29,10 @@ export const MAINTENANCE_CHECKLIST_ITEMS: MaintenanceChecklistItem[] = [
   { code: 'd19', section: 'D. SAFETY & CONTROL BOX', label: 'Emergency switch operates properly?' },
   { code: 'd20', section: 'D. SAFETY & CONTROL BOX', label: 'Control box door closes and lock functions?' },
   { code: 'd21', section: 'D. SAFETY & CONTROL BOX', label: 'All wires secured and covered in conduit?' },
-  { code: 'e22', section: 'E. DRIVE SYSTEM & MOTOR', label: 'Gearbox free of oil leaks and abnormal wear?' },
+  { code: 'e22', section: 'E. DRIVE SYSTEM & MOTOR', label: 'Motor Gearbox – Free of leaks and abnormal wear?' },
   { code: 'e23', section: 'E. DRIVE SYSTEM & MOTOR', label: 'Any signs of wear in drive system?' },
   { code: 'e24', section: 'E. DRIVE SYSTEM & MOTOR', label: 'Bearings free of rust or wear?' },
-  { code: 'e25', section: 'E. DRIVE SYSTEM & MOTOR', label: 'Limit switch or encoder function correctly?' },
+  { code: 'e25', section: 'E. DRIVE SYSTEM & MOTOR', label: 'Limit system – Encoder / Limit Switch working properly?' },
   { code: 'e26', section: 'E. DRIVE SYSTEM & MOTOR', label: 'Chain or belt properly adjusted and lubricated?' },
 ]
 
@@ -167,7 +167,7 @@ export const MAINTENANCE_CHECKLIST_ITEMS_NEW: MaintenanceChecklistItem[] = [
   {
     code: 'e22',
     section: 'E. DRIVE SYSTEM & MOTOR',
-    label: 'Gearbox – Free of leaks and abnormal wear?',
+    label: 'Motor Gearbox – Free of leaks and abnormal wear?',
     floating_note: 'Check for oil leaks and measure wear between the drive drums and gearbox.',
   },
   {
@@ -185,7 +185,7 @@ export const MAINTENANCE_CHECKLIST_ITEMS_NEW: MaintenanceChecklistItem[] = [
   {
     code: 'e25',
     section: 'E. DRIVE SYSTEM & MOTOR',
-    label: 'Limit System – Switch/encoder working?',
+    label: 'Limit system – Encoder / Limit Switch working properly?',
     floating_note: 'Check chain adjustment and lubricate as needed.',
   },
   {
@@ -211,6 +211,8 @@ export type DoorMasterSnapshot = {
   door_type_alt?: string | null
   cw?: string | null
   ch?: string | null
+  /** Motor/hinge side — RHD (Right Hand Drive) or LHD (Left Hand Drive). */
+  motor_side?: 'RHD' | 'LHD' | null
 }
 
 export type MaintenanceDoorForm = {
@@ -310,6 +312,7 @@ export type MaintenanceAvailableDoor = {
   door_type_alt?: string | null
   cw?: string | null
   ch?: string | null
+  motor_side?: 'RHD' | 'LHD' | null
 }
 
 export type ClientRecord = {
@@ -337,6 +340,7 @@ export type DoorRecord = {
   door_type_alt?: string | null
   cw?: string | null
   ch?: string | null
+  motor_side?: 'RHD' | 'LHD' | null
   install_date?: string | null
   created_at?: string | null
 }

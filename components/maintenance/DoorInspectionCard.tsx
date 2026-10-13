@@ -388,6 +388,28 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
               <p className="mt-1 text-xs text-slate-500">
                 Choose a door from the list, or add one manually if the site has extra doors not in the registry.
               </p>
+
+              {/* Door description pill — shown once a door is selected from registry */}
+              {!door.adhoc_manual && (door.door_type || master?.cw || master?.ch || master?.motor_side || master?.door_description) && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  {door.door_type && door.door_type.toLowerCase() !== 'unspecified' && (
+                    <span className="rounded-md bg-white border border-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">{door.door_type}</span>
+                  )}
+                  {(master?.cw || master?.ch) && (
+                    <span className="rounded-md bg-white border border-slate-200 px-2 py-0.5 text-xs text-slate-600">
+                      {[master?.cw && `${master.cw}CW`, master?.ch && `${master.ch}CH`].filter(Boolean).join(' x ')}
+                    </span>
+                  )}
+                  {master?.motor_side && (
+                    <span className="rounded-md bg-white border border-slate-200 px-2 py-0.5 text-xs text-slate-600">
+                      {master.motor_side} (Motor side)
+                    </span>
+                  )}
+                  {master?.door_description && (
+                    <span className="text-xs text-slate-500">{String(master.door_description)}</span>
+                  )}
+                </div>
+              )}
             </label>
 
             {door.adhoc_manual && (
@@ -543,7 +565,7 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
                         setMasterField('cw', d === '' ? null : d)
                       }}
                       disabled={disabled}
-                      placeholder="Curtain width (optional)"
+                      placeholder="Clear width (optional)"
                       className="mt-1 h-12 w-full rounded-xl border border-slate-300 px-3 pb-2 text-base"
                     />
                   </label>
@@ -559,9 +581,25 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
                         setMasterField('ch', d === '' ? null : d)
                       }}
                       disabled={disabled}
-                      placeholder="Curtain height (optional)"
+                      placeholder="Clear height (optional)"
                       className="mt-1 h-12 w-full rounded-xl border border-slate-300 px-3 pb-2 text-base"
                     />
+                  </label>
+                  <label className="text-sm font-medium text-slate-700">
+                    Motor Side
+                    <select
+                      value={door.door_master?.motor_side ?? ''}
+                      onChange={e => {
+                        const v = e.target.value as 'RHD' | 'LHD' | ''
+                        setMasterField('motor_side', v === '' ? null : v)
+                      }}
+                      disabled={disabled}
+                      className="mt-1 h-12 w-full rounded-xl border border-slate-300 px-3 pb-2 text-base"
+                    >
+                      <option value="">Not specified</option>
+                      <option value="RHD">RHD (Right Hand Drive)</option>
+                      <option value="LHD">LHD (Left Hand Drive)</option>
+                    </select>
                   </label>
                 </>
               )}
@@ -659,16 +697,6 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
             </section>
           )}
 
-          <div className="overflow-x-hidden">
-            <ChecklistSection
-              control={control}
-              doorIndex={index}
-              items={checklistItems}
-              headerLabel={hasNewChecklistText ? 'Checklist' : undefined}
-              showFloatingNotes={hasNewChecklistText}
-            />
-          </div>
-
           <label className="block text-sm font-medium text-slate-700">
             {hasNewChecklistText ? 'Service Notes' : 'Door Fault Notes'}
             <textarea
@@ -707,6 +735,16 @@ export const DoorInspectionCard = memo(function DoorInspectionCard({
               }}
               disabled={disabled}
               isOffline={isOffline}
+            />
+          </div>
+
+          <div className="overflow-x-hidden">
+            <ChecklistSection
+              control={control}
+              doorIndex={index}
+              items={checklistItems}
+              headerLabel={hasNewChecklistText ? 'Checklist' : undefined}
+              showFloatingNotes={hasNewChecklistText}
             />
           </div>
         </div>

@@ -79,6 +79,7 @@ const doorFormSchema = z.object({
     door_type_alt: z.string().optional(),
     cw: z.string().optional(),
     ch: z.string().optional(),
+    motor_side: z.enum(['RHD', 'LHD', '']).optional(),
     install_date: z.string().optional(),
 });
 export default function AdminClientsPage() {
@@ -152,6 +153,7 @@ export default function AdminClientsPage() {
             door_type_alt: '',
             cw: '',
             ch: '',
+            motor_side: '' as '' | 'RHD' | 'LHD',
             install_date: '',
         },
     });
@@ -344,7 +346,7 @@ export default function AdminClientsPage() {
         const result = await fetchJson<DoorRecord>(url, {
             method,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(values),
+            body: JSON.stringify({ ...values, motor_side: values.motor_side || null }),
         });
         if (!result.ok) {
             toast.error(result.error ?? 'Failed to save door');
@@ -361,6 +363,7 @@ export default function AdminClientsPage() {
             door_type_alt: '',
             cw: '',
             ch: '',
+            motor_side: '',
             install_date: '',
         });
         if (selectedLocationId)
@@ -467,6 +470,7 @@ export default function AdminClientsPage() {
             door_type_alt: '',
             cw: '',
             ch: '',
+            motor_side: '',
             install_date: '',
         });
         setShowDoorModal(true);
@@ -483,6 +487,7 @@ export default function AdminClientsPage() {
             door_type_alt: door.door_type_alt ?? '',
             cw: door.cw ?? '',
             ch: door.ch ?? '',
+            motor_side: (door.motor_side === 'RHD' || door.motor_side === 'LHD') ? door.motor_side : '',
             install_date: door.install_date ?? '',
         });
         setShowDoorModal(true);
@@ -1200,6 +1205,11 @@ export default function AdminClientsPage() {
               <input {...doorForm.register('door_type_alt')} placeholder="Door type alt" className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
               <input {...doorForm.register('cw')} placeholder="CW" className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
               <input {...doorForm.register('ch')} placeholder="CH" className="h-10 rounded-lg border border-slate-300 px-3 text-sm"/>
+              <select {...doorForm.register('motor_side')} className="h-10 rounded-lg border border-slate-300 px-3 text-sm text-slate-700">
+                <option value="">Motor side (not specified)</option>
+                <option value="RHD">RHD (Right Hand Drive)</option>
+                <option value="LHD">LHD (Left Hand Drive)</option>
+              </select>
               <div className="md:col-span-2 flex justify-end gap-2">
                 <button type="button" className="h-10 rounded-lg border border-slate-300 px-4 text-sm" onClick={closeDoorModal}>Cancel</button>
                 <button disabled={!canEdit} type="submit" className="h-10 rounded-lg bg-indigo-600 px-4 text-sm font-medium text-white disabled:opacity-50">{editingDoor ? 'Save changes' : 'Create door'}</button>

@@ -6,7 +6,8 @@ export async function sendMaintenanceReportEmail(
   pdfBuffer: Uint8Array,
   fileName: string,
 ): Promise<void> {
-  const to = process.env.MAINTENANCE_ADMIN_EMAIL || 'service@nbeaustralia.com.au'
+  const to = process.env.MAINTENANCE_ADMIN_EMAIL
+  if (!to) throw new Error('Missing MAINTENANCE_ADMIN_EMAIL env var')
 
   await sendMailViaGraph({
     to,

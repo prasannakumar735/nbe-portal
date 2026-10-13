@@ -41,6 +41,7 @@ export const upsertDoorSchema = z.object({
   door_type_alt: nullableText(),
   cw: nullableText(120),
   ch: nullableText(120),
+  motor_side: z.enum(['RHD', 'LHD']).nullish().transform(v => v ?? null),
   install_date: z
     .string()
     .trim()
