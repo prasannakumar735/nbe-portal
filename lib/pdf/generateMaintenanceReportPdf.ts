@@ -1360,9 +1360,7 @@ export async function generateMaintenanceReportPdf(options: MaintenancePdfOption
       y -= 14
       page.drawText('Uploaded Photos', { x: MARGIN, y, size: 12, font: bold, color: SECTION_COLOR })
       y -= 16
-      // Use 3 columns when count is divisible by 3 (avoids lonely photo on last row)
-      const photoCols = imageRefs.length % 3 === 0 ? 3 : 2
-      const grid = drawImageGrid(page, y, imageRefs, photoCols, {
+      const grid = drawImageGrid(page, y, imageRefs, 2, {
         pdf,
         reportNumber,
         reportDate,

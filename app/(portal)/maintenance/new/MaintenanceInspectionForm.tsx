@@ -2452,6 +2452,15 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
             }
             const autoScore = totalChecks > 0 ? Math.round((good / totalChecks) * 100) : 0
             const autoColor = autoScore >= 70 ? 'text-emerald-700' : autoScore >= 40 ? 'text-amber-600' : 'text-red-600'
+            const overrideScore = getValues('health_score_override')
+            const overrideColor = getValues('health_score_color')
+            const effectiveScore = overrideScore != null ? overrideScore : autoScore
+            const effectiveColorClass = (() => {
+              if (overrideColor === 'green') return 'text-emerald-700'
+              if (overrideColor === 'amber') return 'text-amber-600'
+              if (overrideColor === 'red') return 'text-red-600'
+              return effectiveScore >= 70 ? 'text-emerald-700' : effectiveScore >= 40 ? 'text-amber-600' : 'text-red-600'
+            })()
             return (
               <div className="mb-4 rounded-lg border border-slate-100 bg-slate-50 p-3">
                 <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">Auto-computed</p>
@@ -2470,7 +2479,7 @@ export function MaintenanceInspectionForm(props: MaintenanceFormPageProps = {}) 
                   ))}
                   <div className="flex flex-col">
                     <span className="text-slate-400">Health Score</span>
-                    <span className={`font-semibold ${autoColor}`}>{autoScore}%</span>
+                    <span className={`font-semibold ${effectiveColorClass}`}>{effectiveScore}%</span>
                   </div>
                 </div>
               </div>
