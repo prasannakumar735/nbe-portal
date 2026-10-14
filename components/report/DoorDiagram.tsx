@@ -74,6 +74,7 @@ function DiagramLightbox({ src, alt, onClose }: { src: string; alt: string; onCl
     >
       {/* Close button */}
       <button
+        type="button"
         onClick={onClose}
         className="absolute right-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm"
         aria-label="Close"
@@ -137,6 +138,7 @@ export function DoorDiagram({ src, alt = 'Door layout diagram' }: DoorDiagramPro
               </div>
               {/* Tap-to-expand overlay — mobile only */}
               <button
+                type="button"
                 className="absolute inset-0 flex items-end justify-end p-2 md:hidden"
                 onClick={() => setLightboxOpen(true)}
                 aria-label="View fullscreen"

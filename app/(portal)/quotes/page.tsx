@@ -539,6 +539,15 @@ const [qty,           setQty]          = useState('1')
   const [workflowQuoteId,   setWorkflowQuoteId]   = useState<string | null>(null)
   const [workflowState,     setWorkflowState]     = useState<ServiceQuoteWorkflowState | null>(null)
   const [workflowLoading,   setWorkflowLoading]   = useState(false)
+
+  // ── PVC Flex job card ─────────────────────────────────────────────────────
+  type PvcAssignee = { id: string; name: string; role: string }
+  const [pvcAssignees,          setPvcAssignees]          = useState<PvcAssignee[]>([])
+  const [pvcFlexAssignedTo,     setPvcFlexAssignedTo]     = useState('')
+  const [pvcFlexPORef,          setPvcFlexPORef]          = useState('')
+  const [pvcFlexJobName,        setPvcFlexJobName]        = useState('')
+  const [pvcFlexRequiredBy,     setPvcFlexRequiredBy]     = useState('')
+  const [pvcFlexJobCardGenerating, setPvcFlexJobCardGenerating] = useState(false)
   // ID of the saved quote currently loaded in the form (null = fresh/unsaved)
   const [editingId,            setEditingId]            = useState<string | null>(null)
   const [isReadOnly,           setIsReadOnly]           = useState(false)
@@ -605,7 +614,10 @@ const [qty,           setQty]          = useState('1')
   useEffect(() => {
     fetch('/api/pvc/quotes/meta')
       .then(r => r.json())
-      .then(data => { if (data.isManager) setIsWorkflowManager(true) })
+      .then(data => {
+        if (data.isManager) setIsWorkflowManager(true)
+        if (Array.isArray(data.assignees)) setPvcAssignees(data.assignees)
+      })
       .catch(() => {})
   }, [])
 
@@ -1881,6 +1893,42 @@ The quote includes all relevant specifications and pricing as discussed. Please 
       loadRecentPvcFlexQuotes()
     } catch (e) {
       setPvcFlexSaveMsg({ ok: false, text: e instanceof Error ? e.message : 'Save failed' })
+    }
+  }
+
+  async function handleGeneratePvcFlexJobCard() {
+    if (!pvcFlexAssignedTo) return
+    setPvcFlexJobCardGenerating(true)
+    try {
+      const res = await fetch('/api/quotes/pvc-flex/job-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quoteId:        pvcFlexQuoteIdRef.current,
+          quoteNumber:    pvcFlexQuoteNumberRef.current,
+          assignedToId:   pvcFlexAssignedTo,
+          poReference:    pvcFlexPORef,
+          jobName:        pvcFlexJobName,
+          requiredBy:     pvcFlexRequiredBy,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string }
+        alert(err.error ?? 'Failed to generate job card')
+        return
+      }
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      const jcNum = res.headers.get('x-job-card-number') ?? 'job-card'
+      a.download = `${jcNum}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to generate job card')
+    } finally {
+      setPvcFlexJobCardGenerating(false)
     }
   }
 
@@ -5884,6 +5932,58 @@ const autoDescLines = [
                   isManager={isWorkflowManager}
                   onUpdated={() => { loadWorkflowState(workflowQuoteId!); loadRecentQuotes() }}
                 />
+              )}
+
+              {/* ── PVC Flex Job Card ── */}
+              {isPvcFlex && (
+                <div className="mt-5 border-t border-slate-100 pt-5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="material-symbols-outlined text-emerald-600 text-[18px]">assignment</span>
+                    <h3 className="text-sm font-semibold text-slate-800">Manufacturing Job Card</h3>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                        Assigned To <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={pvcFlexAssignedTo}
+                        onChange={e => setPvcFlexAssignedTo(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100">
+                        <option value="">— Select staff member —</option>
+                        {pvcAssignees.map(a => (
+                          <option key={a.id} value={a.id}>{a.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">PO / Customer Ref.</label>
+                        <input type="text" value={pvcFlexPORef} onChange={e => setPvcFlexPORef(e.target.value)} placeholder="Optional"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">Required By</label>
+                        <input type="date" value={pvcFlexRequiredBy} onChange={e => setPvcFlexRequiredBy(e.target.value)}
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">Job Name</label>
+                      <input type="text" value={pvcFlexJobName} onChange={e => setPvcFlexJobName(e.target.value)} placeholder="Optional"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+                    </div>
+                    <button type="button"
+                      disabled={!pvcFlexAssignedTo || pvcFlexJobCardGenerating}
+                      onClick={handleGeneratePvcFlexJobCard}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">
+                      {pvcFlexJobCardGenerating
+                        ? <><span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>Generating…</>
+                        : <><span className="material-symbols-outlined text-[16px]">download</span>Generate Job Card PDF</>
+                      }
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           </div>

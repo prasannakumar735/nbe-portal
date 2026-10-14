@@ -1,7 +1,7 @@
 import type { QuoteTypeSlug } from '@/lib/quotes/quoteTaxonomy'
 
 /** Prefixes used in portal-generated quote numbers (per manager / product line). */
-export const QUOTE_NUMBER_PREFIXES = ['RRD', 'SWD', 'IRD', 'QRRD', 'QREP', 'QGEN', 'QPTS', 'QPVC'] as const
+export const QUOTE_NUMBER_PREFIXES = ['RRD', 'SWD', 'IRD', 'QRRD', 'QREP', 'QGEN', 'QPTS', 'QPVC', 'JCPF'] as const
 export type QuoteNumberPrefix = (typeof QUOTE_NUMBER_PREFIXES)[number]
 
 export function isQuoteNumberPrefix(v: string): v is QuoteNumberPrefix {
