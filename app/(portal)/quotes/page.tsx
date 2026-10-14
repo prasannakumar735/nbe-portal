@@ -2548,15 +2548,15 @@ const autoDescLines = [
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm">
                             <thead>
-                              <tr className="border-b border-slate-100 bg-slate-50 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
-                                <th className="px-6 py-2.5">Quote #</th>
-                                <th className="px-4 py-2.5">Customer</th>
-                                <th className="px-4 py-2.5">Address</th>
-                                <th className="px-4 py-2.5">Date (Org)</th>
-                                <th className="px-4 py-2.5">Rev</th>
-                                <th className="px-4 py-2.5">Total (inc. GST)</th>
-                                <th className="px-4 py-2.5">Status</th>
-                                <th className="px-4 py-2.5 text-right">Actions</th>
+                              <tr className="border-b border-slate-100 bg-slate-50 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                                <th className="px-6 py-2.5 whitespace-nowrap">Quote #</th>
+                                <th className="px-4 py-2.5 whitespace-nowrap">Customer</th>
+                                <th className="px-4 py-2.5 whitespace-nowrap">Address</th>
+                                <th className="px-4 py-2.5 whitespace-nowrap">Date (Org)</th>
+                                <th className="px-4 py-2.5 whitespace-nowrap">Rev</th>
+                                <th className="px-4 py-2.5 whitespace-nowrap">Total (inc. GST)</th>
+                                <th className="px-4 py-2.5 whitespace-nowrap">Status</th>
+                                <th className="px-4 py-2.5 whitespace-nowrap text-right">Actions</th>
                               </tr>
                             </thead>
                             <tbody>
