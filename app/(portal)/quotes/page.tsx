@@ -1290,24 +1290,42 @@ The quote includes all relevant specifications and pricing as discussed. Please 
   type InvPricingData = { bulk_roll: InvPricingRow[]; headrail: InvPricingRow[]; rivet_plates: InvPricingRow[] }
   const [invPricingData, setInvPricingData] = useState<InvPricingData | null>(null)
 
+  // Inventory items cart (non-door items added to quote)
+  type PvcInventoryItem = {
+    id: string
+    type: 'bulk_roll' | 'headrail' | 'rivet_plates'
+    label: string       // display name e.g. "Bulk Roll"
+    description: string // multi-line for PDF
+    qty: number
+    unitPrice: number   // calculated
+    overridePrice?: number
+  }
+  const [pvcInventoryItems, setPvcInventoryItems] = useState<PvcInventoryItem[]>([])
+
   // Bulk Roll state
-  const [bulkGrade,  setBulkGrade]  = useState<'Coolroom' | 'Freezer'>('Coolroom')
-  const [bulkWidth,  setBulkWidth]  = useState<number>(100)
-  const [bulkThick,  setBulkThick]  = useState<number>(2)
-  const [bulkQtyStr, setBulkQtyStr] = useState('1')
-  const [bulkMarkup, setBulkMarkup] = useState('100')
+  const [bulkGrade,         setBulkGrade]         = useState<'Coolroom' | 'Freezer'>('Coolroom')
+  const [bulkWidth,         setBulkWidth]         = useState<number>(100)
+  const [bulkThick,         setBulkThick]         = useState<number>(2)
+  const [bulkQtyStr,        setBulkQtyStr]        = useState('1')
+  const [bulkMarkup,        setBulkMarkup]        = useState('100')
+  const [bulkOverride,      setBulkOverride]      = useState(false)
+  const [bulkOverridePrice, setBulkOverridePrice] = useState('')
 
   // Headrail Only state
-  const [hrMaterial, setHrMaterial] = useState<'Galvanised' | 'Stainless Steel'>('Galvanised')
-  const [hrLength,   setHrLength]   = useState<'1M' | '2M' | '3M'>('3M')
-  const [hrQtyStr,   setHrQtyStr]   = useState('1')
-  const [hrMarkup,   setHrMarkup]   = useState('100')
+  const [hrMaterial,    setHrMaterial]    = useState<'Galvanised' | 'Stainless Steel'>('Galvanised')
+  const [hrLength,      setHrLength]      = useState<'1M' | '2M' | '3M'>('3M')
+  const [hrQtyStr,      setHrQtyStr]      = useState('1')
+  const [hrMarkup,      setHrMarkup]      = useState('100')
+  const [hrOverride,    setHrOverride]    = useState(false)
+  const [hrOverridePrice, setHrOverridePrice] = useState('')
 
-  // Rivet Plates state
-  const [rivMaterial, setRivMaterial] = useState<'Stainless Steel' | 'Galvanised'>('Stainless Steel')
-  const [rivSize,     setRivSize]     = useState<'150mm' | '200mm' | '300mm'>('150mm')
-  const [rivQtyStr,   setRivQtyStr]   = useState('1')
-  const [rivMarkup,   setRivMarkup]   = useState('100')
+  // Hangers (formerly Rivet Plates) state
+  const [rivMaterial,    setRivMaterial]    = useState<'Stainless Steel' | 'Galvanised'>('Stainless Steel')
+  const [rivSize,        setRivSize]        = useState<'150mm' | '200mm' | '300mm'>('150mm')
+  const [rivQtyStr,      setRivQtyStr]      = useState('1')
+  const [rivMarkup,      setRivMarkup]      = useState('100')
+  const [rivOverride,    setRivOverride]    = useState(false)
+  const [rivOverridePrice, setRivOverridePrice] = useState('')
 
   // Extra freight toggle (inventory modes)
   const [invExtraFreight,    setInvExtraFreight]    = useState(false)
@@ -1325,6 +1343,8 @@ The quote includes all relevant specifications and pricing as discussed. Please 
   const [pvcContactName,   setPvcContactName]   = useState('Andrew Newton')
   const [pvcContactPhone,  setPvcContactPhone]  = useState('(04) 2705 5556')
   const [pvcContactEmail,  setPvcContactEmail]  = useState('anewton@nbeaustralia.com.au')
+  const [pvcSenderExpanded, setPvcSenderExpanded] = useState(false)
+  const [pvcSenderEditing,  setPvcSenderEditing]  = useState(false)
 
   async function handleGenerateMaintenance() {
     setGenerating(true)
@@ -1827,6 +1847,93 @@ The quote includes all relevant specifications and pricing as discussed. Please 
         }
       })
 
+      // Build line items: cart mode (multi-item) or single inventory mode
+      const shippingTo = custAddress.trim()
+        ? `Including Shipping fees to ${custAddress.trim()}`
+        : 'Including Shipping fees'
+      let finalLineItems = doorLineItems
+
+      if (pvcInventoryItems.length > 0) {
+        // Cart mode: combine door items + all cart inventory items
+        const cartLineItems = pvcInventoryItems.map(it => ({
+          item: it.label.split('—')[0].trim(),
+          description: `${it.description}\n${shippingTo}`,
+          qty: it.qty,
+          unitPrice: it.unitPrice,
+          originalPrice: it.unitPrice,
+        }))
+        finalLineItems = [...doorLineItems, ...cartLineItems]
+      } else if (pvcQuoteMode !== 'door') {
+        const markupN = (s: string) => parseFloat(s) || 100
+        const calcUnit = (row: { actual_cost: number; sales_fee: number; company_fee: number; shipping_fee: number; total_cost_default: number }, mu: number) =>
+          mu === 100 ? row.total_cost_default : row.actual_cost + row.actual_cost * mu / 100 + row.sales_fee + row.company_fee + row.shipping_fee
+
+        if (pvcQuoteMode === 'bulk_roll') {
+          const row = (invPricingData?.bulk_roll ?? []).find(r =>
+            (r as Record<string,unknown>).grade === bulkGrade &&
+            (r as Record<string,unknown>).strip_width === bulkWidth &&
+            (r as Record<string,unknown>).thickness === bulkThick
+          )
+          if (row) {
+            const calcedUnit = calcUnit(row, markupN(bulkMarkup)) * (1 - discPct / 100)
+            const unit = bulkOverride && parseFloat(bulkOverridePrice) > 0 ? parseFloat(bulkOverridePrice) : calcedUnit
+            finalLineItems = [{
+              item: 'PVC Strip Roll',
+              description: `PVC Strip Roll - 50 Metres\n${bulkWidth} x ${bulkThick} ${bulkGrade} Grade\n${shippingTo}`,
+              qty: parseInt(bulkQtyStr) || 1,
+              unitPrice: Math.round(unit * 100) / 100,
+              originalPrice: Math.round(row.total_cost_default * 100) / 100,
+            }]
+          }
+        } else if (pvcQuoteMode === 'headrail') {
+          const row = (invPricingData?.headrail ?? []).find(r =>
+            (r as Record<string,unknown>).material === hrMaterial &&
+            (r as Record<string,unknown>).length === hrLength
+          )
+          if (row) {
+            const calcedUnit = calcUnit(row, markupN(hrMarkup)) * (1 - discPct / 100)
+            const unit = hrOverride && parseFloat(hrOverridePrice) > 0 ? parseFloat(hrOverridePrice) : calcedUnit
+            finalLineItems = [{
+              item: 'Headrail',
+              description: `PVC Flex Headrail - ${hrLength}\n${hrMaterial}\n${shippingTo}`,
+              qty: parseInt(hrQtyStr) || 1,
+              unitPrice: Math.round(unit * 100) / 100,
+              originalPrice: Math.round(row.total_cost_default * 100) / 100,
+            }]
+          }
+        } else if (pvcQuoteMode === 'rivet_plates') {
+          const row = (invPricingData?.rivet_plates ?? []).find(r =>
+            (r as Record<string,unknown>).material === rivMaterial &&
+            (r as Record<string,unknown>).size === rivSize
+          )
+          if (row) {
+            const calcedUnit = calcUnit(row, markupN(rivMarkup)) * (1 - discPct / 100)
+            const unit = rivOverride && parseFloat(rivOverridePrice) > 0 ? parseFloat(rivOverridePrice) : calcedUnit
+            finalLineItems = [{
+              item: 'Hangers',
+              description: `PVC Flex Hangers - ${rivSize}\n${rivMaterial}\n${shippingTo}`,
+              qty: parseInt(rivQtyStr) || 1,
+              unitPrice: Math.round(unit * 100) / 100,
+              originalPrice: Math.round(row.total_cost_default * 100) / 100,
+            }]
+          }
+        }
+      }
+
+      // Extra freight line item (for non-door modes)
+      if (pvcQuoteMode !== 'door' || pvcInventoryItems.length > 0) {
+        const freightN = invExtraFreight ? (parseFloat(invFreightAmountStr) || 0) : 0
+        if (freightN > 0) {
+          finalLineItems = [...finalLineItems, {
+            item: 'Freight',
+            description: 'Additional freight charges',
+            qty: 1,
+            unitPrice: freightN,
+            originalPrice: freightN,
+          }]
+        }
+      }
+
       const res = await fetch('/api/quotes/pvc-flex/pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1836,9 +1943,9 @@ The quote includes all relevant specifications and pricing as discussed. Please 
           customerName: custName, customerAttn: custAttn,
           customerAddress: custAddress, customerPostcode: custPostcode,
           customerPhone: custPhone, customerEmail: custEmail,
-          doors: doorLineItems,
-          delivery:     parseFloat(pvcDelivery)     || undefined,
-          installation: parseFloat(pvcInstallation) || undefined,
+          doors: finalLineItems,
+          delivery:     pvcQuoteMode === 'door' ? (parseFloat(pvcDelivery) || undefined) : undefined,
+          installation: pvcQuoteMode === 'door' ? (parseFloat(pvcInstallation) || undefined) : undefined,
           discountPct:  discPct || undefined,
           terms: pvcTerms || DEFAULT_PVC_TERMS,
           endUser: pvcEndUser || undefined,
@@ -4359,14 +4466,83 @@ const autoDescLines = [
             const invRivMarkupN = parseFloat(rivMarkup) || 100
             const invRivUnit = invRivRow ? (invRivMarkupN === 100 ? invRivRow.total_cost_default : invRivRow.actual_cost + invRivRow.actual_cost * invRivMarkupN / 100 + invRivRow.sales_fee + invRivRow.company_fee + invRivRow.shipping_fee) : 0
             const invRivSubtotal = invRivUnit * (parseInt(rivQtyStr)||1) * (1 - invDiscN/100)
-            const pvcGrandTotal = pvcQuoteMode === 'bulk_roll' ? invBulkSubtotal + invFreightN
+            const cartTotal = pvcInventoryItems.reduce((sum, it) => sum + it.unitPrice * it.qty, 0)
+            const pvcGrandTotal = pvcInventoryItems.length > 0
+              ? cartTotal + pvcDoorGrandTotal + invFreightN
+              : pvcQuoteMode === 'bulk_roll' ? invBulkSubtotal + invFreightN
               : pvcQuoteMode === 'headrail' ? invHrSubtotal + invFreightN
               : pvcQuoteMode === 'rivet_plates' ? invRivSubtotal + invFreightN
               : pvcDoorGrandTotal
             const hasAnyDoor = savedPvcDoors.length > 0 || (!!pvcW && !!pvcH)
-            const canGeneratePvc = !generating && (pvcQuoteMode === 'door' ? hasAnyDoor : pvcGrandTotal > 0) && (custCanBeBlank || customerFilled)
+            const canGeneratePvc = !generating && (pvcQuoteMode === 'door' ? hasAnyDoor : (pvcGrandTotal > 0 || pvcInventoryItems.length > 0)) && (custCanBeBlank || customerFilled)
             return (
-              <div className={`rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden${formLocked ? ' pointer-events-none opacity-75 select-none' : ''}`}>
+              <>
+                {/* ── Sender Details — standalone collapsible card ── */}
+                <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-3">
+                  {/* Header — always visible */}
+                  <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-100">
+                    <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">Sender Details</span>
+                    <div className="flex items-center gap-1">
+                      <button type="button" title="Edit sender details"
+                        onClick={() => { setPvcSenderExpanded(true); setPvcSenderEditing(true) }}
+                        className="flex items-center justify-center rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition">
+                        <span className="material-symbols-outlined text-[17px]">edit</span>
+                      </button>
+                      <button type="button"
+                        onClick={() => { setPvcSenderExpanded(v => !v); if (pvcSenderExpanded) setPvcSenderEditing(false) }}
+                        className="flex items-center justify-center rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition">
+                        <span className="material-symbols-outlined text-[17px]">{pvcSenderExpanded ? 'expand_less' : 'expand_more'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Expanded: view mode */}
+                  {pvcSenderExpanded && !pvcSenderEditing && (
+                    <div className="px-5 py-4">
+                      <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+                        <div><span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 block">Company</span><span className="text-slate-700">{pvcSenderName || '—'}</span></div>
+                        <div><span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 block">Address</span><span className="text-slate-700">{pvcSenderAddress || '—'}</span></div>
+                        <div><span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 block">Email</span><span className="text-slate-700">{pvcSenderEmail || '—'}</span></div>
+                        <div><span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 block">Contact Name</span><span className="text-slate-700">{pvcContactName || '—'}</span></div>
+                        <div><span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 block">Contact Phone</span><span className="text-slate-700">{pvcContactPhone || '—'}</span></div>
+                        <div><span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 block">Contact Email</span><span className="text-slate-700">{pvcContactEmail || '—'}</span></div>
+                      </div>
+                      <div className="mt-3 flex justify-end">
+                        <button type="button" onClick={() => setPvcSenderEditing(true)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition">
+                          <span className="material-symbols-outlined text-[13px]">edit</span>Edit
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Expanded: edit mode */}
+                  {pvcSenderExpanded && pvcSenderEditing && (
+                    <div className="px-5 py-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div><label className={LABEL_CLS}>Company Name</label><input type="text" value={pvcSenderName} onChange={e => setPvcSenderName(e.target.value)} className={INPUT_CLS} /></div>
+                        <div><label className={LABEL_CLS}>Address</label><input type="text" value={pvcSenderAddress} onChange={e => setPvcSenderAddress(e.target.value)} className={INPUT_CLS} /></div>
+                        <div><label className={LABEL_CLS}>Email</label><input type="text" value={pvcSenderEmail} onChange={e => setPvcSenderEmail(e.target.value)} className={INPUT_CLS} /></div>
+                        <div><label className={LABEL_CLS}>Contact Name</label><input type="text" value={pvcContactName} onChange={e => setPvcContactName(e.target.value)} className={INPUT_CLS} /></div>
+                        <div><label className={LABEL_CLS}>Contact Phone</label><input type="text" value={pvcContactPhone} onChange={e => setPvcContactPhone(e.target.value)} className={INPUT_CLS} /></div>
+                        <div><label className={LABEL_CLS}>Contact Email</label><input type="text" value={pvcContactEmail} onChange={e => setPvcContactEmail(e.target.value)} className={INPUT_CLS} /></div>
+                      </div>
+                      <div className="mt-4 flex justify-end gap-2">
+                        <button type="button" onClick={() => setPvcSenderEditing(false)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition">
+                          Cancel
+                        </button>
+                        <button type="button" onClick={() => { setPvcSenderEditing(false); setPvcSenderExpanded(false) }}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-slate-700 px-4 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 transition">
+                          <span className="material-symbols-outlined text-[13px]">check</span>Save &amp; Close
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Main form card ── */}
+                <div className={`rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden${formLocked ? ' pointer-events-none opacity-75 select-none' : ''}`}>
                 {formLocked && (
                   <div className="pointer-events-auto flex items-center justify-between gap-3 bg-amber-50 px-6 py-3 border-b border-amber-100">
                     <div className="flex items-center gap-2 text-sm font-medium text-amber-800">
@@ -4379,19 +4555,6 @@ const autoDescLines = [
                     </button>
                   </div>
                 )}
-
-                {/* ── Sender Details ── */}
-                <div className="px-6 pt-6 pb-4 border-b border-slate-100">
-                  <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-4">Sender Details</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div><label className={LABEL_CLS}>Company Name</label><input type="text" value={pvcSenderName} onChange={e => setPvcSenderName(e.target.value)} className={INPUT_CLS} /></div>
-                    <div><label className={LABEL_CLS}>Address</label><input type="text" value={pvcSenderAddress} onChange={e => setPvcSenderAddress(e.target.value)} className={INPUT_CLS} /></div>
-                    <div><label className={LABEL_CLS}>Email</label><input type="text" value={pvcSenderEmail} onChange={e => setPvcSenderEmail(e.target.value)} className={INPUT_CLS} /></div>
-                    <div><label className={LABEL_CLS}>Contact Name</label><input type="text" value={pvcContactName} onChange={e => setPvcContactName(e.target.value)} className={INPUT_CLS} /></div>
-                    <div><label className={LABEL_CLS}>Contact Phone</label><input type="text" value={pvcContactPhone} onChange={e => setPvcContactPhone(e.target.value)} className={INPUT_CLS} /></div>
-                    <div><label className={LABEL_CLS}>Contact Email</label><input type="text" value={pvcContactEmail} onChange={e => setPvcContactEmail(e.target.value)} className={INPUT_CLS} /></div>
-                  </div>
-                </div>
 
                 {/* ── Customer Details ── */}
                 <div className="px-6 py-4 border-b border-slate-100">
@@ -4440,10 +4603,10 @@ const autoDescLines = [
                   <label className={LABEL_CLS}>Quote Mode</label>
                   <div className="flex gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
                     {([
-                      { key: 'door',         label: 'Door Dimensions', icon: 'sensor_door' },
-                      { key: 'bulk_roll',    label: 'Bulk Roll',       icon: 'rotate_right' },
-                      { key: 'headrail',     label: 'Headrail Only',   icon: 'horizontal_rule' },
-                      { key: 'rivet_plates', label: 'Rivet Plates',    icon: 'grid_on' },
+                      { key: 'door',         label: 'PVC Strip Door', icon: 'sensor_door' },
+                      { key: 'bulk_roll',    label: 'Bulk Roll',      icon: 'rotate_right' },
+                      { key: 'headrail',     label: 'Headrail Only',  icon: 'horizontal_rule' },
+                      { key: 'rivet_plates', label: 'Hangers',        icon: 'grid_on' },
                     ] as const).map(m => (
                       <button
                         key={m.key}
@@ -4682,14 +4845,44 @@ const autoDescLines = [
                           <span className="material-symbols-outlined text-teal-500 text-xl">calculate</span>
                           <div>
                             <p className="text-[11px] font-semibold uppercase tracking-widest text-teal-600">Unit Price per Roll</p>
-                            <p className="text-2xl font-bold text-teal-700">${bulkUnitPrice.toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
+                            <p className="text-2xl font-bold text-teal-700">${(bulkOverride && parseFloat(bulkOverridePrice) > 0 ? parseFloat(bulkOverridePrice) : bulkUnitPrice).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
                           </div>
                           <div className="ml-auto text-right text-xs text-teal-500">
                             <p>× {parseInt(bulkQtyStr)||1} roll{(parseInt(bulkQtyStr)||1)>1?'s':''}</p>
-                            <p className="font-semibold">${(bulkUnitPrice*(parseInt(bulkQtyStr)||1)).toLocaleString('en-AU',{minimumFractionDigits:2})} subtotal</p>
+                            <p className="font-semibold">${((bulkOverride && parseFloat(bulkOverridePrice) > 0 ? parseFloat(bulkOverridePrice) : bulkUnitPrice)*(parseInt(bulkQtyStr)||1)).toLocaleString('en-AU',{minimumFractionDigits:2})} subtotal</p>
                           </div>
                         </div>
                       )}
+                      <label className="flex items-center gap-3 cursor-pointer select-none">
+                        <input type="checkbox" checked={bulkOverride} onChange={e => setBulkOverride(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                        <span className="text-sm font-medium text-slate-700">Override Price</span>
+                      </label>
+                      {bulkOverride && (
+                        <div className="relative max-w-xs">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                          <input type="number" min="0" step="0.01" value={bulkOverridePrice} onChange={e => setBulkOverridePrice(e.target.value)}
+                            placeholder="Enter override price" className={INPUT_CLS + ' pl-7'} />
+                        </div>
+                      )}
+                      <button type="button"
+                        disabled={!selectedRow}
+                        onClick={() => {
+                          const finalUnit = bulkOverride && parseFloat(bulkOverridePrice) > 0 ? parseFloat(bulkOverridePrice) : bulkUnitPrice
+                          setPvcInventoryItems(prev => [...prev, {
+                            id: `bulk_${Date.now()}`,
+                            type: 'bulk_roll',
+                            label: `PVC Strip Roll — ${bulkWidth}mm × ${bulkThick}mm ${bulkGrade}`,
+                            description: `PVC Strip Roll - 50 Metres\n${bulkWidth} x ${bulkThick} ${bulkGrade} Grade`,
+                            qty: parseInt(bulkQtyStr) || 1,
+                            unitPrice: Math.round(finalUnit * 100) / 100,
+                            overridePrice: bulkOverride && parseFloat(bulkOverridePrice) > 0 ? Math.round(parseFloat(bulkOverridePrice) * 100) / 100 : undefined,
+                          }])
+                        }}
+                        className="inline-flex items-center gap-2 rounded-xl border border-dashed border-indigo-400 px-5 py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50 transition disabled:opacity-40 disabled:cursor-not-allowed">
+                        <span className="material-symbols-outlined text-[18px]">add_shopping_cart</span>
+                        Add to Quote
+                      </button>
                     </div>
                   )
                 })()}
@@ -4753,14 +4946,44 @@ const autoDescLines = [
                           <span className="material-symbols-outlined text-teal-500 text-xl">calculate</span>
                           <div>
                             <p className="text-[11px] font-semibold uppercase tracking-widest text-teal-600">Unit Price</p>
-                            <p className="text-2xl font-bold text-teal-700">${hrUnitPrice.toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
+                            <p className="text-2xl font-bold text-teal-700">${(hrOverride && parseFloat(hrOverridePrice) > 0 ? parseFloat(hrOverridePrice) : hrUnitPrice).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
                           </div>
                           <div className="ml-auto text-right text-xs text-teal-500">
                             <p>× {parseInt(hrQtyStr)||1} unit{(parseInt(hrQtyStr)||1)>1?'s':''}</p>
-                            <p className="font-semibold">${(hrUnitPrice*(parseInt(hrQtyStr)||1)).toLocaleString('en-AU',{minimumFractionDigits:2})} subtotal</p>
+                            <p className="font-semibold">${((hrOverride && parseFloat(hrOverridePrice) > 0 ? parseFloat(hrOverridePrice) : hrUnitPrice)*(parseInt(hrQtyStr)||1)).toLocaleString('en-AU',{minimumFractionDigits:2})} subtotal</p>
                           </div>
                         </div>
                       )}
+                      <label className="flex items-center gap-3 cursor-pointer select-none">
+                        <input type="checkbox" checked={hrOverride} onChange={e => setHrOverride(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                        <span className="text-sm font-medium text-slate-700">Override Price</span>
+                      </label>
+                      {hrOverride && (
+                        <div className="relative max-w-xs">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                          <input type="number" min="0" step="0.01" value={hrOverridePrice} onChange={e => setHrOverridePrice(e.target.value)}
+                            placeholder="Enter override price" className={INPUT_CLS + ' pl-7'} />
+                        </div>
+                      )}
+                      <button type="button"
+                        disabled={!selectedRow}
+                        onClick={() => {
+                          const finalUnit = hrOverride && parseFloat(hrOverridePrice) > 0 ? parseFloat(hrOverridePrice) : hrUnitPrice
+                          setPvcInventoryItems(prev => [...prev, {
+                            id: `hr_${Date.now()}`,
+                            type: 'headrail',
+                            label: `PVC Flex Headrail — ${hrLength} ${hrMaterial}`,
+                            description: `PVC Flex Headrail - ${hrLength}\n${hrMaterial}`,
+                            qty: parseInt(hrQtyStr) || 1,
+                            unitPrice: Math.round(finalUnit * 100) / 100,
+                            overridePrice: hrOverride && parseFloat(hrOverridePrice) > 0 ? Math.round(parseFloat(hrOverridePrice) * 100) / 100 : undefined,
+                          }])
+                        }}
+                        className="inline-flex items-center gap-2 rounded-xl border border-dashed border-indigo-400 px-5 py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50 transition disabled:opacity-40 disabled:cursor-not-allowed">
+                        <span className="material-symbols-outlined text-[18px]">add_shopping_cart</span>
+                        Add to Quote
+                      </button>
                     </div>
                   )
                 })()}
@@ -4774,7 +4997,7 @@ const autoDescLines = [
                     : 0
                   return (
                     <div className="px-6 py-5 border-b border-slate-100 space-y-5">
-                      <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Rivet Plates Specification</h3>
+                      <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Hangers Specification</h3>
                       <div className="grid grid-cols-3 gap-4">
                         <div>
                           <label className={LABEL_REQ_CLS}>Material</label>
@@ -4824,17 +5047,71 @@ const autoDescLines = [
                           <span className="material-symbols-outlined text-teal-500 text-xl">calculate</span>
                           <div>
                             <p className="text-[11px] font-semibold uppercase tracking-widest text-teal-600">Unit Price</p>
-                            <p className="text-2xl font-bold text-teal-700">${rivUnitPrice.toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
+                            <p className="text-2xl font-bold text-teal-700">${(rivOverride && parseFloat(rivOverridePrice) > 0 ? parseFloat(rivOverridePrice) : rivUnitPrice).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
                           </div>
                           <div className="ml-auto text-right text-xs text-teal-500">
-                            <p>× {parseInt(rivQtyStr)||1} plate{(parseInt(rivQtyStr)||1)>1?'s':''}</p>
-                            <p className="font-semibold">${(rivUnitPrice*(parseInt(rivQtyStr)||1)).toLocaleString('en-AU',{minimumFractionDigits:2})} subtotal</p>
+                            <p>× {parseInt(rivQtyStr)||1} hanger{(parseInt(rivQtyStr)||1)>1?'s':''}</p>
+                            <p className="font-semibold">${((rivOverride && parseFloat(rivOverridePrice) > 0 ? parseFloat(rivOverridePrice) : rivUnitPrice)*(parseInt(rivQtyStr)||1)).toLocaleString('en-AU',{minimumFractionDigits:2})} subtotal</p>
                           </div>
                         </div>
                       )}
+                      <label className="flex items-center gap-3 cursor-pointer select-none">
+                        <input type="checkbox" checked={rivOverride} onChange={e => setRivOverride(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                        <span className="text-sm font-medium text-slate-700">Override Price</span>
+                      </label>
+                      {rivOverride && (
+                        <div className="relative max-w-xs">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                          <input type="number" min="0" step="0.01" value={rivOverridePrice} onChange={e => setRivOverridePrice(e.target.value)}
+                            placeholder="Enter override price" className={INPUT_CLS + ' pl-7'} />
+                        </div>
+                      )}
+                      <button type="button"
+                        disabled={!selectedRow}
+                        onClick={() => {
+                          const finalUnit = rivOverride && parseFloat(rivOverridePrice) > 0 ? parseFloat(rivOverridePrice) : rivUnitPrice
+                          setPvcInventoryItems(prev => [...prev, {
+                            id: `riv_${Date.now()}`,
+                            type: 'rivet_plates',
+                            label: `Hangers — ${rivSize} ${rivMaterial}`,
+                            description: `PVC Flex Hangers - ${rivSize}\n${rivMaterial}`,
+                            qty: parseInt(rivQtyStr) || 1,
+                            unitPrice: Math.round(finalUnit * 100) / 100,
+                            overridePrice: rivOverride && parseFloat(rivOverridePrice) > 0 ? Math.round(parseFloat(rivOverridePrice) * 100) / 100 : undefined,
+                          }])
+                        }}
+                        className="inline-flex items-center gap-2 rounded-xl border border-dashed border-indigo-400 px-5 py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50 transition disabled:opacity-40 disabled:cursor-not-allowed">
+                        <span className="material-symbols-outlined text-[18px]">add_shopping_cart</span>
+                        Add to Quote
+                      </button>
                     </div>
                   )
                 })()}
+
+                {/* ── Quote Cart (inventory items) ── */}
+                {pvcInventoryItems.length > 0 && (
+                  <div className="px-6 py-5 border-b border-slate-100 space-y-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Quote Items ({pvcInventoryItems.length})</h3>
+                    {pvcInventoryItems.map((item, idx) => (
+                      <div key={item.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-800 truncate">{item.label}</p>
+                          <p className="text-xs text-slate-500">Qty {item.qty} × ${item.unitPrice.toLocaleString('en-AU',{minimumFractionDigits:2})}{item.overridePrice ? ' (override)' : ''}</p>
+                        </div>
+                        <span className="text-sm font-semibold text-slate-700 font-mono">${(item.unitPrice * item.qty).toLocaleString('en-AU',{minimumFractionDigits:2})}</span>
+                        <button type="button" onClick={() => setPvcInventoryItems(prev => prev.filter((_,i) => i !== idx))}
+                          className="flex-shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 transition">
+                          <span className="material-symbols-outlined text-[16px]">delete</span>
+                        </button>
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => setPvcInventoryItems([])}
+                      className="text-xs text-slate-400 hover:text-red-500 transition">
+                      Clear all items
+                    </button>
+                  </div>
+                )}
 
                 {/* ── Quote Settings ── */}
                 <div className="px-6 py-5 border-b border-slate-100 space-y-4">
@@ -4963,7 +5240,8 @@ const autoDescLines = [
                     }
                   </button>
                 </div>
-              </div>
+                </div>{/* end main form card */}
+              </>
             )
           })()}
 
