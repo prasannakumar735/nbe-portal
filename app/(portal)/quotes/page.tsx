@@ -1299,8 +1299,11 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     qty: number
     unitPrice: number   // calculated
     overridePrice?: number
+    // raw form values for edit-restore
+    meta: Record<string, string | number | boolean>
   }
   const [pvcInventoryItems, setPvcInventoryItems] = useState<PvcInventoryItem[]>([])
+  const [editingInvItemId, setEditingInvItemId] = useState<string | null>(null)
 
   // Bulk Roll state
   const [bulkGrade,         setBulkGrade]         = useState<'Coolroom' | 'Freezer'>('Coolroom')
@@ -4479,22 +4482,22 @@ const autoDescLines = [
               <>
                 {/* ── Sender Details — standalone collapsible card ── */}
                 <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-3">
-                  {/* Header — always visible */}
-                  <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-100">
+                  {/* Header — always visible, full row click = expand/collapse */}
+                  <button type="button"
+                    onClick={() => { setPvcSenderExpanded(v => !v); if (pvcSenderExpanded) setPvcSenderEditing(false) }}
+                    className="w-full flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-100 hover:bg-slate-100 transition text-left">
                     <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">Sender Details</span>
                     <div className="flex items-center gap-1">
-                      <button type="button" title="Edit sender details"
-                        onClick={() => { setPvcSenderExpanded(true); setPvcSenderEditing(true) }}
-                        className="flex items-center justify-center rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition">
+                      <span title="Edit sender details"
+                        onClick={e => { e.stopPropagation(); setPvcSenderExpanded(true); setPvcSenderEditing(true) }}
+                        className="flex items-center justify-center rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition cursor-pointer">
                         <span className="material-symbols-outlined text-[17px]">edit</span>
-                      </button>
-                      <button type="button"
-                        onClick={() => { setPvcSenderExpanded(v => !v); if (pvcSenderExpanded) setPvcSenderEditing(false) }}
-                        className="flex items-center justify-center rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition">
+                      </span>
+                      <span className="flex items-center justify-center rounded-lg p-1.5 text-slate-400">
                         <span className="material-symbols-outlined text-[17px]">{pvcSenderExpanded ? 'expand_less' : 'expand_more'}</span>
-                      </button>
+                      </span>
                     </div>
-                  </div>
+                  </button>
 
                   {/* Expanded: view mode */}
                   {pvcSenderExpanded && !pvcSenderEditing && (
@@ -4869,20 +4872,32 @@ const autoDescLines = [
                         disabled={!selectedRow}
                         onClick={() => {
                           const finalUnit = bulkOverride && parseFloat(bulkOverridePrice) > 0 ? parseFloat(bulkOverridePrice) : bulkUnitPrice
-                          setPvcInventoryItems(prev => [...prev, {
-                            id: `bulk_${Date.now()}`,
+                          const id = editingInvItemId ?? `bulk_${Date.now()}`
+                          const newItem: PvcInventoryItem = {
+                            id,
                             type: 'bulk_roll',
                             label: `PVC Strip Roll — ${bulkWidth}mm × ${bulkThick}mm ${bulkGrade}`,
                             description: `PVC Strip Roll - 50 Metres\n${bulkWidth} x ${bulkThick} ${bulkGrade} Grade`,
                             qty: parseInt(bulkQtyStr) || 1,
                             unitPrice: Math.round(finalUnit * 100) / 100,
                             overridePrice: bulkOverride && parseFloat(bulkOverridePrice) > 0 ? Math.round(parseFloat(bulkOverridePrice) * 100) / 100 : undefined,
-                          }])
+                            meta: { grade: bulkGrade, width: bulkWidth, thick: bulkThick, markup: bulkMarkup, override: bulkOverride, overridePrice: bulkOverridePrice },
+                          }
+                          setPvcInventoryItems(prev => editingInvItemId
+                            ? prev.map(it => it.id === editingInvItemId ? newItem : it)
+                            : [...prev, newItem])
+                          setEditingInvItemId(null)
                         }}
-                        className="inline-flex items-center gap-2 rounded-xl border border-dashed border-indigo-400 px-5 py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50 transition disabled:opacity-40 disabled:cursor-not-allowed">
-                        <span className="material-symbols-outlined text-[18px]">add_shopping_cart</span>
-                        Add to Quote
+                        className={`inline-flex items-center gap-2 rounded-xl border px-5 py-2.5 text-sm font-medium transition disabled:opacity-40 disabled:cursor-not-allowed ${editingInvItemId ? 'border-amber-400 text-amber-700 hover:bg-amber-50' : 'border-dashed border-indigo-400 text-indigo-700 hover:bg-indigo-50'}`}>
+                        <span className="material-symbols-outlined text-[18px]">{editingInvItemId ? 'save' : 'add_shopping_cart'}</span>
+                        {editingInvItemId ? 'Update Item' : 'Add to Quote'}
                       </button>
+                      {editingInvItemId && (
+                        <button type="button" onClick={() => setEditingInvItemId(null)}
+                          className="text-xs text-slate-400 hover:text-slate-600 transition">
+                          Cancel edit
+                        </button>
+                      )}
                     </div>
                   )
                 })()}
@@ -4970,20 +4985,32 @@ const autoDescLines = [
                         disabled={!selectedRow}
                         onClick={() => {
                           const finalUnit = hrOverride && parseFloat(hrOverridePrice) > 0 ? parseFloat(hrOverridePrice) : hrUnitPrice
-                          setPvcInventoryItems(prev => [...prev, {
-                            id: `hr_${Date.now()}`,
+                          const id = editingInvItemId ?? `hr_${Date.now()}`
+                          const newItem: PvcInventoryItem = {
+                            id,
                             type: 'headrail',
                             label: `PVC Flex Headrail — ${hrLength} ${hrMaterial}`,
                             description: `PVC Flex Headrail - ${hrLength}\n${hrMaterial}`,
                             qty: parseInt(hrQtyStr) || 1,
                             unitPrice: Math.round(finalUnit * 100) / 100,
                             overridePrice: hrOverride && parseFloat(hrOverridePrice) > 0 ? Math.round(parseFloat(hrOverridePrice) * 100) / 100 : undefined,
-                          }])
+                            meta: { material: hrMaterial, length: hrLength, markup: hrMarkup, override: hrOverride, overridePrice: hrOverridePrice },
+                          }
+                          setPvcInventoryItems(prev => editingInvItemId
+                            ? prev.map(it => it.id === editingInvItemId ? newItem : it)
+                            : [...prev, newItem])
+                          setEditingInvItemId(null)
                         }}
-                        className="inline-flex items-center gap-2 rounded-xl border border-dashed border-indigo-400 px-5 py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50 transition disabled:opacity-40 disabled:cursor-not-allowed">
-                        <span className="material-symbols-outlined text-[18px]">add_shopping_cart</span>
-                        Add to Quote
+                        className={`inline-flex items-center gap-2 rounded-xl border px-5 py-2.5 text-sm font-medium transition disabled:opacity-40 disabled:cursor-not-allowed ${editingInvItemId ? 'border-amber-400 text-amber-700 hover:bg-amber-50' : 'border-dashed border-indigo-400 text-indigo-700 hover:bg-indigo-50'}`}>
+                        <span className="material-symbols-outlined text-[18px]">{editingInvItemId ? 'save' : 'add_shopping_cart'}</span>
+                        {editingInvItemId ? 'Update Item' : 'Add to Quote'}
                       </button>
+                      {editingInvItemId && (
+                        <button type="button" onClick={() => setEditingInvItemId(null)}
+                          className="text-xs text-slate-400 hover:text-slate-600 transition">
+                          Cancel edit
+                        </button>
+                      )}
                     </div>
                   )
                 })()}
@@ -5071,20 +5098,32 @@ const autoDescLines = [
                         disabled={!selectedRow}
                         onClick={() => {
                           const finalUnit = rivOverride && parseFloat(rivOverridePrice) > 0 ? parseFloat(rivOverridePrice) : rivUnitPrice
-                          setPvcInventoryItems(prev => [...prev, {
-                            id: `riv_${Date.now()}`,
+                          const id = editingInvItemId ?? `riv_${Date.now()}`
+                          const newItem: PvcInventoryItem = {
+                            id,
                             type: 'rivet_plates',
                             label: `Hangers — ${rivSize} ${rivMaterial}`,
                             description: `PVC Flex Hangers - ${rivSize}\n${rivMaterial}`,
                             qty: parseInt(rivQtyStr) || 1,
                             unitPrice: Math.round(finalUnit * 100) / 100,
                             overridePrice: rivOverride && parseFloat(rivOverridePrice) > 0 ? Math.round(parseFloat(rivOverridePrice) * 100) / 100 : undefined,
-                          }])
+                            meta: { material: rivMaterial, size: rivSize, markup: rivMarkup, override: rivOverride, overridePrice: rivOverridePrice },
+                          }
+                          setPvcInventoryItems(prev => editingInvItemId
+                            ? prev.map(it => it.id === editingInvItemId ? newItem : it)
+                            : [...prev, newItem])
+                          setEditingInvItemId(null)
                         }}
-                        className="inline-flex items-center gap-2 rounded-xl border border-dashed border-indigo-400 px-5 py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50 transition disabled:opacity-40 disabled:cursor-not-allowed">
-                        <span className="material-symbols-outlined text-[18px]">add_shopping_cart</span>
-                        Add to Quote
+                        className={`inline-flex items-center gap-2 rounded-xl border px-5 py-2.5 text-sm font-medium transition disabled:opacity-40 disabled:cursor-not-allowed ${editingInvItemId ? 'border-amber-400 text-amber-700 hover:bg-amber-50' : 'border-dashed border-indigo-400 text-indigo-700 hover:bg-indigo-50'}`}>
+                        <span className="material-symbols-outlined text-[18px]">{editingInvItemId ? 'save' : 'add_shopping_cart'}</span>
+                        {editingInvItemId ? 'Update Item' : 'Add to Quote'}
                       </button>
+                      {editingInvItemId && (
+                        <button type="button" onClick={() => setEditingInvItemId(null)}
+                          className="text-xs text-slate-400 hover:text-slate-600 transition">
+                          Cancel edit
+                        </button>
+                      )}
                     </div>
                   )
                 })()}
@@ -5109,13 +5148,44 @@ const autoDescLines = [
                       </div>
                     ))}
                     {pvcInventoryItems.map((item, idx) => (
-                      <div key={item.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <div key={item.id} className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${editingInvItemId === item.id ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-slate-800 truncate">{item.label}</p>
                           <p className="text-xs text-slate-500">Qty {item.qty} × ${item.unitPrice.toLocaleString('en-AU',{minimumFractionDigits:2})}{item.overridePrice ? ' (override)' : ''}</p>
                         </div>
                         <span className="text-sm font-semibold text-slate-700 font-mono">${(item.unitPrice * item.qty).toLocaleString('en-AU',{minimumFractionDigits:2})}</span>
-                        <button type="button" onClick={() => setPvcInventoryItems(prev => prev.filter((_,i) => i !== idx))}
+                        <button type="button" title="Edit item" onClick={() => {
+                          // Load item values back into the relevant form and switch mode
+                          setEditingInvItemId(item.id)
+                          setPvcQuoteMode(item.type)
+                          if (item.type === 'bulk_roll') {
+                            setBulkGrade(item.meta.grade as 'Coolroom'|'Freezer')
+                            setBulkWidth(item.meta.width as number)
+                            setBulkThick(item.meta.thick as number)
+                            setBulkQtyStr(String(item.qty))
+                            setBulkMarkup(String(item.meta.markup))
+                            setBulkOverride(!!item.meta.override)
+                            setBulkOverridePrice(String(item.meta.overridePrice ?? ''))
+                          } else if (item.type === 'headrail') {
+                            setHrMaterial(item.meta.material as 'Galvanised'|'Stainless Steel')
+                            setHrLength(item.meta.length as '1M'|'2M'|'3M')
+                            setHrQtyStr(String(item.qty))
+                            setHrMarkup(String(item.meta.markup))
+                            setHrOverride(!!item.meta.override)
+                            setHrOverridePrice(String(item.meta.overridePrice ?? ''))
+                          } else if (item.type === 'rivet_plates') {
+                            setRivMaterial(item.meta.material as 'Stainless Steel'|'Galvanised')
+                            setRivSize(item.meta.size as '150mm'|'200mm'|'300mm')
+                            setRivQtyStr(String(item.qty))
+                            setRivMarkup(String(item.meta.markup))
+                            setRivOverride(!!item.meta.override)
+                            setRivOverridePrice(String(item.meta.overridePrice ?? ''))
+                          }
+                        }}
+                          className="flex-shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-amber-100 hover:text-amber-600 transition">
+                          <span className="material-symbols-outlined text-[16px]">edit</span>
+                        </button>
+                        <button type="button" onClick={() => { setPvcInventoryItems(prev => prev.filter((_,i) => i !== idx)); if (editingInvItemId === item.id) setEditingInvItemId(null) }}
                           className="flex-shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 transition">
                           <span className="material-symbols-outlined text-[16px]">delete</span>
                         </button>
