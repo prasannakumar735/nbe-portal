@@ -5302,8 +5302,8 @@ const autoDescLines = [
             )
           })()}
 
-          {/* ── Customer Details (shown before door fields for rapid door) ── */}
-          {showRightPanel && isRapidDoor && (
+          {/* ── Customer Details — shown immediately on rapid door selection, before door dropdowns ── */}
+          {isRapidDoor && (
             <div className="mt-4 mx-1 mb-4 rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -5323,37 +5323,23 @@ const autoDescLines = [
                 </div>
               )}
               <div className="px-6 py-5">
-                <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-                  <div className="space-y-4">
-                    {([
-                      ['Customer',  custName,  setCustName,  'Company or customer name', true],
-                      ['Attention', custAttn,  setCustAttn,  'Contact person',           false],
-                      ['Phone',     custPhone, setCustPhone, '(03) 9000 0000',           false],
-                    ] as [string, string, (v: string) => void, string, boolean][]).map(([label, value, setter, placeholder, required]) => (
-                      <div key={label}>
-                        <label className={`mb-1.5 block text-xs font-semibold uppercase tracking-widest ${!custCanBeBlank && required && !value ? 'text-red-400' : 'text-slate-400'}`}>
-                          {label}{required && !custCanBeBlank && <span className="ml-0.5 text-red-400">*</span>}
-                        </label>
-                        <input type="text" value={value} placeholder={placeholder} onChange={e => setter(e.target.value)}
-                          className={`w-full rounded-xl border py-2.5 px-4 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:ring-2 focus:ring-indigo-500/20 ${!custCanBeBlank && required && !value ? 'border-red-300 focus:border-red-400' : 'border-slate-200 bg-white focus:border-indigo-400'}`} />
-                      </div>
-                    ))}
-                  </div>
-                  <div className="space-y-4">
-                    {([
-                      ['Address',  custAddress,  setCustAddress,  'Street address',        true],
-                      ['Postcode', custPostcode, setCustPostcode, '3000',                   false],
-                      ['Email',    custEmail,    setCustEmail,    'contact@company.com.au', false],
-                    ] as [string, string, (v: string) => void, string, boolean][]).map(([label, value, setter, placeholder, required]) => (
-                      <div key={label}>
-                        <label className={`mb-1.5 block text-xs font-semibold uppercase tracking-widest ${!custCanBeBlank && required && !value ? 'text-red-400' : 'text-slate-400'}`}>
-                          {label}{required && !custCanBeBlank && <span className="ml-0.5 text-red-400">*</span>}
-                        </label>
-                        <input type="text" value={value} placeholder={placeholder} onChange={e => setter(e.target.value)}
-                          className={`w-full rounded-xl border py-2.5 px-4 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:ring-2 focus:ring-indigo-500/20 ${!custCanBeBlank && required && !value ? 'border-red-300 focus:border-red-400' : 'border-slate-200 bg-white focus:border-indigo-400'}`} />
-                      </div>
-                    ))}
-                  </div>
+                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                  {([
+                    ['Customer',  custName,     setCustName,     'Company or customer name', true],
+                    ['Attention', custAttn,     setCustAttn,     'Contact person',            false],
+                    ['Address',   custAddress,  setCustAddress,  'Street address',            true],
+                    ['Postcode',  custPostcode, setCustPostcode, '3000',                      false],
+                    ['Phone',     custPhone,    setCustPhone,    '(03) 9000 0000',            false],
+                    ['Email',     custEmail,    setCustEmail,    'contact@company.com.au',    false],
+                  ] as [string, string, (v: string) => void, string, boolean][]).map(([label, value, setter, placeholder, required]) => (
+                    <div key={label}>
+                      <label className={`mb-1.5 block text-xs font-semibold uppercase tracking-widest ${!custCanBeBlank && required && !value ? 'text-red-400' : 'text-slate-400'}`}>
+                        {label}{required && !custCanBeBlank && <span className="ml-0.5 text-red-400">*</span>}
+                      </label>
+                      <input type="text" value={value} placeholder={placeholder} onChange={e => setter(e.target.value)}
+                        className={`w-full rounded-xl border py-2.5 px-4 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:ring-2 focus:ring-indigo-500/20 ${!custCanBeBlank && required && !value ? 'border-red-300 focus:border-red-400 bg-white' : 'border-slate-200 bg-white focus:border-indigo-400'}`} />
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
