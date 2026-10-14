@@ -612,6 +612,15 @@ const [qty,           setQty]          = useState('1')
   }, [pendingAutoGenerate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (selected !== 'PVC_FLEX_SYSTEM' || invPricingData) return
+    fetch('/api/pvc/inventory-pricing')
+      .then(r => r.json())
+      .then(d => { if (d.ok) setInvPricingData(d as InvPricingData) })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected])
+
+  useEffect(() => {
     fetch('/api/pvc/quotes/meta')
       .then(r => r.json())
       .then(data => {
@@ -1272,6 +1281,37 @@ The quote includes all relevant specifications and pricing as discussed. Please 
   const [pvcDiscountPct, setPvcDiscountPct] = useState('')
   const [pvcDelivery, setPvcDelivery] = useState('')
   const [pvcInstallation, setPvcInstallation] = useState('')
+
+  // ── PVC inventory mode ───────────────────────────────────────────────────────
+  type PvcQuoteMode = 'door' | 'bulk_roll' | 'headrail' | 'rivet_plates'
+  const [pvcQuoteMode, setPvcQuoteMode] = useState<PvcQuoteMode>('door')
+
+  type InvPricingRow = { id: string; actual_cost: number; sales_fee: number; company_fee: number; shipping_fee: number; total_cost_default: number; [key: string]: unknown }
+  type InvPricingData = { bulk_roll: InvPricingRow[]; headrail: InvPricingRow[]; rivet_plates: InvPricingRow[] }
+  const [invPricingData, setInvPricingData] = useState<InvPricingData | null>(null)
+
+  // Bulk Roll state
+  const [bulkGrade,  setBulkGrade]  = useState<'Coolroom' | 'Freezer'>('Coolroom')
+  const [bulkWidth,  setBulkWidth]  = useState<number>(100)
+  const [bulkThick,  setBulkThick]  = useState<number>(2)
+  const [bulkQtyStr, setBulkQtyStr] = useState('1')
+  const [bulkMarkup, setBulkMarkup] = useState('100')
+
+  // Headrail Only state
+  const [hrMaterial, setHrMaterial] = useState<'Galvanised' | 'Stainless Steel'>('Galvanised')
+  const [hrLength,   setHrLength]   = useState<'1M' | '2M' | '3M'>('3M')
+  const [hrQtyStr,   setHrQtyStr]   = useState('1')
+  const [hrMarkup,   setHrMarkup]   = useState('100')
+
+  // Rivet Plates state
+  const [rivMaterial, setRivMaterial] = useState<'Stainless Steel' | 'Galvanised'>('Stainless Steel')
+  const [rivSize,     setRivSize]     = useState<'150mm' | '200mm' | '300mm'>('150mm')
+  const [rivQtyStr,   setRivQtyStr]   = useState('1')
+  const [rivMarkup,   setRivMarkup]   = useState('100')
+
+  // Extra freight toggle (inventory modes)
+  const [invExtraFreight,    setInvExtraFreight]    = useState(false)
+  const [invFreightAmountStr, setInvFreightAmountStr] = useState('')
 
   const DEFAULT_PVC_TERMS = "This quotation covers the PVC strip curtain system(s) listed above. Strip configurations are calculated from nominated opening dimensions; final measurements must be verified on-site before manufacture. Pricing is valid for 30 days from date of issue. Delivery and installation are excluded unless shown as priced line items. All supply and installation is subject to NBE Australia's standard Terms & Conditions."
   const [pvcTerms, setPvcTerms] = useState<string>('')
@@ -4302,9 +4342,29 @@ const autoDescLines = [
             const activePreview = pvcCalcPreview(activeWn, activeHn)
             const savedDoorsSubtotal = savedPvcDoors.reduce((s, d) => { const p = pvcCalcSaved(d); return s + (p ? p * d.qty : 0) }, 0)
             const activeSubtotal = activePreview && activeWn && activeHn ? activePreview.unitPrice * (parseInt(pvcQtyStr) || 1) : 0
-            const pvcGrandTotal = savedDoorsSubtotal + activeSubtotal + pvcDelivN + pvcInstN
+            const pvcDoorGrandTotal = savedDoorsSubtotal + activeSubtotal + pvcDelivN + pvcInstN
+
+            // Inventory mode totals
+            const invDiscN = pvcDiscN
+            const invFreightN = invExtraFreight ? (parseFloat(invFreightAmountStr) || 0) : 0
+            const invBulkRow = (invPricingData?.bulk_roll ?? []).find(r => (r as Record<string,unknown>).grade === bulkGrade && (r as Record<string,unknown>).strip_width === bulkWidth && (r as Record<string,unknown>).thickness === bulkThick)
+            const invBulkMarkupN = parseFloat(bulkMarkup) || 100
+            const invBulkUnit = invBulkRow ? (invBulkMarkupN === 100 ? invBulkRow.total_cost_default : invBulkRow.actual_cost + invBulkRow.actual_cost * invBulkMarkupN / 100 + invBulkRow.sales_fee + invBulkRow.company_fee + invBulkRow.shipping_fee) : 0
+            const invBulkSubtotal = invBulkUnit * (parseInt(bulkQtyStr)||1) * (1 - invDiscN/100)
+            const invHrRow = (invPricingData?.headrail ?? []).find(r => (r as Record<string,unknown>).material === hrMaterial && (r as Record<string,unknown>).length === hrLength)
+            const invHrMarkupN = parseFloat(hrMarkup) || 100
+            const invHrUnit = invHrRow ? (invHrMarkupN === 100 ? invHrRow.total_cost_default : invHrRow.actual_cost + invHrRow.actual_cost * invHrMarkupN / 100 + invHrRow.sales_fee + invHrRow.company_fee + invHrRow.shipping_fee) : 0
+            const invHrSubtotal = invHrUnit * (parseInt(hrQtyStr)||1) * (1 - invDiscN/100)
+            const invRivRow = (invPricingData?.rivet_plates ?? []).find(r => (r as Record<string,unknown>).material === rivMaterial && (r as Record<string,unknown>).size === rivSize)
+            const invRivMarkupN = parseFloat(rivMarkup) || 100
+            const invRivUnit = invRivRow ? (invRivMarkupN === 100 ? invRivRow.total_cost_default : invRivRow.actual_cost + invRivRow.actual_cost * invRivMarkupN / 100 + invRivRow.sales_fee + invRivRow.company_fee + invRivRow.shipping_fee) : 0
+            const invRivSubtotal = invRivUnit * (parseInt(rivQtyStr)||1) * (1 - invDiscN/100)
+            const pvcGrandTotal = pvcQuoteMode === 'bulk_roll' ? invBulkSubtotal + invFreightN
+              : pvcQuoteMode === 'headrail' ? invHrSubtotal + invFreightN
+              : pvcQuoteMode === 'rivet_plates' ? invRivSubtotal + invFreightN
+              : pvcDoorGrandTotal
             const hasAnyDoor = savedPvcDoors.length > 0 || (!!pvcW && !!pvcH)
-            const canGeneratePvc = !generating && hasAnyDoor && (custCanBeBlank || customerFilled)
+            const canGeneratePvc = !generating && (pvcQuoteMode === 'door' ? hasAnyDoor : pvcGrandTotal > 0) && (custCanBeBlank || customerFilled)
             return (
               <div className={`rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden${formLocked ? ' pointer-events-none opacity-75 select-none' : ''}`}>
                 {formLocked && (
@@ -4375,8 +4435,33 @@ const autoDescLines = [
                   </div>
                 )}
 
+                {/* ── Quote Mode selector ── */}
+                <div className="px-6 py-4 border-b border-slate-100">
+                  <label className={LABEL_CLS}>Quote Mode</label>
+                  <div className="flex gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+                    {([
+                      { key: 'door',         label: 'Door Dimensions', icon: 'sensor_door' },
+                      { key: 'bulk_roll',    label: 'Bulk Roll',       icon: 'rotate_right' },
+                      { key: 'headrail',     label: 'Headrail Only',   icon: 'horizontal_rule' },
+                      { key: 'rivet_plates', label: 'Rivet Plates',    icon: 'grid_on' },
+                    ] as const).map(m => (
+                      <button
+                        key={m.key}
+                        type="button"
+                        onClick={() => setPvcQuoteMode(m.key)}
+                        className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                          pvcQuoteMode === m.key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[15px]">{m.icon}</span>
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* ── Active door form (rapid-door style) ── */}
-                <div className="px-6 py-5 border-b border-slate-100 space-y-5">
+                {pvcQuoteMode === 'door' && <div className="px-6 py-5 border-b border-slate-100 space-y-5">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">
                       {savedPvcDoors.length > 0 ? `Door ${savedPvcDoors.length + 1} Specification` : 'Door Specification'}
@@ -4524,29 +4609,271 @@ const autoDescLines = [
                     <span className="material-symbols-outlined text-[18px]">add_circle</span>
                     Lock Door {savedPvcDoors.length + 1} &amp; Add Another Door
                   </button>
-                </div>
+                </div>}
+
+                {/* ── Bulk Roll form ── */}
+                {pvcQuoteMode === 'bulk_roll' && (() => {
+                  const validCombos = (invPricingData?.bulk_roll ?? []).filter(r => (r as Record<string,unknown>).grade === bulkGrade)
+                  const availWidths = [...new Set(validCombos.map(r => (r as Record<string,unknown>).strip_width as number))].sort((a,b)=>a-b)
+                  const validThicks = validCombos.filter(r => (r as Record<string,unknown>).strip_width === bulkWidth).map(r => (r as Record<string,unknown>).thickness as number)
+                  const selectedRow = validCombos.find(r => (r as Record<string,unknown>).strip_width === bulkWidth && (r as Record<string,unknown>).thickness === bulkThick)
+                  const markupN = parseFloat(bulkMarkup) || 100
+                  const bulkUnitPrice = selectedRow
+                    ? (markupN === 100 ? selectedRow.total_cost_default : selectedRow.actual_cost + selectedRow.actual_cost * markupN / 100 + selectedRow.sales_fee + selectedRow.company_fee + selectedRow.shipping_fee)
+                    : 0
+                  return (
+                    <div className="px-6 py-5 border-b border-slate-100 space-y-5">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Bulk Roll Specification</h3>
+                        <span className="text-[11px] text-slate-400">Each roll = 50m · Ribbed profile only</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className={LABEL_REQ_CLS}>Grade</label>
+                          <SelectWrapper>
+                            <select value={bulkGrade} onChange={e => { setBulkGrade(e.target.value as 'Coolroom'|'Freezer'); setBulkWidth(100); setBulkThick(2) }} className={SELECT_CLS}>
+                              <option value="Coolroom">Coolroom</option>
+                              <option value="Freezer">Freezer</option>
+                            </select>
+                          </SelectWrapper>
+                        </div>
+                        <div>
+                          <label className={LABEL_REQ_CLS}>Strip Width</label>
+                          <SelectWrapper>
+                            <select value={bulkWidth} onChange={e => { const w = Number(e.target.value); setBulkWidth(w); const ts = validCombos.filter(r=>(r as Record<string,unknown>).strip_width===w).map(r=>(r as Record<string,unknown>).thickness as number); if (ts.length && !ts.includes(bulkThick)) setBulkThick(ts[0]) }} className={SELECT_CLS}>
+                              {availWidths.map(w => <option key={w} value={w}>{w} mm</option>)}
+                            </select>
+                          </SelectWrapper>
+                        </div>
+                        <div>
+                          <label className={LABEL_REQ_CLS}>Thickness</label>
+                          <SelectWrapper>
+                            <select value={bulkThick} onChange={e => setBulkThick(Number(e.target.value))} className={SELECT_CLS}>
+                              {validThicks.map(t => <option key={t} value={t}>{t} mm</option>)}
+                            </select>
+                          </SelectWrapper>
+                        </div>
+                        <div>
+                          <label className={LABEL_CLS}>Qty (rolls)</label>
+                          <input type="number" min={1} value={bulkQtyStr} onChange={e => setBulkQtyStr(e.target.value)} className={INPUT_CLS} />
+                        </div>
+                      </div>
+                      {isWorkflowManager && (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className={LABEL_CLS}>Markup Margin %</label>
+                              <div className="relative">
+                                <input type="number" min="0" step="1" value={bulkMarkup} onChange={e => setBulkMarkup(e.target.value)} className={INPUT_CLS + ' pr-8'} />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-semibold">%</span>
+                              </div>
+                            </div>
+                          </div>
+                          {markupN < 100 && (
+                            <div className={`rounded-lg border px-3 py-2 text-xs font-medium ${markupN < 50 ? 'border-red-200 bg-red-50 text-red-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                              <span className="material-symbols-outlined text-[14px] align-middle mr-1">{markupN < 50 ? 'error' : 'warning'}</span>
+                              Markup below 100% — selling below default sell price.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {selectedRow && (
+                        <div className="flex items-center gap-4 rounded-xl border border-teal-200 bg-teal-50 px-5 py-3">
+                          <span className="material-symbols-outlined text-teal-500 text-xl">calculate</span>
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-widest text-teal-600">Unit Price per Roll</p>
+                            <p className="text-2xl font-bold text-teal-700">${bulkUnitPrice.toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
+                          </div>
+                          <div className="ml-auto text-right text-xs text-teal-500">
+                            <p>× {parseInt(bulkQtyStr)||1} roll{(parseInt(bulkQtyStr)||1)>1?'s':''}</p>
+                            <p className="font-semibold">${(bulkUnitPrice*(parseInt(bulkQtyStr)||1)).toLocaleString('en-AU',{minimumFractionDigits:2})} subtotal</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* ── Headrail Only form ── */}
+                {pvcQuoteMode === 'headrail' && (() => {
+                  const selectedRow = (invPricingData?.headrail ?? []).find(r => (r as Record<string,unknown>).material === hrMaterial && (r as Record<string,unknown>).length === hrLength)
+                  const markupN = parseFloat(hrMarkup) || 100
+                  const hrUnitPrice = selectedRow
+                    ? (markupN === 100 ? selectedRow.total_cost_default : selectedRow.actual_cost + selectedRow.actual_cost * markupN / 100 + selectedRow.sales_fee + selectedRow.company_fee + selectedRow.shipping_fee)
+                    : 0
+                  return (
+                    <div className="px-6 py-5 border-b border-slate-100 space-y-5">
+                      <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Headrail Specification</h3>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div>
+                          <label className={LABEL_REQ_CLS}>Material</label>
+                          <SelectWrapper>
+                            <select value={hrMaterial} onChange={e => setHrMaterial(e.target.value as 'Galvanised'|'Stainless Steel')} className={SELECT_CLS}>
+                              <option value="Galvanised">Galvanised</option>
+                              <option value="Stainless Steel">Stainless Steel</option>
+                            </select>
+                          </SelectWrapper>
+                        </div>
+                        <div>
+                          <label className={LABEL_REQ_CLS}>Length</label>
+                          <SelectWrapper>
+                            <select value={hrLength} onChange={e => setHrLength(e.target.value as '1M'|'2M'|'3M')} className={SELECT_CLS}>
+                              <option value="1M">1M</option>
+                              <option value="2M">2M</option>
+                              <option value="3M">3M</option>
+                            </select>
+                          </SelectWrapper>
+                        </div>
+                        <div>
+                          <label className={LABEL_CLS}>Qty</label>
+                          <input type="number" min={1} value={hrQtyStr} onChange={e => setHrQtyStr(e.target.value)} className={INPUT_CLS} />
+                        </div>
+                      </div>
+                      {isWorkflowManager && (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className={LABEL_CLS}>Markup Margin %</label>
+                              <div className="relative">
+                                <input type="number" min="0" step="1" value={hrMarkup} onChange={e => setHrMarkup(e.target.value)} className={INPUT_CLS + ' pr-8'} />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-semibold">%</span>
+                              </div>
+                            </div>
+                          </div>
+                          {(parseFloat(hrMarkup)||100) < 100 && (
+                            <div className={`rounded-lg border px-3 py-2 text-xs font-medium ${(parseFloat(hrMarkup)||100) < 50 ? 'border-red-200 bg-red-50 text-red-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                              <span className="material-symbols-outlined text-[14px] align-middle mr-1">{(parseFloat(hrMarkup)||100) < 50 ? 'error' : 'warning'}</span>
+                              Markup below 100% — selling below default sell price.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {selectedRow && (
+                        <div className="flex items-center gap-4 rounded-xl border border-teal-200 bg-teal-50 px-5 py-3">
+                          <span className="material-symbols-outlined text-teal-500 text-xl">calculate</span>
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-widest text-teal-600">Unit Price</p>
+                            <p className="text-2xl font-bold text-teal-700">${hrUnitPrice.toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
+                          </div>
+                          <div className="ml-auto text-right text-xs text-teal-500">
+                            <p>× {parseInt(hrQtyStr)||1} unit{(parseInt(hrQtyStr)||1)>1?'s':''}</p>
+                            <p className="font-semibold">${(hrUnitPrice*(parseInt(hrQtyStr)||1)).toLocaleString('en-AU',{minimumFractionDigits:2})} subtotal</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* ── Rivet Plates form ── */}
+                {pvcQuoteMode === 'rivet_plates' && (() => {
+                  const selectedRow = (invPricingData?.rivet_plates ?? []).find(r => (r as Record<string,unknown>).material === rivMaterial && (r as Record<string,unknown>).size === rivSize)
+                  const markupN = parseFloat(rivMarkup) || 100
+                  const rivUnitPrice = selectedRow
+                    ? (markupN === 100 ? selectedRow.total_cost_default : selectedRow.actual_cost + selectedRow.actual_cost * markupN / 100 + selectedRow.sales_fee + selectedRow.company_fee + selectedRow.shipping_fee)
+                    : 0
+                  return (
+                    <div className="px-6 py-5 border-b border-slate-100 space-y-5">
+                      <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Rivet Plates Specification</h3>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div>
+                          <label className={LABEL_REQ_CLS}>Material</label>
+                          <SelectWrapper>
+                            <select value={rivMaterial} onChange={e => setRivMaterial(e.target.value as 'Stainless Steel'|'Galvanised')} className={SELECT_CLS}>
+                              <option value="Stainless Steel">Stainless Steel</option>
+                              <option value="Galvanised">Galvanised</option>
+                            </select>
+                          </SelectWrapper>
+                        </div>
+                        <div>
+                          <label className={LABEL_REQ_CLS}>Size</label>
+                          <SelectWrapper>
+                            <select value={rivSize} onChange={e => setRivSize(e.target.value as '150mm'|'200mm'|'300mm')} className={SELECT_CLS}>
+                              <option value="150mm">150 mm</option>
+                              <option value="200mm">200 mm</option>
+                              <option value="300mm">300 mm</option>
+                            </select>
+                          </SelectWrapper>
+                        </div>
+                        <div>
+                          <label className={LABEL_CLS}>Qty</label>
+                          <input type="number" min={1} value={rivQtyStr} onChange={e => setRivQtyStr(e.target.value)} className={INPUT_CLS} />
+                        </div>
+                      </div>
+                      {isWorkflowManager && (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className={LABEL_CLS}>Markup Margin %</label>
+                              <div className="relative">
+                                <input type="number" min="0" step="1" value={rivMarkup} onChange={e => setRivMarkup(e.target.value)} className={INPUT_CLS + ' pr-8'} />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-semibold">%</span>
+                              </div>
+                            </div>
+                          </div>
+                          {(parseFloat(rivMarkup)||100) < 100 && (
+                            <div className={`rounded-lg border px-3 py-2 text-xs font-medium ${(parseFloat(rivMarkup)||100) < 50 ? 'border-red-200 bg-red-50 text-red-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                              <span className="material-symbols-outlined text-[14px] align-middle mr-1">{(parseFloat(rivMarkup)||100) < 50 ? 'error' : 'warning'}</span>
+                              Markup below 100% — selling below default sell price.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {selectedRow && (
+                        <div className="flex items-center gap-4 rounded-xl border border-teal-200 bg-teal-50 px-5 py-3">
+                          <span className="material-symbols-outlined text-teal-500 text-xl">calculate</span>
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-widest text-teal-600">Unit Price</p>
+                            <p className="text-2xl font-bold text-teal-700">${rivUnitPrice.toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
+                          </div>
+                          <div className="ml-auto text-right text-xs text-teal-500">
+                            <p>× {parseInt(rivQtyStr)||1} plate{(parseInt(rivQtyStr)||1)>1?'s':''}</p>
+                            <p className="font-semibold">${(rivUnitPrice*(parseInt(rivQtyStr)||1)).toLocaleString('en-AU',{minimumFractionDigits:2})} subtotal</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* ── Quote Settings ── */}
                 <div className="px-6 py-5 border-b border-slate-100 space-y-4">
                   <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Quote Settings</h3>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className={`grid gap-4 ${pvcQuoteMode === 'door' ? 'grid-cols-3' : 'grid-cols-2'}`}>
                     <div>
                       <label className={LABEL_CLS}>
-                        Discount % on Material
+                        Discount %{pvcQuoteMode !== 'door' ? '' : ' on Material'}
                       </label>
                       <div className="relative">
                         <input type="number" min="0" max="100" step="1" value={pvcDiscountPct} onChange={e => setPvcDiscountPct(e.target.value)} placeholder="0" className={INPUT_CLS + ' pr-8'} />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-semibold">%</span>
                       </div>
                     </div>
-                    <div>
-                      <label className={LABEL_CLS}>Installation Fee ($)</label>
-                      <input type="number" min="0" value={pvcInstallation} onChange={e => setPvcInstallation(e.target.value)} placeholder="0.00" className={INPUT_CLS} />
-                    </div>
-                    <div>
-                      <label className={LABEL_CLS}>Delivery Fee ($)</label>
-                      <input type="number" min="0" value={pvcDelivery} onChange={e => setPvcDelivery(e.target.value)} placeholder="0.00" className={INPUT_CLS} />
-                    </div>
+                    {pvcQuoteMode === 'door' && (
+                      <div>
+                        <label className={LABEL_CLS}>Installation Fee ($)</label>
+                        <input type="number" min="0" value={pvcInstallation} onChange={e => setPvcInstallation(e.target.value)} placeholder="0.00" className={INPUT_CLS} />
+                      </div>
+                    )}
+                    {pvcQuoteMode === 'door' ? (
+                      <div>
+                        <label className={LABEL_CLS}>Delivery Fee ($)</label>
+                        <input type="number" min="0" value={pvcDelivery} onChange={e => setPvcDelivery(e.target.value)} placeholder="0.00" className={INPUT_CLS} />
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                          <input type="checkbox" checked={invExtraFreight} onChange={e => setInvExtraFreight(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                          <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Add Extra Freight</span>
+                        </label>
+                        {invExtraFreight && (
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                            <input type="number" min="0" value={invFreightAmountStr} onChange={e => setInvFreightAmountStr(e.target.value)} placeholder="0.00" className={INPUT_CLS + ' pl-7'} />
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 

@@ -6,8 +6,9 @@ import { FEATURE_FLAG_DEFINITIONS, getFeatureFlags } from '@/lib/featureFlags'
 import { FeatureFlagsClient } from './FeatureFlagsClient'
 import { NotificationSettingsClient } from './NotificationSettingsClient'
 import { QuoteSettingsClient } from './QuoteSettingsClient'
+import { PvcInventoryPricingClient } from './PvcInventoryPricingClient'
 
-type Tab = 'feature_flags' | 'notifications' | 'quote_settings'
+type Tab = 'feature_flags' | 'notifications' | 'quote_settings' | 'pvc_inventory'
 
 type SearchParams = Promise<{ tab?: string }>
 
@@ -30,6 +31,7 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
   const activeTab: Tab =
     tabParam === 'notifications' ? 'notifications' :
     tabParam === 'quote_settings' ? 'quote_settings' :
+    tabParam === 'pvc_inventory' ? 'pvc_inventory' :
     'feature_flags'
 
   const flagValues = await getFeatureFlags()
@@ -44,10 +46,11 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
     { key: 'feature_flags',  label: 'Feature Flags' },
     { key: 'notifications',  label: 'Notification Settings' },
     { key: 'quote_settings', label: 'Quote Settings' },
+    { key: 'pvc_inventory',  label: 'PVC Inventory Pricing' },
   ]
 
   return (
-    <div className={`mx-auto space-y-6 ${activeTab === 'quote_settings' ? 'max-w-5xl' : 'max-w-2xl'}`}>
+    <div className={`mx-auto space-y-6 ${activeTab === 'quote_settings' || activeTab === 'pvc_inventory' ? 'max-w-5xl' : 'max-w-2xl'}`}>
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Portal Settings</h1>
         <p className="mt-1 text-sm text-slate-500">
@@ -118,6 +121,13 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
       {activeTab === 'quote_settings' && (
         <section className="space-y-4">
           <QuoteSettingsClient />
+        </section>
+      )}
+
+      {/* PVC Inventory Pricing tab */}
+      {activeTab === 'pvc_inventory' && (
+        <section className="space-y-4">
+          <PvcInventoryPricingClient />
         </section>
       )}
     </div>
