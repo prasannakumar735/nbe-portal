@@ -1877,7 +1877,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
           if (row) {
             const calcedUnit = calcUnit(row, markupN(bulkMarkup)) * (1 - discPct / 100)
             const unit = bulkOverride && parseFloat(bulkOverridePrice) > 0 ? parseFloat(bulkOverridePrice) : calcedUnit
-            finalLineItems = [{
+            finalLineItems = [...doorLineItems, {
               item: 'PVC Strip Roll',
               description: `PVC Strip Roll - 50 Metres\n${bulkWidth} x ${bulkThick} ${bulkGrade} Grade\n${shippingTo}`,
               qty: parseInt(bulkQtyStr) || 1,
@@ -1893,7 +1893,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
           if (row) {
             const calcedUnit = calcUnit(row, markupN(hrMarkup)) * (1 - discPct / 100)
             const unit = hrOverride && parseFloat(hrOverridePrice) > 0 ? parseFloat(hrOverridePrice) : calcedUnit
-            finalLineItems = [{
+            finalLineItems = [...doorLineItems, {
               item: 'Headrail',
               description: `PVC Flex Headrail - ${hrLength}\n${hrMaterial}\n${shippingTo}`,
               qty: parseInt(hrQtyStr) || 1,
@@ -1909,7 +1909,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
           if (row) {
             const calcedUnit = calcUnit(row, markupN(rivMarkup)) * (1 - discPct / 100)
             const unit = rivOverride && parseFloat(rivOverridePrice) > 0 ? parseFloat(rivOverridePrice) : calcedUnit
-            finalLineItems = [{
+            finalLineItems = [...doorLineItems, {
               item: 'Hangers',
               description: `PVC Flex Hangers - ${rivSize}\n${rivMaterial}\n${shippingTo}`,
               qty: parseInt(rivQtyStr) || 1,
@@ -5089,10 +5089,25 @@ const autoDescLines = [
                   )
                 })()}
 
-                {/* ── Quote Cart (inventory items) ── */}
-                {pvcInventoryItems.length > 0 && (
+                {/* ── Quote Cart (saved doors + inventory items) ── */}
+                {(savedPvcDoors.length > 0 || pvcInventoryItems.length > 0) && (
                   <div className="px-6 py-5 border-b border-slate-100 space-y-3">
-                    <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Quote Items ({pvcInventoryItems.length})</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                      Quote Items ({savedPvcDoors.length + pvcInventoryItems.length})
+                    </h3>
+                    {savedPvcDoors.map((door, idx) => (
+                      <div key={door.id} className="flex items-center gap-3 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3">
+                        <span className="material-symbols-outlined text-teal-500 text-[18px]">sensor_door</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-800">Door {idx + 1} — {door.openingW}W × {door.openingH}H mm</p>
+                          <p className="text-xs text-slate-500">{door.stripWidth}mm {door.grade} · {door.supplyType} · Qty {door.qty}</p>
+                        </div>
+                        <button type="button" onClick={() => removeSavedPvcDoor(door.id)}
+                          className="flex-shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 transition">
+                          <span className="material-symbols-outlined text-[16px]">delete</span>
+                        </button>
+                      </div>
+                    ))}
                     {pvcInventoryItems.map((item, idx) => (
                       <div key={item.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                         <div className="flex-1 min-w-0">
@@ -5106,10 +5121,12 @@ const autoDescLines = [
                         </button>
                       </div>
                     ))}
-                    <button type="button" onClick={() => setPvcInventoryItems([])}
-                      className="text-xs text-slate-400 hover:text-red-500 transition">
-                      Clear all items
-                    </button>
+                    {pvcInventoryItems.length > 0 && (
+                      <button type="button" onClick={() => setPvcInventoryItems([])}
+                        className="text-xs text-slate-400 hover:text-red-500 transition">
+                        Clear inventory items
+                      </button>
+                    )}
                   </div>
                 )}
 
