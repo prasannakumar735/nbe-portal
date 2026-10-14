@@ -121,7 +121,7 @@ export async function generatePvcFlexQuotePdf(input: PvcFlexQuotePdfInput): Prom
   const cNo      = ML
   const cNoW     = 24
   const cItem    = ML + cNoW
-  const cItemW   = 60
+  const cItemW   = 90
   const cDesc    = cItem + cItemW
   const cQtyX    = ML + CW - 130
   const cQtyW    = 28
