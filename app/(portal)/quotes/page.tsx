@@ -1003,9 +1003,12 @@ The quote includes all relevant specifications and pricing as discussed. Please 
   }
   const [groupFilters, setGroupFilters] = useState<Record<string, string>>({})
   const [filterMenuOpen, setFilterMenuOpen] = useState<string | null>(null)
+  const PAGE_SIZE = 10
+  const [groupPages, setGroupPages] = useState<Record<string, number>>({})
   function setGroupFilter(kind: string, value: string, e: React.MouseEvent) {
     e.stopPropagation()
     setGroupFilters(prev => ({ ...prev, [kind]: value }))
+    setGroupPages(prev => ({ ...prev, [kind]: 0 }))
     setFilterMenuOpen(null)
   }
   function toggleFilterMenu(kind: string, e: React.MouseEvent) {
@@ -2437,7 +2440,7 @@ const autoDescLines = [
         <div className="flex items-center gap-3">
           <div className="relative flex-1 max-w-sm">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-[16px] text-slate-400">search</span>
-            <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+            <input type="text" value={search} onChange={e => { setSearch(e.target.value); setGroupPages({}) }}
               placeholder="Customer name or quote number…"
               className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-4 text-sm text-slate-800 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
           </div>
@@ -2482,6 +2485,10 @@ const autoDescLines = [
               const open = groupsOpen[kind] !== false
               const activeFilter = groupFilters[kind] ?? 'all'
               const rows = sortAndFilterRows(allRows, kind)
+              const currentPage = groupPages[kind] ?? 0
+              const totalPages = Math.ceil(rows.length / PAGE_SIZE)
+              const pageRows = rows.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE)
+              function goToPage(p: number) { setGroupPages(prev => ({ ...prev, [kind]: p })) }
               const accentMap: Record<string, string> = {
                 indigo:  'bg-indigo-50 border-indigo-200 text-indigo-700',
                 violet:  'bg-violet-50 border-violet-200 text-violet-700',
@@ -2560,7 +2567,7 @@ const autoDescLines = [
                               </tr>
                             </thead>
                             <tbody>
-                              {rows.map(q => {
+                              {pageRows.map(q => {
                                 const [y, m, d] = (q.service_date ?? '').split('-')
                                 const dateStr = y ? `${d}/${m}/${y}` : '—'
                                 const updDate = q.updated_at ? q.updated_at.slice(0, 10) : ''
@@ -2620,6 +2627,34 @@ const autoDescLines = [
                             </tbody>
                           </table>
                         </div>
+
+                        {/* Pagination */}
+                        {totalPages > 1 && (
+                          <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3">
+                            <span className="text-xs text-slate-400 tabular-nums">
+                              {currentPage * PAGE_SIZE + 1}–{Math.min((currentPage + 1) * PAGE_SIZE, rows.length)} of {rows.length}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button type="button" disabled={currentPage === 0} onClick={() => goToPage(currentPage - 1)}
+                                className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-xs text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">
+                                ←
+                              </button>
+                              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                                const idx = totalPages <= 7 ? i : currentPage < 4 ? i : currentPage > totalPages - 4 ? totalPages - 7 + i : currentPage - 3 + i
+                                return (
+                                  <button key={idx} type="button" onClick={() => goToPage(idx)}
+                                    className={`flex h-7 w-7 items-center justify-center rounded-lg border text-xs font-medium transition ${idx === currentPage ? 'border-indigo-400 bg-indigo-500 text-white' : 'border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
+                                    {idx + 1}
+                                  </button>
+                                )
+                              })}
+                              <button type="button" disabled={currentPage >= totalPages - 1} onClick={() => goToPage(currentPage + 1)}
+                                className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-xs text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">
+                                →
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </>
                     )
                   )}
