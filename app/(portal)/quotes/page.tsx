@@ -497,6 +497,21 @@ const [qty,           setQty]          = useState('1')
   const quoteNumberRef = useRef<string | null>(null)  // stable ref — avoids stale closure in handleGenerateQuote
   const quoteIdRef     = useRef<string | null>(null)  // Supabase quotes.id — set after first save
   const [generating,   setGenerating]   = useState(false)
+  const [generatingPct, setGeneratingPct] = useState(0)
+  const genIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  function startGenerating() {
+    setGenerating(true); setGeneratingPct(0)
+    let pct = 0
+    genIntervalRef.current = setInterval(() => {
+      pct = Math.min(92, pct + (92 - pct) * 0.06 + 0.4)
+      setGeneratingPct(Math.round(pct))
+    }, 120)
+  }
+  function stopGenerating() {
+    if (genIntervalRef.current) { clearInterval(genIntervalRef.current); genIntervalRef.current = null }
+    setGeneratingPct(100)
+    setTimeout(() => { setGenerating(false); setGeneratingPct(0) }, 400)
+  }
   const [previewUrl,   setPreviewUrl]   = useState<string | null>(null)
   const [showPreview,  setShowPreview]  = useState(false)
   const previewRef = useRef<HTMLDivElement>(null)
@@ -1350,7 +1365,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
   const [pvcSenderEditing,  setPvcSenderEditing]  = useState(false)
 
   async function handleGenerateMaintenance() {
-    setGenerating(true)
+    startGenerating()
     try {
       if (!quoteNumberRef.current) {
         const res = await fetch('/api/quotes/next-number?prefix=QREP')
@@ -1395,12 +1410,12 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     } catch (e) {
       alert(`Error: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
-      setGenerating(false)
+      stopGenerating()
     }
   }
 
   async function handleGenerateParts() {
-    setGenerating(true)
+    startGenerating()
     try {
       if (!quoteNumberRef.current) {
         const res = await fetch('/api/quotes/next-number?prefix=QPTS')
@@ -1446,7 +1461,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     } catch (e) {
       alert(`Error: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
-      setGenerating(false)
+      stopGenerating()
     }
   }
 
@@ -1628,7 +1643,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
   }
 
   async function handleGenerateGeneral() {
-    setGenerating(true)
+    startGenerating()
     try {
       if (!quoteNumberRef.current) {
         const res = await fetch('/api/quotes/next-number?prefix=QGEN')
@@ -1674,7 +1689,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     } catch (e) {
       alert(`Error: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
-      setGenerating(false)
+      stopGenerating()
     }
   }
 
@@ -1795,7 +1810,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
   }
 
   async function handleGeneratePvcFlex() {
-    setGenerating(true)
+    startGenerating()
     try {
       if (!quoteNumberRef.current) {
         const res = await fetch('/api/quotes/next-number?prefix=QPVC')
@@ -1966,7 +1981,7 @@ The quote includes all relevant specifications and pricing as discussed. Please 
     } catch (e) {
       alert(`Error: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
-      setGenerating(false)
+      stopGenerating()
     }
   }
 
@@ -2250,7 +2265,7 @@ const autoDescLines = [
 
   // ── Generate quote ───────────────────────────────────────────────────────────
   async function handleGenerateQuote() {
-    setGenerating(true)
+    startGenerating()
     try {
       const qn = quoteNumberRef.current ?? await fetchNextRapidDoorQuoteNumber()
       if (!quoteNumberRef.current) {
@@ -2368,7 +2383,7 @@ const autoDescLines = [
     } catch (e) {
       alert(`Error: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
-      setGenerating(false)
+      stopGenerating()
     }
   }
 
@@ -3220,7 +3235,7 @@ const autoDescLines = [
                     className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-40"
                     title={!custCanBeBlank && !customerFilled ? 'Customer name and address are required' : undefined}>
                     {generating
-                      ? <><span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>Generating…</>
+                      ? <><span className="tabular-nums font-bold">{generatingPct}%</span><span className="opacity-80">Generating…</span></>
                       : <><span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>{showPreview ? 'Regenerate Quote' : 'Generate Quote'}</>
                     }
                   </button>
@@ -3707,7 +3722,7 @@ const autoDescLines = [
                     className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-40"
                     title={!custCanBeBlank && !customerFilled ? 'Customer name and address are required' : undefined}>
                     {generating
-                      ? <><span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>Generating…</>
+                      ? <><span className="tabular-nums font-bold">{generatingPct}%</span><span className="opacity-80">Generating…</span></>
                       : <><span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>{showPreview ? 'Regenerate Quote' : 'Generate Quote'}</>
                     }
                   </button>
@@ -4210,7 +4225,7 @@ const autoDescLines = [
                     className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-40"
                     title={!custCanBeBlank && !customerFilled ? 'Customer name and address are required' : undefined}>
                     {generating
-                      ? <><span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>Generating…</>
+                      ? <><span className="tabular-nums font-bold">{generatingPct}%</span><span className="opacity-80">Generating…</span></>
                       : <><span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>{showPreview ? 'Regenerate Quote' : 'Generate Quote'}</>
                     }
                   </button>
@@ -5277,7 +5292,7 @@ const autoDescLines = [
                     className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-40"
                     title={!hasAnyDoor ? 'Enter at least one door opening size' : (!custCanBeBlank && !customerFilled) ? 'Customer name and address are required' : undefined}>
                     {generating
-                      ? <><span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>Generating…</>
+                      ? <><span className="tabular-nums font-bold">{generatingPct}%</span><span className="opacity-80">Generating…</span></>
                       : <><span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>{showPreview ? 'Regenerate Quote' : 'Generate Quote'}</>
                     }
                   </button>
@@ -6051,7 +6066,7 @@ const autoDescLines = [
               <button type="button" disabled={!canGenerate} onClick={handleGenerateQuote}
                 className="inline-flex h-11 flex-[2] items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40">
                 {generating
-                  ? <><span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>Generating…</>
+                  ? <><span className="tabular-nums font-bold">{generatingPct}%</span><span className="opacity-80">Generating…</span></>
                   : <><span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>{showPreview ? 'Regenerate Quote' : 'Generate Quote'}</>
                 }
               </button>
