@@ -2529,8 +2529,8 @@ const autoDescLines = [
                       </div>
                     ) : (
                       <>
-                        {/* Desktop */}
-                        <div className="hidden overflow-x-auto xl:block">
+                        {/* Table — always shown */}
+                        <div className="overflow-x-auto">
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="border-b border-slate-100 bg-slate-50 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
@@ -2605,58 +2605,6 @@ const autoDescLines = [
                             </tbody>
                           </table>
                         </div>
-                        {/* Mobile */}
-                        <ul className="divide-y divide-slate-100 xl:hidden">
-                          {rows.map(q => {
-                            const [y, m, d] = (q.service_date ?? '').split('-')
-                            const dateStr = y ? `${d}/${m}/${y}` : '—'
-                            return (
-                              <li key={q.id} className="flex items-start justify-between gap-4 px-5 py-4 hover:bg-slate-50 transition">
-                                <div className="min-w-0 flex-1">
-                                  <p className="font-mono text-xs font-semibold text-indigo-700">{q.quote_number}</p>
-                                  <p className="mt-0.5 text-sm font-medium text-slate-800">{q.customer_name || <span className="text-slate-400 italic font-normal">No customer</span>}</p>
-                                  <p className="mt-0.5 text-xs text-slate-500">{dateStr}</p>
-                                  <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-                                    {kind !== 'rapid_door' && (
-                                      <button type="button" onClick={() => openWorkflowModal(q.id)}
-                                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 transition">
-                                        <span className="material-symbols-outlined text-[13px]">timeline</span>Workflow
-                                      </button>
-                                    )}
-                                    {kind !== 'rapid_door' && (
-                                      <button type="button" onClick={() => openPdfFromList(q)}
-                                        className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 hover:bg-sky-100 transition">
-                                        <span className="material-symbols-outlined text-[13px]">picture_as_pdf</span>PDF
-                                      </button>
-                                    )}
-                                    <button type="button" onClick={() => openQuoteFromList(q)}
-                                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 transition">
-                                      <span className="material-symbols-outlined text-[13px]">edit</span>Open
-                                    </button>
-                                    {(() => {
-                                      const isDraft = ['draft', 'draft_review'].includes(q.workflow_status ?? '')
-                                      return (
-                                        <button
-                                          type="button"
-                                          disabled={!isDraft}
-                                          onClick={() => { setDeleteConfirmRow(q); setDeleteError(null) }}
-                                          className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${isDraft ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100' : 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300'}`}>
-                                          <span className="material-symbols-outlined text-[13px]">delete</span>Delete
-                                        </button>
-                                      )
-                                    })()}
-                                  </div>
-                                </div>
-                                <div className="shrink-0 text-right">
-                                  <p className="text-sm font-semibold text-slate-800">${Number(q.total ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
-                                  <span className={`mt-1 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${accentMap[accent]}`}>
-                                    {(q.workflow_status ?? 'draft').replace(/_/g, ' ')}
-                                  </span>
-                                </div>
-                              </li>
-                            )
-                          })}
-                        </ul>
                       </>
                     )
                   )}
