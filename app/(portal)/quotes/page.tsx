@@ -5287,6 +5287,63 @@ const autoDescLines = [
             )
           })()}
 
+          {/* ── Customer Details (shown before door fields for rapid door) ── */}
+          {showRightPanel && isRapidDoor && (
+            <div className="mt-4 mx-1 mb-4 rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-500">Customer Details</h2>
+                  <span className="text-red-400 text-sm font-bold">*</span>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input type="checkbox" checked={custCanBeBlank} onChange={e => setCustCanBeBlank(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                  <span className="text-xs text-slate-500">Customer details can be blank</span>
+                </label>
+              </div>
+              {custCanBeBlank && (
+                <div className="mx-6 mt-4 flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+                  <span className="material-symbols-outlined text-[14px] text-amber-500">warning</span>
+                  <p className="text-xs text-amber-700">Quote will be generated without customer details. This is for internal/draft use only.</p>
+                </div>
+              )}
+              <div className="px-6 py-5">
+                <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                  <div className="space-y-4">
+                    {([
+                      ['Customer',  custName,  setCustName,  'Company or customer name', true],
+                      ['Attention', custAttn,  setCustAttn,  'Contact person',           false],
+                      ['Phone',     custPhone, setCustPhone, '(03) 9000 0000',           false],
+                    ] as [string, string, (v: string) => void, string, boolean][]).map(([label, value, setter, placeholder, required]) => (
+                      <div key={label}>
+                        <label className={`mb-1.5 block text-xs font-semibold uppercase tracking-widest ${!custCanBeBlank && required && !value ? 'text-red-400' : 'text-slate-400'}`}>
+                          {label}{required && !custCanBeBlank && <span className="ml-0.5 text-red-400">*</span>}
+                        </label>
+                        <input type="text" value={value} placeholder={placeholder} onChange={e => setter(e.target.value)}
+                          className={`w-full rounded-xl border py-2.5 px-4 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:ring-2 focus:ring-indigo-500/20 ${!custCanBeBlank && required && !value ? 'border-red-300 focus:border-red-400' : 'border-slate-200 bg-white focus:border-indigo-400'}`} />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-4">
+                    {([
+                      ['Address',  custAddress,  setCustAddress,  'Street address',        true],
+                      ['Postcode', custPostcode, setCustPostcode, '3000',                   false],
+                      ['Email',    custEmail,    setCustEmail,    'contact@company.com.au', false],
+                    ] as [string, string, (v: string) => void, string, boolean][]).map(([label, value, setter, placeholder, required]) => (
+                      <div key={label}>
+                        <label className={`mb-1.5 block text-xs font-semibold uppercase tracking-widest ${!custCanBeBlank && required && !value ? 'text-red-400' : 'text-slate-400'}`}>
+                          {label}{required && !custCanBeBlank && <span className="ml-0.5 text-red-400">*</span>}
+                        </label>
+                        <input type="text" value={value} placeholder={placeholder} onChange={e => setter(e.target.value)}
+                          className={`w-full rounded-xl border py-2.5 px-4 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:ring-2 focus:ring-indigo-500/20 ${!custCanBeBlank && required && !value ? 'border-red-300 focus:border-red-400' : 'border-slate-200 bg-white focus:border-indigo-400'}`} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ── Rapid door / other type fields — back inside px-6 padding ── */}
           {!isMaintenance && !isGeneral && !isParts && !isPvcFlex && (
           <div className="px-6 pb-6 space-y-3">
@@ -5455,63 +5512,6 @@ const autoDescLines = [
             )}
           </div>
           )}{/* end !isMaintenance && !isGeneral && !isParts wrapper */}
-
-          {/* ── Customer Details ── */}
-          {showRightPanel && (
-            <div className="mt-4 mx-1 mb-4 rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-500">Customer Details</h2>
-                  <span className="text-red-400 text-sm font-bold">*</span>
-                </div>
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input type="checkbox" checked={custCanBeBlank} onChange={e => setCustCanBeBlank(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-                  <span className="text-xs text-slate-500">Customer details can be blank</span>
-                </label>
-              </div>
-              {custCanBeBlank && (
-                <div className="mx-6 mt-4 flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
-                  <span className="material-symbols-outlined text-[14px] text-amber-500">warning</span>
-                  <p className="text-xs text-amber-700">Quote will be generated without customer details. This is for internal/draft use only.</p>
-                </div>
-              )}
-              <div className="px-6 py-5">
-                <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-                  <div className="space-y-4">
-                    {([
-                      ['Customer',  custName,  setCustName,  'Company or customer name', true],
-                      ['Attention', custAttn,  setCustAttn,  'Contact person',           false],
-                      ['Phone',     custPhone, setCustPhone, '(03) 9000 0000',           false],
-                    ] as [string, string, (v: string) => void, string, boolean][]).map(([label, value, setter, placeholder, required]) => (
-                      <div key={label}>
-                        <label className={`mb-1.5 block text-xs font-semibold uppercase tracking-widest ${!custCanBeBlank && required && !value ? 'text-red-400' : 'text-slate-400'}`}>
-                          {label}{required && !custCanBeBlank && <span className="ml-0.5 text-red-400">*</span>}
-                        </label>
-                        <input type="text" value={value} placeholder={placeholder} onChange={e => setter(e.target.value)}
-                          className={`w-full rounded-xl border py-2.5 px-4 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:ring-2 focus:ring-indigo-500/20 ${!custCanBeBlank && required && !value ? 'border-red-300 focus:border-red-400' : 'border-slate-200 bg-white focus:border-indigo-400'}`} />
-                      </div>
-                    ))}
-                  </div>
-                  <div className="space-y-4">
-                    {([
-                      ['Address',  custAddress,  setCustAddress,  'Street address',        true],
-                      ['Postcode', custPostcode, setCustPostcode, '3000',                   false],
-                      ['Email',    custEmail,    setCustEmail,    'contact@company.com.au', false],
-                    ] as [string, string, (v: string) => void, string, boolean][]).map(([label, value, setter, placeholder, required]) => (
-                      <div key={label}>
-                        <label className={`mb-1.5 block text-xs font-semibold uppercase tracking-widest ${!custCanBeBlank && required && !value ? 'text-red-400' : 'text-slate-400'}`}>
-                          {label}{required && !custCanBeBlank && <span className="ml-0.5 text-red-400">*</span>}
-                        </label>
-                        <input type="text" value={value} placeholder={placeholder} onChange={e => setter(e.target.value)}
-                          className={`w-full rounded-xl border py-2.5 px-4 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:ring-2 focus:ring-indigo-500/20 ${!custCanBeBlank && required && !value ? 'border-red-300 focus:border-red-400' : 'border-slate-200 bg-white focus:border-indigo-400'}`} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* ── Abbreviation Legend ── */}
           {showRightPanel && (() => {
