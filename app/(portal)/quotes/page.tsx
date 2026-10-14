@@ -2629,11 +2629,11 @@ const autoDescLines = [
                         </div>
 
                         {/* Pagination */}
-                        {totalPages > 1 && (
-                          <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3">
-                            <span className="text-xs text-slate-400 tabular-nums">
-                              {currentPage * PAGE_SIZE + 1}–{Math.min((currentPage + 1) * PAGE_SIZE, rows.length)} of {rows.length}
-                            </span>
+                        <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3">
+                          <span className="text-xs text-slate-400 tabular-nums">
+                            Showing {Math.min(currentPage * PAGE_SIZE + 1, rows.length)}–{Math.min((currentPage + 1) * PAGE_SIZE, rows.length)} of {rows.length}
+                          </span>
+                          {totalPages > 1 && (
                             <div className="flex items-center gap-1">
                               <button type="button" disabled={currentPage === 0} onClick={() => goToPage(currentPage - 1)}
                                 className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-xs text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">
@@ -2653,8 +2653,8 @@ const autoDescLines = [
                                 →
                               </button>
                             </div>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </>
                     )
                   )}
