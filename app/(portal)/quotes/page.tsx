@@ -2456,11 +2456,11 @@ const autoDescLines = [
         ) : (
           <div className="space-y-3">
             {([
-              { kind: 'rapid_door',  label: 'Rapid Roller Door',       icon: 'garage',        accent: 'indigo' },
-              { kind: 'general',     label: 'General',                  icon: 'description',   accent: 'violet' },
-              { kind: 'maintenance', label: 'Maintenance Service/Repair',icon: 'build',         accent: 'orange' },
-              { kind: 'parts',       label: 'Parts',                    icon: 'inventory_2',   accent: 'emerald' },
-              { kind: 'pvc_flex',    label: 'PVC Flex System',          icon: 'view_column',   accent: 'sky' },
+              { kind: 'rapid_door',  label: 'Rapid Roller Door',        icon: 'garage',       accent: 'indigo' },
+              { kind: 'pvc_flex',    label: 'PVC Flex System',          icon: 'view_column',  accent: 'sky' },
+              { kind: 'maintenance', label: 'Maintenance Service/Repair',icon: 'build',        accent: 'orange' },
+              { kind: 'parts',       label: 'Parts',                    icon: 'inventory_2',  accent: 'emerald' },
+              { kind: 'general',     label: 'General',                  icon: 'description',  accent: 'violet' },
             ] as { kind: string; label: string; icon: string; accent: string }[]).map(({ kind, label, icon, accent }) => {
               const allRows = filteredQuotes.filter(q => q.quote_kind === kind)
               if (allRows.length === 0 && search.trim()) return null
@@ -2537,7 +2537,8 @@ const autoDescLines = [
                                 <th className="px-6 py-2.5">Quote #</th>
                                 <th className="px-4 py-2.5">Customer</th>
                                 <th className="px-4 py-2.5">Address</th>
-                                <th className="px-4 py-2.5">Date</th>
+                                <th className="px-4 py-2.5">Date (Org)</th>
+                                <th className="px-4 py-2.5">Rev</th>
                                 <th className="px-4 py-2.5">Total (inc. GST)</th>
                                 <th className="px-4 py-2.5">Status</th>
                                 <th className="px-4 py-2.5 text-right">Actions</th>
@@ -2547,12 +2548,18 @@ const autoDescLines = [
                               {rows.map(q => {
                                 const [y, m, d] = (q.service_date ?? '').split('-')
                                 const dateStr = y ? `${d}/${m}/${y}` : '—'
+                                const updDate = q.updated_at ? q.updated_at.slice(0, 10) : ''
+                                const revStr = updDate && updDate > (q.service_date ?? '') ? (() => {
+                                  const [uy, um, ud] = updDate.split('-')
+                                  return `${ud}/${um}/${uy}`
+                                })() : null
                                 return (
                                   <tr key={q.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/80 transition">
                                     <td className="px-6 py-3 font-mono text-xs font-semibold text-indigo-700">{q.quote_number}</td>
                                     <td className="px-4 py-3 font-medium text-slate-800">{q.customer_name || <span className="text-slate-400 italic font-normal">No customer</span>}</td>
                                     <td className="px-4 py-3 text-slate-500 max-w-[180px] truncate">{q.site_address || '—'}</td>
                                     <td className="px-4 py-3 text-slate-500">{dateStr}</td>
+                                    <td className="px-4 py-3 text-slate-500">{revStr ?? <span className="text-slate-300">—</span>}</td>
                                     <td className="px-4 py-3 font-semibold text-slate-800">${Number(q.total ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</td>
                                     <td className="px-4 py-3">
                                       <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${accentMap[accent]}`}>
