@@ -2557,7 +2557,7 @@ const autoDescLines = [
                                   <tr key={q.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/80 transition">
                                     <td className="px-6 py-3 font-mono text-xs font-semibold text-indigo-700">{q.quote_number}</td>
                                     <td className="px-4 py-3 font-medium text-slate-800">{q.customer_name || <span className="text-slate-400 italic font-normal">No customer</span>}</td>
-                                    <td className="px-4 py-3 text-slate-500 max-w-[180px] truncate">{q.site_address || '—'}</td>
+                                    <td className="px-4 py-3 text-slate-500 max-w-[140px] truncate" title={q.site_address || undefined}>{q.site_address || '—'}</td>
                                     <td className="px-4 py-3 text-slate-500">{dateStr}</td>
                                     <td className="px-4 py-3 text-slate-500">{revStr ?? <span className="text-slate-300">—</span>}</td>
                                     <td className="px-4 py-3 font-semibold text-slate-800">${Number(q.total ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</td>
