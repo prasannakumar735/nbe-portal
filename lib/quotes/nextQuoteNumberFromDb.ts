@@ -17,18 +17,24 @@ export async function nextQuoteNumberFromDb(
   prefix: QuoteNumberPrefix,
   dateKey: string,
 ): Promise<string> {
-  const newPattern    = `${prefix}${shortDateKey(dateKey)}%`
-  const legacyPattern = `${prefix}-${dateKey}-%`
+  // Current format: PREFIX-YYMMDDNNN (e.g. QREP-261015001)
+  // Old compact format: PREFIXYYMMDDNNN (e.g. QREP261015001, no hyphen)
+  // Legacy format: PREFIX-YYYYMMDD-NNN
+  const hyphenPattern  = `${prefix}-${shortDateKey(dateKey)}%`
+  const compactPattern = `${prefix}${shortDateKey(dateKey)}%`
+  const legacyPattern  = `${prefix}-${dateKey}-%`
 
-  const [newRes, legacyRes] = await Promise.all([
-    supabase.from('quotes').select('quote_number').like('quote_number', newPattern).limit(2000),
+  const [hyphenRes, compactRes, legacyRes] = await Promise.all([
+    supabase.from('quotes').select('quote_number').like('quote_number', hyphenPattern).limit(2000),
+    supabase.from('quotes').select('quote_number').like('quote_number', compactPattern).limit(2000),
     supabase.from('quotes').select('quote_number').like('quote_number', legacyPattern).limit(2000),
   ])
 
-  if (newRes.error) throw newRes.error
+  if (hyphenRes.error) throw hyphenRes.error
+  if (compactRes.error) throw compactRes.error
   if (legacyRes.error) throw legacyRes.error
 
-  const numbers = [...(newRes.data ?? []), ...(legacyRes.data ?? [])].map(r =>
+  const numbers = [...(hyphenRes.data ?? []), ...(compactRes.data ?? []), ...(legacyRes.data ?? [])].map(r =>
     String((r as { quote_number?: string }).quote_number ?? ''),
   )
   const nextSeq = maxSequenceForPrefixDate(numbers, prefix, dateKey) + 1
